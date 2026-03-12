@@ -1,0 +1,14 @@
+{
+  "name": "bookscanner",
+  "private": true,
+  "scripts": {
+    "build": "pnpm -r build",
+    "test": "pnpm -r test",
+    "lint": "pnpm -r lint",
+    "dev:backend": "pnpm --filter @bookscanner/backend dev",
+    "dev:mobile": "pnpm --filter bookscanner-mobile start"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
