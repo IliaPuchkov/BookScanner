@@ -5,7 +5,7 @@ import { AppNavigator } from './src/navigation/AppNavigator';
 import { DevNavigator } from './src/navigation/DevNavigator';
 
 // TODO: переключить на false перед релизом
-const DEV_MODE = true;
+const DEV_MODE = false;
 
 export default function App() {
   if (DEV_MODE) {

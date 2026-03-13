@@ -1,5 +1,6 @@
-export function formatPrice(price: number): string {
-  return `${price.toFixed(2)} ₽`;
+export function formatPrice(price: number | undefined | null): string {
+  if (price == null) return '—';
+  return `${Number(price).toFixed(2)} ₽`;
 }
 
 export function formatDimensions(w: number, h: number, d: number): string {

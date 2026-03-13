@@ -2,17 +2,22 @@ import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { ConfigService } from '@nestjs/config';
+import { NestExpressApplication } from '@nestjs/platform-express';
+import * as path from 'path';
 import { AppModule } from './app.module';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule);
+
+  // Раздача загруженных файлов
+  app.useStaticAssets(path.join(process.cwd(), 'uploads'), { prefix: '/uploads' });
 
   const configService = app.get(ConfigService);
 
-  // CORS
+  // CORS — разрешаем запросы от мобильного приложения и веб-клиента
   app.enableCors({
-    origin: configService.get<string>('FRONTEND_URL', 'http://localhost:8100'),
+    origin: true, // разрешить все origins (React Native не отправляет Origin header)
     credentials: true,
   });
 

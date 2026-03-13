@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import * as fs from 'fs';
 import * as path from 'path';
 import { IStorageProvider } from './storage.interface';
@@ -6,11 +7,15 @@ import { IStorageProvider } from './storage.interface';
 @Injectable()
 export class LocalStorageService implements IStorageProvider {
   private readonly uploadDir = path.join(process.cwd(), 'uploads');
+  private readonly baseUrl: string;
 
-  constructor() {
+  constructor(configService?: ConfigService) {
     if (!fs.existsSync(this.uploadDir)) {
       fs.mkdirSync(this.uploadDir, { recursive: true });
     }
+    const port = configService?.get<number>('BACKEND_PORT') ?? 3000;
+    const host = configService?.get<string>('BACKEND_HOST') ?? 'localhost';
+    this.baseUrl = `http://${host}:${port}`;
   }
 
   async upload(
@@ -27,7 +32,7 @@ export class LocalStorageService implements IStorageProvider {
     fs.writeFileSync(filePath, file.buffer);
 
     return {
-      url: `/uploads/${key}`,
+      url: `${this.baseUrl}/uploads/${key}`,
       key,
     };
   }

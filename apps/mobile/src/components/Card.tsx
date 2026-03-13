@@ -29,8 +29,8 @@ export function BookCard({ book, onPress }: Props) {
           </Text>
         ) : null}
         <Text style={styles.sku}>{book.sku}</Text>
-        {book.price > 0 && (
-          <Text style={styles.price}>{book.price.toFixed(0)} ₽</Text>
+        {book.price != null && Number(book.price) > 0 && (
+          <Text style={styles.price}>{Number(book.price).toFixed(0)} ₽</Text>
         )}
       </View>
     </TouchableOpacity>

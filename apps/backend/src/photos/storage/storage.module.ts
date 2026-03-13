@@ -17,7 +17,7 @@ export class StorageModule {
             if (bucket) {
               return new S3StorageService(configService);
             }
-            return new LocalStorageService();
+            return new LocalStorageService(configService);
           },
           inject: [ConfigService],
         },
