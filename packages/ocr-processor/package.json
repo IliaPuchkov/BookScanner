@@ -9,7 +9,8 @@
     "dev": "tsc --watch"
   },
   "dependencies": {
-    "@bookscanner/shared": "workspace:*"
+    "@bookscanner/shared": "workspace:*",
+    "openai": "^4.80.0"
   },
   "devDependencies": {
     "@types/node": "^20.19.37",

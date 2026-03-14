@@ -9,6 +9,6 @@ import { StorageModule } from './storage/storage.module';
   imports: [TypeOrmModule.forFeature([BookPhoto]), StorageModule.register()],
   controllers: [PhotosController],
   providers: [PhotosService],
-  exports: [PhotosService],
+  exports: [PhotosService, StorageModule],
 })
 export class PhotosModule {}

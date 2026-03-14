@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Inject } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ConfigService } from '@nestjs/config';
@@ -6,12 +6,9 @@ import { OcrResult } from './entities/ocr-result.entity';
 import { BooksService } from '../books/books.service';
 import { PhotosService } from '../photos/photos.service';
 import { SettingsService } from '../settings/settings.service';
-import {
-  DEFAULT_HEIGHT_MM,
-  DEFAULT_WEIGHT_G,
-  DEFAULT_PAPER_TYPE,
-  DEFAULT_COVER_TYPE,
-} from '@bookscanner/shared';
+import { IStorageProvider, STORAGE_PROVIDER } from '../photos/storage/storage.interface';
+import { OpenAIVisionExtractor, mergeExtractionResults, applyDefaults } from '@bookscanner/ocr-processor';
+import { PaperType, CoverType } from '@bookscanner/shared';
 
 @Injectable()
 export class VisionService {
@@ -24,22 +21,18 @@ export class VisionService {
     private readonly photosService: PhotosService,
     private readonly settingsService: SettingsService,
     private readonly configService: ConfigService,
+    @Inject(STORAGE_PROVIDER)
+    private readonly storage: IStorageProvider,
   ) {}
 
   async extractBookData(bookId: string) {
     const book = await this.booksService.findOne(bookId);
     const photos = await this.photosService.findByBookId(bookId);
 
-    // Create or update OCR result
-    let ocrResult = await this.ocrResultRepository.findOne({
-      where: { bookId },
-    });
+    let ocrResult = await this.ocrResultRepository.findOne({ where: { bookId } });
 
     if (!ocrResult) {
-      ocrResult = this.ocrResultRepository.create({
-        bookId,
-        status: 'processing',
-      });
+      ocrResult = this.ocrResultRepository.create({ bookId, status: 'processing' });
     } else {
       ocrResult.status = 'processing';
     }
@@ -47,36 +40,72 @@ export class VisionService {
     ocrResult = await this.ocrResultRepository.save(ocrResult);
 
     try {
-      // Get Claude API prompt from settings
+      const apiKey = this.configService.get<string>('OPENAI_API_KEY');
+      if (!apiKey) {
+        throw new Error('OPENAI_API_KEY не настроен в переменных окружения');
+      }
+
       const prompt = await this.settingsService.getValue<string>(
         'ocr_prompt',
         this.getDefaultPrompt(),
       );
 
-      // TODO: Implement actual Claude Vision API call
-      // For now, return a placeholder that shows the structure
-      const extractedData = {
-        title: book.title,
-        author: book.author,
-        isbn: book.isbn,
-        publisher: book.publisher,
-        yearPublished: book.yearPublished,
-        paperType: DEFAULT_PAPER_TYPE,
-        coverType: DEFAULT_COVER_TYPE,
-        pageCount: book.pageCount,
-        annotation: book.annotation,
-      };
+      const extractor = new OpenAIVisionExtractor(apiKey);
 
-      ocrResult.extractedData = extractedData;
+      const photo01 = photos[0];
+      const photo02 = photos[1];
+
+      const [result01, result02] = await Promise.all([
+        photo01
+          ? extractor.extractBookData(
+              await this.storage.download(photo01.fileKey),
+              prompt,
+              photo01.mimeType as 'image/jpeg' | 'image/png',
+            )
+          : null,
+        photo02
+          ? extractor.extractBookData(
+              await this.storage.download(photo02.fileKey),
+              prompt,
+              photo02.mimeType as 'image/jpeg' | 'image/png',
+            )
+          : null,
+      ]);
+
+      const merged = mergeExtractionResults(result01, result02);
+      const extractedData = applyDefaults(merged);
+
+      ocrResult.photo01Extraction = result01 as unknown as Record<string, unknown>;
+      ocrResult.photo02Extraction = result02 as unknown as Record<string, unknown>;
+      ocrResult.extractedData = extractedData as unknown as Record<string, unknown>;
       ocrResult.status = 'completed';
       await this.ocrResultRepository.save(ocrResult);
 
-      // Apply defaults for missing data
-      const mergedData = this.applyDefaults(extractedData);
+      await this.booksService.updateFromExtraction(bookId, {
+        title: extractedData.title,
+        author: extractedData.author,
+        isbn: extractedData.isbn,
+        publisher: extractedData.publisher,
+        yearPublished: extractedData.yearPublished,
+        ...(extractedData.width != null && {
+          dimensions: {
+            width: extractedData.width,
+            height: extractedData.height ?? 0,
+            depth: extractedData.depth ?? 0,
+          },
+        }),
+        weightGross: extractedData.weightGross,
+        weightNet: extractedData.weightNet,
+        paperType: extractedData.paperType as PaperType,
+        coverType: extractedData.coverType as CoverType,
+        pageCount: extractedData.pageCount,
+        annotation: extractedData.annotation,
+        language: extractedData.language,
+      });
 
       return {
         ocrResult,
-        mergedData,
+        mergedData: extractedData,
         photosProcessed: photos.length,
       };
     } catch (error) {
@@ -88,24 +117,11 @@ export class VisionService {
   }
 
   async isbnLookup(isbn: string) {
-    // TODO: Implement Ozon ISBN lookup
     this.logger.log(`ISBN lookup: ${isbn}`);
     return {
       isbn,
       found: false,
       message: 'Поиск по ISBN будет реализован при интеграции с Ozon API',
-    };
-  }
-
-  private applyDefaults(data: Record<string, unknown>) {
-    return {
-      ...data,
-      height: data.height || DEFAULT_HEIGHT_MM,
-      weightGross: data.weightGross || DEFAULT_WEIGHT_G,
-      paperType: data.paperType || DEFAULT_PAPER_TYPE,
-      coverType: data.coverType || DEFAULT_COVER_TYPE,
-      language: data.language || 'русский',
-      condition: 'Хорошая',
     };
   }
 

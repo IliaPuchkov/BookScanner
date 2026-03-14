@@ -47,4 +47,9 @@ export class LocalStorageService implements IStorageProvider {
   async getSignedUrl(key: string): Promise<string> {
     return `/uploads/${key}`;
   }
+
+  async download(key: string): Promise<Buffer> {
+    const filePath = path.join(this.uploadDir, key);
+    return fs.readFileSync(filePath);
+  }
 }

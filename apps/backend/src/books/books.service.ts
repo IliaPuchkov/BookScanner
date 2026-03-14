@@ -106,6 +106,10 @@ export class BooksService {
     return this.booksRepository.save(book);
   }
 
+  async updateFromExtraction(id: string, data: Partial<Book>): Promise<void> {
+    await this.booksRepository.update(id, data as any);
+  }
+
   async remove(id: string, userId: string, role: UserRole): Promise<void> {
     const book = await this.findOne(id);
     this.checkOwnership(book, userId, role);

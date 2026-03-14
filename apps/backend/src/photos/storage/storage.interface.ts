@@ -5,6 +5,7 @@ export interface IStorageProvider {
   ): Promise<{ url: string; key: string }>;
   delete(key: string): Promise<void>;
   getSignedUrl(key: string, expiresIn?: number): Promise<string>;
+  download(key: string): Promise<Buffer>;
 }
 
 export const STORAGE_PROVIDER = 'STORAGE_PROVIDER';

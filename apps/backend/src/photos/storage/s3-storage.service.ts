@@ -62,4 +62,15 @@ export class S3StorageService implements IStorageProvider {
     });
     return getSignedUrl(this.s3, command, { expiresIn });
   }
+
+  async download(key: string): Promise<Buffer> {
+    const response = await this.s3.send(
+      new GetObjectCommand({ Bucket: this.bucket, Key: key }),
+    );
+    const chunks: Uint8Array[] = [];
+    for await (const chunk of response.Body as AsyncIterable<Uint8Array>) {
+      chunks.push(chunk);
+    }
+    return Buffer.concat(chunks);
+  }
 }
