@@ -7,8 +7,7 @@ import {
   Text,
   TouchableOpacity,
 } from 'react-native';
-import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
-import { type NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { useRoute, type RouteProp } from '@react-navigation/native';
 import * as ImagePicker from 'expo-image-picker';
 import { Input } from '../../components/Input';
 import { Button } from '../../components/Button';
@@ -18,10 +17,9 @@ import { booksService } from '../../services/books.service';
 import { boxesService } from '../../services/boxes.service';
 import { photosService } from '../../services/photos.service';
 import { visionService } from '../../services/vision.service';
-import type { Box, PaperType, CoverType } from '../../types';
+import type { Box } from '../../types';
 import type { OperatorStackParamList } from '../../navigation/OperatorNavigator';
 
-type Nav = NativeStackNavigationProp<OperatorStackParamList, 'CreateCard'>;
 type Route = RouteProp<OperatorStackParamList, 'CreateCard'>;
 
 interface PhotoItem {
@@ -30,10 +28,9 @@ interface PhotoItem {
 }
 
 export function CreateCardScreen() {
-  const navigation = useNavigation<Nav>();
   const route = useRoute<Route>();
 
-  const [step, setStep] = useState<'box' | 'photos' | 'details'>('box');
+  const [step, setStep] = useState<'box' | 'photos'>('box');
   const [loading, setLoading] = useState(false);
   const [loadingMessage, setLoadingMessage] = useState('');
 
@@ -46,16 +43,6 @@ export function CreateCardScreen() {
 
   // Photos
   const [photos, setPhotos] = useState<PhotoItem[]>([]);
-
-  // Book details
-  const [title, setTitle] = useState('');
-  const [author, setAuthor] = useState('');
-  const [isbn, setIsbn] = useState('');
-  const [publisher, setPublisher] = useState('');
-  const [yearPublished, setYearPublished] = useState('');
-  const [pageCount, setPageCount] = useState('');
-  const [price, setPrice] = useState('');
-  const [annotation, setAnnotation] = useState('');
 
   useEffect(() => {
     boxesService.getBoxes(1, 100).then((res) => setBoxes(res.data)).catch(() => {});
@@ -116,7 +103,7 @@ export function CreateCardScreen() {
     setPhotos((prev) => prev.filter((_, i) => i !== index));
   };
 
-  const handleExtractAndCreate = async () => {
+  const handleSubmitForProcessing = async () => {
     if (!selectedBoxId) {
       Alert.alert('Ошибка', 'Выберите коробку');
       return;
@@ -140,62 +127,16 @@ export function CreateCardScreen() {
         photos.map((p) => p.uri),
       );
 
-      setLoadingMessage('AI распознавание...');
-      try {
-        const ocrResult = await visionService.extract(book.id);
-        const extracted = ocrResult.extractedData as Record<string, any> | undefined;
-        if (extracted) {
-          setTitle(extracted.title || '');
-          setAuthor(extracted.author || '');
-          setIsbn(extracted.isbn || '');
-          setPublisher(extracted.publisher || '');
-          setYearPublished(extracted.yearPublished?.toString() || '');
-          setPageCount(extracted.pageCount?.toString() || '');
-          setAnnotation(extracted.annotation || '');
-        }
-      } catch {
-        Alert.alert('Внимание', 'Не удалось распознать данные. Заполните вручную.');
-      }
+      // Запускаем AI-обработку в фоне — не ждём результата
+      visionService.extract(book.id).catch(() => {});
 
-      setStep('details');
-      // Store book id for later update
-      (navigation as any).__bookId = book.id;
+      setPhotos([]);
+      Alert.alert('Отправлено', 'Фотографии загружены. ИИ обрабатывает их в фоне.');
     } catch (err: any) {
       Alert.alert('Ошибка', err?.response?.data?.message || 'Ошибка создания');
     } finally {
       setLoading(false);
       setLoadingMessage('');
-    }
-  };
-
-  const handleSaveDetails = async () => {
-    const bookId = (navigation as any).__bookId;
-    if (!bookId) return;
-    if (!title.trim()) {
-      Alert.alert('Ошибка', 'Название обязательно');
-      return;
-    }
-
-    setLoading(true);
-    try {
-      await booksService.updateBook(bookId, {
-        title: title.trim(),
-        author: author.trim() || undefined,
-        isbn: isbn.trim() || undefined,
-        publisher: publisher.trim() || undefined,
-        yearPublished: yearPublished ? parseInt(yearPublished, 10) : undefined,
-        pageCount: pageCount ? parseInt(pageCount, 10) : undefined,
-        price: price ? parseFloat(price) : undefined,
-        annotation: annotation.trim() || undefined,
-      });
-
-      Alert.alert('Готово', 'Карточка сохранена', [
-        { text: 'OK', onPress: () => navigation.goBack() },
-      ]);
-    } catch (err: any) {
-      Alert.alert('Ошибка', err?.response?.data?.message || 'Не удалось сохранить');
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -284,8 +225,8 @@ export function CreateCardScreen() {
             </View>
 
             <Button
-              title="Распознать и создать"
-              onPress={handleExtractAndCreate}
+              title="Отправить в обработку"
+              onPress={handleSubmitForProcessing}
               disabled={photos.length < 2}
               style={{ marginTop: 16 }}
             />
@@ -295,48 +236,6 @@ export function CreateCardScreen() {
               variant="secondary"
               style={{ marginTop: 8 }}
             />
-          </View>
-        )}
-
-        {step === 'details' && (
-          <View>
-            <Text style={styles.stepTitle}>Шаг 3: Проверьте данные</Text>
-            <Text style={styles.hint}>
-              Данные распознаны автоматически. Проверьте и исправьте при необходимости.
-            </Text>
-
-            <Input label="Название" value={title} onChangeText={setTitle} />
-            <Input label="Автор" value={author} onChangeText={setAuthor} />
-            <Input label="ISBN" value={isbn} onChangeText={setIsbn} keyboardType="numeric" />
-            <Input label="Издательство" value={publisher} onChangeText={setPublisher} />
-            <Input
-              label="Год издания"
-              value={yearPublished}
-              onChangeText={setYearPublished}
-              keyboardType="numeric"
-            />
-            <Input
-              label="Кол-во страниц"
-              value={pageCount}
-              onChangeText={setPageCount}
-              keyboardType="numeric"
-            />
-            <Input
-              label="Цена (₽)"
-              value={price}
-              onChangeText={setPrice}
-              keyboardType="decimal-pad"
-            />
-            <Input
-              label="Аннотация"
-              value={annotation}
-              onChangeText={setAnnotation}
-              multiline
-              numberOfLines={4}
-              style={{ height: 100, textAlignVertical: 'top' }}
-            />
-
-            <Button title="Сохранить" onPress={handleSaveDetails} style={{ marginTop: 8 }} />
           </View>
         )}
       </ScrollView>

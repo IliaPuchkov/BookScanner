@@ -11,10 +11,20 @@ import { CreateCardScreen } from "../screens/operator/CreateCard";
 import { CardDetailScreen } from "../screens/operator/CardDetail";
 import { PhotoUploadScreen } from "../screens/operator/PhotoUpload";
 import { ProfileScreen } from "../screens/operator/ProfileScreen";
-import type { OperatorStackParamList } from "./OperatorNavigator";
 
+export type AdminMainStackParamList = {
+  Dashboard: undefined;
+  UserManagement: undefined;
+  Statistics: undefined;
+  BookDatabase: undefined;
+  CardsList: undefined;
+  CreateCard: { boxId?: string } | undefined;
+  CardDetail: { bookId: string };
+  PhotoUpload: { bookId: string };
+};
+
+const MainStack = createNativeStackNavigator<AdminMainStackParamList>();
 const Tab = createBottomTabNavigator();
-const Stack = createNativeStackNavigator<OperatorStackParamList>();
 
 const headerStyle = {
   headerStyle: { backgroundColor: "#1976D2" } as const,
@@ -22,32 +32,50 @@ const headerStyle = {
   headerTitleStyle: { fontWeight: "600" as const },
 };
 
-function CardsStack() {
+function MainStackScreen() {
   return (
-    <Stack.Navigator screenOptions={headerStyle}>
-      <Stack.Screen
+    <MainStack.Navigator screenOptions={headerStyle}>
+      <MainStack.Screen
+        name="Dashboard"
+        component={DashboardScreen}
+        options={{ title: "Панель управления" }}
+      />
+      <MainStack.Screen
+        name="UserManagement"
+        component={UserManagementScreen}
+        options={{ title: "Пользователи" }}
+      />
+      <MainStack.Screen
+        name="Statistics"
+        component={StatisticsScreen}
+        options={{ title: "Статистика" }}
+      />
+      <MainStack.Screen
+        name="BookDatabase"
+        component={BookDatabaseScreen}
+        options={{ title: "База книг" }}
+      />
+      <MainStack.Screen
         name="CardsList"
         component={CardsListScreen}
-        options={{
-          title: "Карточки",
-        }}
+        options={{ title: "Карточки" }}
       />
-      <Stack.Screen
+      <MainStack.Screen
         name="CreateCard"
         component={CreateCardScreen}
         options={{ title: "Новая карточка" }}
       />
-      <Stack.Screen
+      <MainStack.Screen
         name="CardDetail"
         component={CardDetailScreen}
         options={{ title: "Карточка" }}
       />
-      <Stack.Screen
+      <MainStack.Screen
         name="PhotoUpload"
         component={PhotoUploadScreen}
         options={{ title: "Фото" }}
       />
-    </Stack.Navigator>
+    </MainStack.Navigator>
   );
 }
 
@@ -66,55 +94,11 @@ export function AdminNavigator() {
       }}
     >
       <Tab.Screen
-        name="DashboardTab"
-        component={DashboardScreen}
+        name="MainTab"
+        component={MainStackScreen}
         options={{
           tabBarLabel: "Главная",
           tabBarIcon: () => <TabIcon label="📊" />,
-          headerShown: true,
-          headerTitle: "Панель управления",
-          ...headerStyle,
-        }}
-      />
-      <Tab.Screen
-        name="CardsTab"
-        component={CardsStack}
-        options={{
-          tabBarLabel: "Карточки",
-          tabBarIcon: () => <TabIcon label="📚" />,
-        }}
-      />
-      <Tab.Screen
-        name="UsersTab"
-        component={UserManagementScreen}
-        options={{
-          tabBarLabel: "Пользователи",
-          tabBarIcon: () => <TabIcon label="👥" />,
-          headerShown: true,
-          headerTitle: "Пользователи",
-          ...headerStyle,
-        }}
-      />
-      <Tab.Screen
-        name="StatsTab"
-        component={StatisticsScreen}
-        options={{
-          tabBarLabel: "Статистика",
-          tabBarIcon: () => <TabIcon label="📈" />,
-          headerShown: true,
-          headerTitle: "Статистика",
-          ...headerStyle,
-        }}
-      />
-      <Tab.Screen
-        name="DatabaseTab"
-        component={BookDatabaseScreen}
-        options={{
-          tabBarLabel: "База",
-          tabBarIcon: () => <TabIcon label="🗄️" />,
-          headerShown: true,
-          headerTitle: "База книг",
-          ...headerStyle,
         }}
       />
       <Tab.Screen

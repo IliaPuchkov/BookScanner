@@ -34,18 +34,41 @@ export class AdminService {
   }
 
   async getStatistics(days?: number) {
-    const since = days ? new Date(Date.now() - days * 24 * 60 * 60 * 1000) : undefined;
+    const periodDays = days || 7;
+    const now = new Date();
 
-    const [globalStats, perUser, dailyTrends] = await Promise.all([
-      this.statsService.getGlobalStats(since),
+    const startOfToday = new Date(now);
+    startOfToday.setHours(0, 0, 0, 0);
+
+    const startOfPeriod = new Date(now.getTime() - periodDays * 24 * 60 * 60 * 1000);
+
+    const miniPagination = new PaginationDto();
+    miniPagination.page = 1;
+    miniPagination.limit = 1;
+
+    const [todayStats, periodStats, perUserRaw, usersResult, booksResult] = await Promise.all([
+      this.statsService.getGlobalStats(startOfToday),
+      this.statsService.getGlobalStats(startOfPeriod),
       this.statsService.getPerUserBookCounts(),
-      this.statsService.getDailyTrends(days || 30),
+      this.usersService.findAll(miniPagination),
+      this.booksService.findAll('', UserRole.ADMIN, miniPagination),
     ]);
 
+    const getCount = (
+      stats: Array<{ action: string; count: string }>,
+      action: string,
+    ) => parseInt(stats.find((s) => s.action === action)?.count ?? '0', 10);
+
     return {
-      globalStats,
-      perUser,
-      dailyTrends,
+      totalCards: booksResult.meta.total,
+      totalUsers: usersResult.meta.total,
+      cardsToday: getCount(todayStats, 'card_created'),
+      cardsThisWeek: getCount(periodStats, 'card_created'),
+      perUser: perUserRaw.map((u: { userId: string; fullName: string; booksCount: string }) => ({
+        userId: u.userId,
+        fullName: u.fullName,
+        cardsCount: parseInt(u.booksCount, 10),
+      })),
     };
   }
 
