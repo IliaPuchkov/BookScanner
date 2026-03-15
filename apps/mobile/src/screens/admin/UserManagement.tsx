@@ -8,17 +8,25 @@ import {
   Alert,
   TouchableOpacity,
   Modal,
+  KeyboardAvoidingView,
+  ScrollView,
+  TouchableWithoutFeedback,
+  Keyboard,
+  Platform,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { Input } from '../../components/Input';
 import { Button } from '../../components/Button';
 import { adminService } from '../../services/admin.service';
+import { useAuth } from '../../hooks/useAuth';
 import type { User } from '../../types';
 
 export function UserManagementScreen() {
+  const { user: currentUser } = useAuth();
   const [users, setUsers] = useState<User[]>([]);
   const [refreshing, setRefreshing] = useState(false);
-  const [showModal, setShowModal] = useState(false);
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [editTarget, setEditTarget] = useState<User | null>(null);
 
   // Create user form
   const [fullName, setFullName] = useState('');
@@ -55,7 +63,32 @@ export function UserManagementScreen() {
     }
   };
 
+  const handlePromoteToAdmin = (user: User) => {
+    setEditTarget(null);
+    Alert.alert(
+      'Назначить администратором?',
+      `${user.fullName} получит права администратора. Это действие нельзя отменить через приложение.`,
+      [
+        { text: 'Отмена', style: 'cancel' },
+        {
+          text: 'Назначить',
+          onPress: async () => {
+            try {
+              await adminService.updateUser(user.id, { role: 'admin' });
+              setUsers((prev) =>
+                prev.map((u) => (u.id === user.id ? { ...u, role: 'admin' } : u)),
+              );
+            } catch {
+              Alert.alert('Ошибка', 'Не удалось изменить роль');
+            }
+          },
+        },
+      ],
+    );
+  };
+
   const handleDelete = (user: User) => {
+    setEditTarget(null);
     Alert.alert('Удалить пользователя?', user.fullName, [
       { text: 'Отмена', style: 'cancel' },
       {
@@ -87,7 +120,7 @@ export function UserManagementScreen() {
         password,
       });
       setUsers((prev) => [user, ...prev]);
-      setShowModal(false);
+      setShowCreateModal(false);
       resetForm();
     } catch (err: any) {
       Alert.alert('Ошибка', err?.response?.data?.message || 'Не удалось создать');
@@ -102,6 +135,9 @@ export function UserManagementScreen() {
     setEmail('');
     setPassword('');
   };
+
+  const canEdit = (item: User) =>
+    item.role !== 'admin' || item.id !== currentUser?.id;
 
   const renderUser = ({ item }: { item: User }) => (
     <View style={styles.userCard}>
@@ -122,12 +158,14 @@ export function UserManagementScreen() {
             <Text style={styles.approveBtnText}>✓</Text>
           </TouchableOpacity>
         )}
-        <TouchableOpacity
-          style={styles.deleteBtn}
-          onPress={() => handleDelete(item)}
-        >
-          <Text style={styles.deleteBtnText}>✕</Text>
-        </TouchableOpacity>
+        {canEdit(item) && (
+          <TouchableOpacity
+            style={styles.editBtn}
+            onPress={() => setEditTarget(item)}
+          >
+            <Text style={styles.editBtnText}>✎</Text>
+          </TouchableOpacity>
+        )}
       </View>
     </View>
   );
@@ -155,32 +193,97 @@ export function UserManagementScreen() {
 
       <TouchableOpacity
         style={styles.fab}
-        onPress={() => setShowModal(true)}
+        onPress={() => setShowCreateModal(true)}
         activeOpacity={0.8}
       >
         <Text style={styles.fabText}>+</Text>
       </TouchableOpacity>
 
-      <Modal visible={showModal} animationType="slide" transparent>
-        <View style={styles.modalOverlay}>
-          <View style={styles.modal}>
-            <Text style={styles.modalTitle}>Новый пользователь</Text>
-            <Input label="ФИО" value={fullName} onChangeText={setFullName} />
-            <Input label="Телефон" value={phone} onChangeText={setPhone} keyboardType="phone-pad" />
-            <Input label="Email" value={email} onChangeText={setEmail} autoCapitalize="none" />
-            <Input label="Пароль" value={password} onChangeText={setPassword} secureTextEntry />
-            <Button title="Создать" onPress={handleCreate} loading={creating} />
-            <Button
-              title="Отмена"
-              onPress={() => {
-                setShowModal(false);
-                resetForm();
-              }}
-              variant="secondary"
-              style={{ marginTop: 8 }}
-            />
+      {/* Edit actions modal */}
+      <Modal visible={!!editTarget} animationType="fade" transparent>
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setEditTarget(null)}
+        >
+          <View style={styles.modal} onStartShouldSetResponder={() => true}>
+            <Text style={styles.modalTitle}>{editTarget?.fullName}</Text>
+            <Text style={styles.modalSubtitle}>
+              {editTarget?.role === 'admin' ? 'Админ' : 'Оператор'} ·{' '}
+              {editTarget?.phone}
+            </Text>
+
+            {editTarget?.role !== 'admin' && (
+              <TouchableOpacity
+                style={styles.actionRow}
+                onPress={() => editTarget && handlePromoteToAdmin(editTarget)}
+              >
+                <View style={[styles.actionIcon, { backgroundColor: '#FFF8E1' }]}>
+                  <Text style={{ fontSize: 16 }}>★</Text>
+                </View>
+                <Text style={styles.actionText}>Назначить администратором</Text>
+              </TouchableOpacity>
+            )}
+
+            {editTarget?.id !== currentUser?.id && editTarget?.role !== 'admin' && (
+              <TouchableOpacity
+                style={styles.actionRow}
+                onPress={() => editTarget && handleDelete(editTarget)}
+              >
+                <View style={[styles.actionIcon, { backgroundColor: '#FFEBEE' }]}>
+                  <Text style={{ fontSize: 16, color: '#E53935' }}>✕</Text>
+                </View>
+                <Text style={[styles.actionText, { color: '#E53935' }]}>
+                  Удалить пользователя
+                </Text>
+              </TouchableOpacity>
+            )}
+
+            <TouchableOpacity
+              style={[styles.actionRow, { marginTop: 8 }]}
+              onPress={() => setEditTarget(null)}
+            >
+              <Text style={[styles.actionText, { color: '#999', textAlign: 'center', flex: 1 }]}>
+                Отмена
+              </Text>
+            </TouchableOpacity>
           </View>
-        </View>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* Create user modal */}
+      <Modal visible={showCreateModal} animationType="slide" transparent>
+        <KeyboardAvoidingView
+          style={styles.modalOverlay}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        >
+          <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+            <View style={styles.modalOverlay} pointerEvents="box-none">
+              <View style={styles.modal}>
+                <Text style={styles.modalTitle}>Новый пользователь</Text>
+                <ScrollView
+                  keyboardShouldPersistTaps="handled"
+                  showsVerticalScrollIndicator={false}
+                >
+                  <Input label="ФИО" value={fullName} onChangeText={setFullName} />
+                  <Input label="Телефон" value={phone} onChangeText={setPhone} keyboardType="phone-pad" />
+                  <Input label="Email" value={email} onChangeText={setEmail} autoCapitalize="none" />
+                  <Input label="Пароль" value={password} onChangeText={setPassword} secureTextEntry />
+                  <Button title="Создать" onPress={handleCreate} loading={creating} />
+                  <Button
+                    title="Отмена"
+                    onPress={() => {
+                      setShowCreateModal(false);
+                      resetForm();
+                    }}
+                    variant="secondary"
+                    style={{ marginTop: 8 }}
+                  />
+                </ScrollView>
+              </View>
+            </View>
+          </TouchableWithoutFeedback>
+        </KeyboardAvoidingView>
       </Modal>
     </View>
   );
@@ -243,17 +346,17 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '700',
   },
-  deleteBtn: {
+  editBtn: {
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: '#FFEBEE',
+    backgroundColor: '#E3F2FD',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  deleteBtnText: {
-    color: '#E53935',
-    fontSize: 16,
+  editBtnText: {
+    color: '#1976D2',
+    fontSize: 18,
     fontWeight: '700',
   },
   empty: {
@@ -299,6 +402,30 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: '700',
     color: '#222',
+    marginBottom: 4,
+  },
+  modalSubtitle: {
+    fontSize: 13,
+    color: '#888',
     marginBottom: 20,
+  },
+  actionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    borderBottomWidth: 0.5,
+    borderBottomColor: '#F0F0F0',
+    gap: 12,
+  },
+  actionIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  actionText: {
+    fontSize: 15,
+    color: '#222',
   },
 });

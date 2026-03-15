@@ -1,6 +1,22 @@
 import api from './api';
 import type { User, PaginatedResponse, StatsSummary, Book } from '../types';
 
+export interface SystemSetting {
+  id: string;
+  key: string;
+  value: string;
+  description?: string;
+  valueType: string;
+  updatedAt: string;
+}
+
+interface UpsertSettingDto {
+  key: string;
+  value: string;
+  description?: string;
+  valueType?: string;
+}
+
 interface CreateUserDto {
   fullName: string;
   phone: string;
@@ -43,6 +59,16 @@ export const adminService = {
     const { data } = await api.get<StatsSummary>('/admin/statistics', {
       params: { days },
     });
+    return data;
+  },
+
+  async getSettings(): Promise<SystemSetting[]> {
+    const { data } = await api.get<SystemSetting[]>('/admin/settings');
+    return data;
+  },
+
+  async upsertSetting(dto: UpsertSettingDto): Promise<SystemSetting> {
+    const { data } = await api.post<SystemSetting>('/admin/settings', dto);
     return data;
   },
 

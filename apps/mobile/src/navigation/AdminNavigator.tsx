@@ -10,7 +10,7 @@ import { CardsListScreen } from "../screens/operator/CardsList";
 import { CreateCardScreen } from "../screens/operator/CreateCard";
 import { CardDetailScreen } from "../screens/operator/CardDetail";
 import { PhotoUploadScreen } from "../screens/operator/PhotoUpload";
-import { ProfileScreen } from "../screens/operator/ProfileScreen";
+import { SettingsScreen } from "../screens/operator/SettingsScreen";
 
 export type AdminMainStackParamList = {
   Dashboard: undefined;
@@ -103,12 +103,12 @@ export function AdminNavigator() {
       />
       <Tab.Screen
         name="ProfileTab"
-        component={ProfileScreen}
+        component={SettingsScreen}
         options={{
-          tabBarLabel: "Профиль",
+          tabBarLabel: "Настройки",
           tabBarIcon: () => <TabIcon label="👤" />,
           headerShown: true,
-          headerTitle: "Профиль",
+          headerTitle: "Настройки",
           ...headerStyle,
         }}
       />

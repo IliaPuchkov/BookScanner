@@ -3,14 +3,16 @@ import { View, StyleSheet, Alert, ActivityIndicator } from 'react-native';
 import { useRoute, type RouteProp } from '@react-navigation/native';
 import * as ImagePicker from 'expo-image-picker';
 import { PhotoGrid } from '../../components/PhotoGrid';
-import { Button } from '../../components/Button';
 import { LoadingOverlay } from '../../components/LoadingOverlay';
 import { booksService } from '../../services/books.service';
 import { photosService } from '../../services/photos.service';
-import type { BookPhoto } from '../../types';
+import { adminService } from '../../services/admin.service';
 import type { OperatorStackParamList } from '../../navigation/OperatorNavigator';
 
 type Route = RouteProp<OperatorStackParamList, 'PhotoUpload'>;
+
+const DEFAULT_MAX_PHOTOS = 10;
+const MAX_PHOTOS_KEY = 'max_photo_count';
 
 export function PhotoUploadScreen() {
   const route = useRoute<Route>();
@@ -19,26 +21,43 @@ export function PhotoUploadScreen() {
   const [photos, setPhotos] = useState<Array<{ uri: string; id?: string }>>([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
+  const [maxPhotos, setMaxPhotos] = useState(DEFAULT_MAX_PHOTOS);
 
   useEffect(() => {
-    booksService
-      .getBook(bookId)
-      .then((book) => {
+    const init = async () => {
+      try {
+        const [book, settings] = await Promise.all([
+          booksService.getBook(bookId),
+          adminService.getSettings().catch(() => []),
+        ]);
+
         const sorted = [...(book.photos ?? [])].sort(
           (a, b) => a.sortOrder - b.sortOrder,
         );
         setPhotos(sorted.map((p) => ({ uri: p.fileUrl, id: p.id })));
-      })
-      .catch(() => Alert.alert('Ошибка', 'Не удалось загрузить фото'))
-      .finally(() => setLoading(false));
+
+        const maxSetting = settings.find((s) => s.key === MAX_PHOTOS_KEY);
+        if (maxSetting) {
+          const parsed = parseInt(maxSetting.value, 10);
+          if (!isNaN(parsed) && parsed > 0) setMaxPhotos(parsed);
+        }
+      } catch {
+        Alert.alert('Ошибка', 'Не удалось загрузить данные');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    init();
   }, [bookId]);
 
   const handleAdd = async () => {
+    const remaining = maxPhotos - photos.length;
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['images'],
       allowsMultipleSelection: true,
       quality: 0.8,
-      selectionLimit: 10 - photos.length,
+      selectionLimit: remaining,
     });
 
     if (!result.canceled && result.assets.length > 0) {
@@ -94,7 +113,12 @@ export function PhotoUploadScreen() {
     <View style={styles.container}>
       {uploading && <LoadingOverlay message="Загрузка фото..." />}
       <View style={styles.content}>
-        <PhotoGrid photos={photos} onAdd={handleAdd} onRemove={handleRemove} />
+        <PhotoGrid
+          photos={photos}
+          onAdd={handleAdd}
+          onRemove={handleRemove}
+          maxPhotos={maxPhotos}
+        />
       </View>
     </View>
   );

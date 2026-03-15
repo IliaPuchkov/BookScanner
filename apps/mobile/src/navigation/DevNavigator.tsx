@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState } from "react";
 import {
   View,
   Text,
@@ -6,40 +6,92 @@ import {
   TouchableOpacity,
   ScrollView,
   SafeAreaView,
-} from 'react-native';
-import { NavigationContainer } from '@react-navigation/native';
-import { createNativeStackNavigator } from '@react-navigation/native-stack';
+} from "react-native";
+import { NavigationContainer } from "@react-navigation/native";
+import { createNativeStackNavigator } from "@react-navigation/native-stack";
 
-import { LoginScreen } from '../screens/auth/LoginScreen';
-import { RegisterScreen } from '../screens/auth/RegisterScreen';
-import { CardsListScreen } from '../screens/operator/CardsList';
-import { CreateCardScreen } from '../screens/operator/CreateCard';
-import { CardDetailScreen } from '../screens/operator/CardDetail';
-import { PhotoUploadScreen } from '../screens/operator/PhotoUpload';
-import { ProfileScreen } from '../screens/operator/ProfileScreen';
-import { DashboardScreen } from '../screens/admin/Dashboard';
-import { UserManagementScreen } from '../screens/admin/UserManagement';
-import { StatisticsScreen } from '../screens/admin/Statistics';
-import { BookDatabaseScreen } from '../screens/admin/BookDatabase';
+import { LoginScreen } from "../screens/auth/LoginScreen";
+import { RegisterScreen } from "../screens/auth/RegisterScreen";
+import { CardsListScreen } from "../screens/operator/CardsList";
+import { CreateCardScreen } from "../screens/operator/CreateCard";
+import { CardDetailScreen } from "../screens/operator/CardDetail";
+import { PhotoUploadScreen } from "../screens/operator/PhotoUpload";
+import { SettingsScreen } from "../screens/operator/SettingsScreen";
+import { DashboardScreen } from "../screens/admin/Dashboard";
+import { UserManagementScreen } from "../screens/admin/UserManagement";
+import { StatisticsScreen } from "../screens/admin/Statistics";
+import { BookDatabaseScreen } from "../screens/admin/BookDatabase";
 
 const SCREENS = [
-  { key: 'Login', title: 'Login', group: 'Auth', component: LoginScreen },
-  { key: 'Register', title: 'Register', group: 'Auth', component: RegisterScreen },
-  { key: 'CardsList', title: 'CardsList', group: 'Operator', component: CardsListScreen },
-  { key: 'CreateCard', title: 'CreateCard', group: 'Operator', component: CreateCardScreen },
-  { key: 'CardDetail', title: 'CardDetail', group: 'Operator', component: CardDetailScreen, params: { bookId: 'dev-mock-id' } },
-  { key: 'PhotoUpload', title: 'PhotoUpload', group: 'Operator', component: PhotoUploadScreen, params: { bookId: 'dev-mock-id' } },
-  { key: 'Profile', title: 'Profile', group: 'Operator', component: ProfileScreen },
-  { key: 'Dashboard', title: 'Dashboard', group: 'Admin', component: DashboardScreen },
-  { key: 'UserManagement', title: 'UserManagement', group: 'Admin', component: UserManagementScreen },
-  { key: 'Statistics', title: 'Statistics', group: 'Admin', component: StatisticsScreen },
-  { key: 'BookDatabase', title: 'BookDatabase', group: 'Admin', component: BookDatabaseScreen },
+  { key: "Login", title: "Login", group: "Auth", component: LoginScreen },
+  {
+    key: "Register",
+    title: "Register",
+    group: "Auth",
+    component: RegisterScreen,
+  },
+  {
+    key: "CardsList",
+    title: "CardsList",
+    group: "Operator",
+    component: CardsListScreen,
+  },
+  {
+    key: "CreateCard",
+    title: "CreateCard",
+    group: "Operator",
+    component: CreateCardScreen,
+  },
+  {
+    key: "CardDetail",
+    title: "CardDetail",
+    group: "Operator",
+    component: CardDetailScreen,
+    params: { bookId: "dev-mock-id" },
+  },
+  {
+    key: "PhotoUpload",
+    title: "PhotoUpload",
+    group: "Operator",
+    component: PhotoUploadScreen,
+    params: { bookId: "dev-mock-id" },
+  },
+  {
+    key: "Profile",
+    title: "Profile",
+    group: "Operator",
+    component: SettingsScreen,
+  },
+  {
+    key: "Dashboard",
+    title: "Dashboard",
+    group: "Admin",
+    component: DashboardScreen,
+  },
+  {
+    key: "UserManagement",
+    title: "UserManagement",
+    group: "Admin",
+    component: UserManagementScreen,
+  },
+  {
+    key: "Statistics",
+    title: "Statistics",
+    group: "Admin",
+    component: StatisticsScreen,
+  },
+  {
+    key: "BookDatabase",
+    title: "BookDatabase",
+    group: "Admin",
+    component: BookDatabaseScreen,
+  },
 ] as const;
 
 const Stack = createNativeStackNavigator();
 
 function DevMenu({ onSelect }: { onSelect: (key: string) => void }) {
-  const groups = ['Auth', 'Operator', 'Admin'] as const;
+  const groups = ["Auth", "Operator", "Admin"] as const;
 
   return (
     <SafeAreaView style={styles.container}>
@@ -81,9 +133,9 @@ export function DevNavigator() {
     <NavigationContainer>
       <Stack.Navigator
         screenOptions={{
-          headerStyle: { backgroundColor: '#FF6B00' },
-          headerTintColor: '#fff',
-          headerTitleStyle: { fontWeight: '600' },
+          headerStyle: { backgroundColor: "#FF6B00" },
+          headerTintColor: "#fff",
+          headerTitleStyle: { fontWeight: "600" },
         }}
       >
         <Stack.Screen
@@ -94,7 +146,7 @@ export function DevNavigator() {
             title: `[DEV] ${screen.title}`,
             headerLeft: () => (
               <TouchableOpacity onPress={() => setActiveScreen(null)}>
-                <Text style={{ color: '#fff', fontSize: 16, marginRight: 12 }}>
+                <Text style={{ color: "#fff", fontSize: 16, marginRight: 12 }}>
                   ← Меню
                 </Text>
               </TouchableOpacity>
@@ -109,7 +161,7 @@ export function DevNavigator() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#1a1a2e',
+    backgroundColor: "#1a1a2e",
   },
   scroll: {
     padding: 20,
@@ -117,15 +169,15 @@ const styles = StyleSheet.create({
   },
   header: {
     fontSize: 28,
-    fontWeight: '900',
-    color: '#FF6B00',
-    textAlign: 'center',
+    fontWeight: "900",
+    color: "#FF6B00",
+    textAlign: "center",
     marginBottom: 4,
   },
   hint: {
     fontSize: 13,
-    color: '#666',
-    textAlign: 'center',
+    color: "#666",
+    textAlign: "center",
     marginBottom: 24,
   },
   group: {
@@ -133,17 +185,17 @@ const styles = StyleSheet.create({
   },
   groupTitle: {
     fontSize: 12,
-    fontWeight: '700',
-    color: '#888',
-    textTransform: 'uppercase',
+    fontWeight: "700",
+    color: "#888",
+    textTransform: "uppercase",
     letterSpacing: 1,
     marginBottom: 8,
     marginLeft: 4,
   },
   item: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#16213e',
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#16213e",
     borderRadius: 10,
     padding: 14,
     marginBottom: 6,
@@ -151,11 +203,11 @@ const styles = StyleSheet.create({
   itemText: {
     flex: 1,
     fontSize: 15,
-    fontWeight: '500',
-    color: '#e0e0e0',
+    fontWeight: "500",
+    color: "#e0e0e0",
   },
   arrow: {
     fontSize: 20,
-    color: '#555',
+    color: "#555",
   },
 });
