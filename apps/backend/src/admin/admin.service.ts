@@ -5,6 +5,7 @@ import { StatsService } from '../stats/stats.service';
 import { CreateUserDto } from '../users/dto/create-user.dto';
 import { UpdateUserDto } from '../users/dto/update-user.dto';
 import { PaginationDto } from '../common/dto/pagination.dto';
+import { SearchBooksDto } from './dto/search-books.dto';
 import { UserRole } from '@bookscanner/shared';
 
 @Injectable()
@@ -49,7 +50,7 @@ export class AdminService {
     const [todayStats, periodStats, perUserRaw, usersResult, booksResult] = await Promise.all([
       this.statsService.getGlobalStats(startOfToday),
       this.statsService.getGlobalStats(startOfPeriod),
-      this.statsService.getPerUserBookCounts(),
+      this.statsService.getPerUserBookCounts(startOfPeriod),
       this.usersService.findAll(miniPagination),
       this.booksService.findAll('', UserRole.ADMIN, miniPagination),
     ]);
@@ -72,8 +73,9 @@ export class AdminService {
     };
   }
 
-  async searchBooks(pagination: PaginationDto, search?: string) {
+  async searchBooks(dto: SearchBooksDto) {
+    const { search, boxId, createdById, dateFrom, dateTo, ...pagination } = dto;
     // Admin sees all books
-    return this.booksService.findAll('', UserRole.ADMIN, pagination, undefined, search);
+    return this.booksService.findAll('', UserRole.ADMIN, pagination as PaginationDto, boxId, search, createdById, dateFrom, dateTo);
   }
 }

@@ -53,34 +53,7 @@ export function DashboardScreen() {
       contentContainerStyle={styles.scroll}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
     >
-      {/* Row 1: Cards + Users */}
-      <View style={styles.row}>
-        <TouchableOpacity
-          style={[styles.card, styles.cardBlue]}
-          activeOpacity={0.75}
-          onPress={() => navigation.navigate('CardsList')}
-        >
-          <Text style={styles.cardValue}>
-            {stats?.totalCards?.toString() ?? '—'}
-          </Text>
-          <Text style={styles.cardLabel}>Всего карточек</Text>
-          <Text style={styles.cardArrow}>›</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[styles.card, styles.cardGreen]}
-          activeOpacity={0.75}
-          onPress={() => navigation.navigate('UserManagement')}
-        >
-          <Text style={styles.cardValue}>
-            {stats?.totalUsers?.toString() ?? '—'}
-          </Text>
-          <Text style={styles.cardLabel}>Пользователи</Text>
-          <Text style={styles.cardArrow}>›</Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* Row 2: Statistics */}
+      {/* Statistics */}
       <TouchableOpacity
         style={[styles.wideCard, styles.cardOrange]}
         activeOpacity={0.75}
@@ -90,7 +63,17 @@ export function DashboardScreen() {
           <Text style={styles.wideCardTitle}>Статистика</Text>
           <Text style={styles.cardArrow}>›</Text>
         </View>
+
+        {/* Количество карточек */}
+        <Text style={styles.subSectionTitle}>Карточки</Text>
         <View style={styles.statsRow}>
+          <View style={styles.statItem}>
+            <Text style={[styles.statValue, { color: '#1976D2' }]}>
+              {stats?.totalCards?.toString() ?? '—'}
+            </Text>
+            <Text style={styles.statLabel}>Всего</Text>
+          </View>
+          <View style={styles.statDivider} />
           <View style={styles.statItem}>
             <Text style={[styles.statValue, { color: '#FB8C00' }]}>
               {stats?.cardsToday?.toString() ?? '—'}
@@ -104,20 +87,34 @@ export function DashboardScreen() {
             </Text>
             <Text style={styles.statLabel}>За неделю</Text>
           </View>
-          {stats?.perUser && stats.perUser.length > 0 && (
-            <>
-              <View style={styles.statDivider} />
-              <View style={styles.statItem}>
-                <Text style={[styles.statValue, { color: '#FB8C00' }]}>
-                  {stats.perUser[0].cardsCount}
-                </Text>
-                <Text style={styles.statLabel} numberOfLines={1}>
-                  {stats.perUser[0].fullName.split(' ')[0]}
-                </Text>
-              </View>
-            </>
-          )}
         </View>
+
+        {/* Пользователи */}
+        <View style={styles.sectionDivider} />
+        <Text style={styles.subSectionTitle}>Пользователи</Text>
+        <View style={styles.statsRow}>
+          <View style={styles.statItem}>
+            <Text style={[styles.statValue, { color: '#43A047' }]}>
+              {stats?.totalUsers?.toString() ?? '—'}
+            </Text>
+            <Text style={styles.statLabel}>Всего</Text>
+          </View>
+        </View>
+
+        {/* Производительность */}
+        {stats?.perUser && stats.perUser.length > 0 && (
+          <>
+            <View style={styles.sectionDivider} />
+            <Text style={styles.subSectionTitle}>Производительность</Text>
+            {stats.perUser.slice(0, 3).map((u, i) => (
+              <View key={u.userId} style={styles.perfRow}>
+                <Text style={styles.perfRank}>#{i + 1}</Text>
+                <Text style={styles.perfName} numberOfLines={1}>{u.fullName}</Text>
+                <Text style={styles.perfCount}>{u.cardsCount}</Text>
+              </View>
+            ))}
+          </>
+        )}
       </TouchableOpacity>
 
       {/* Row 3: Book Database */}
@@ -159,36 +156,6 @@ const styles = StyleSheet.create({
   scroll: {
     padding: 16,
     gap: 12,
-  },
-  row: {
-    flexDirection: 'row',
-    gap: 12,
-  },
-  card: {
-    flex: 1,
-    borderRadius: 14,
-    padding: 18,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 6,
-    elevation: 2,
-  },
-  cardBlue: {
-    backgroundColor: '#1976D2',
-  },
-  cardGreen: {
-    backgroundColor: '#43A047',
-  },
-  cardValue: {
-    fontSize: 36,
-    fontWeight: '800',
-    color: '#fff',
-  },
-  cardLabel: {
-    fontSize: 13,
-    color: 'rgba(255,255,255,0.85)',
-    marginTop: 4,
   },
   cardArrow: {
     position: 'absolute',
@@ -249,6 +216,41 @@ const styles = StyleSheet.create({
     width: 1,
     height: 36,
     backgroundColor: '#eee',
+  },
+  subSectionTitle: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#999',
+    marginBottom: 8,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  sectionDivider: {
+    height: 1,
+    backgroundColor: '#f0f0f0',
+    marginVertical: 14,
+  },
+  perfRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 5,
+  },
+  perfRank: {
+    width: 28,
+    fontSize: 13,
+    color: '#999',
+    fontWeight: '600',
+  },
+  perfName: {
+    flex: 1,
+    fontSize: 14,
+    color: '#444',
+  },
+  perfCount: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#1976D2',
+    marginLeft: 8,
   },
   bookRow: {
     paddingVertical: 6,

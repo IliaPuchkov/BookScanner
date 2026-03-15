@@ -19,6 +19,7 @@ import { UserRole } from '@bookscanner/shared';
 import { CreateUserDto } from '../users/dto/create-user.dto';
 import { UpdateUserDto } from '../users/dto/update-user.dto';
 import { PaginationDto } from '../common/dto/pagination.dto';
+import { SearchBooksDto } from './dto/search-books.dto';
 
 @ApiTags('Admin')
 @Controller('admin')
@@ -67,11 +68,7 @@ export class AdminController {
   // Book database
   @Get('books/database')
   @ApiOperation({ summary: 'Поиск по базе книг' })
-  @ApiQuery({ name: 'search', required: false })
-  searchBooks(
-    @Query() pagination: PaginationDto,
-    @Query('search') search?: string,
-  ) {
-    return this.adminService.searchBooks(pagination, search);
+  searchBooks(@Query() dto: SearchBooksDto) {
+    return this.adminService.searchBooks(dto);
   }
 }

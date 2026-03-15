@@ -12,16 +12,19 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from "react-native";
+import { useNavigation } from "@react-navigation/native";
 import { useAuth } from "../../hooks/useAuth";
-import { Button } from "../../components/Button";
 import { adminService } from "../../services/admin.service";
+
+// Operator sees a blank screen; only admin gets settings content
 
 const AI_PROMPT_KEY = "vision_ai_prompt";
 const MAX_PHOTOS_KEY = "max_photo_count";
 const DEFAULT_MAX_PHOTOS = 10;
 
 export function SettingsScreen() {
-  const { user, logout } = useAuth();
+  const { user } = useAuth();
+  const navigation = useNavigation<any>();
   const isAdmin = user?.role === "admin";
 
   // AI prompt
@@ -39,7 +42,9 @@ export function SettingsScreen() {
   const [loadingSettings, setLoadingSettings] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
-  const applySettings = (settings: Awaited<ReturnType<typeof adminService.getSettings>>) => {
+  const applySettings = (
+    settings: Awaited<ReturnType<typeof adminService.getSettings>>,
+  ) => {
     const prompt = settings.find((s) => s.key === AI_PROMPT_KEY);
     if (prompt) setAiPrompt(prompt.value);
 
@@ -148,202 +153,203 @@ export function SettingsScreen() {
     }
   };
 
-  const handleLogout = () => {
-    Alert.alert("Выход", "Вы уверены?", [
-      { text: "Отмена", style: "cancel" },
-      { text: "Выйти", style: "destructive", onPress: logout },
-    ]);
-  };
+  if (!isAdmin) {
+    return <View style={styles.blank} />;
+  }
 
-  return (
-    <KeyboardAvoidingView
-      style={styles.flex}
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
-      keyboardVerticalOffset={Platform.OS === "ios" ? 88 : 0}
-    >
-      <ScrollView
-        style={styles.scroll}
-        contentContainerStyle={styles.container}
-        keyboardShouldPersistTaps="handled"
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={handleRefresh}
-            colors={["#1976D2"]}
-            tintColor="#1976D2"
-          />
-        }
+  if (isAdmin) {
+    return (
+      <KeyboardAvoidingView
+        style={styles.flex}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        keyboardVerticalOffset={Platform.OS === "ios" ? 88 : 0}
       >
-        <View style={styles.card}>
-          <View style={styles.avatar}>
-            <Text style={styles.avatarText}>
-              {user?.fullName?.charAt(0)?.toUpperCase() ?? "?"}
-            </Text>
-          </View>
-          <Text style={styles.name}>{user?.fullName}</Text>
-          <Text style={styles.role}>
-            {isAdmin ? "Администратор" : "Оператор"}
-          </Text>
-
-          <View style={styles.info}>
-            <InfoItem label="Телефон" value={user?.phone ?? "—"} />
-            <InfoItem label="Email" value={user?.email ?? "—"} />
-            <InfoItem
-              label="Статус"
-              value={user?.isApproved ? "Подтвержден" : "Ожидает подтверждения"}
+        <ScrollView
+          style={styles.scroll}
+          contentContainerStyle={styles.container}
+          keyboardShouldPersistTaps="handled"
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={handleRefresh}
+              colors={["#1976D2"]}
+              tintColor="#1976D2"
             />
-          </View>
-        </View>
+          }
+        >
+          {loadingSettings ? (
+            <View style={styles.card}>
+              <ActivityIndicator color="#1976D2" />
+            </View>
+          ) : (
+            <>
+              {/* User management */}
+              <TouchableOpacity
+                style={styles.card}
+                activeOpacity={0.75}
+                onPress={() => navigation.navigate('UserManagement')}
+              >
+                <View style={[styles.sectionHeader, { marginBottom: 0 }]}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.sectionTitle}>
+                      Управление пользователями
+                    </Text>
+                    <Text style={styles.sectionDesc}>
+                      Создание, редактирование и удаление пользователей.
+                    </Text>
+                  </View>
+                  <Text style={styles.userMgmtArrow}>›</Text>
+                </View>
+              </TouchableOpacity>
 
-        {isAdmin && (
-          <>
-            {loadingSettings ? (
+              {/* Max photos setting */}
               <View style={styles.card}>
-                <ActivityIndicator color="#1976D2" />
+                <View style={styles.sectionHeader}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.sectionTitle}>
+                      Максимальное количество фото
+                    </Text>
+                    <Text style={styles.sectionDesc}>
+                      Сколько фотографий оператор может загрузить для одной
+                      книги.
+                    </Text>
+                  </View>
+                </View>
+
+                {editingMaxPhotos ? (
+                  <>
+                    <TextInput
+                      style={styles.numberInput}
+                      value={draftMaxPhotos}
+                      onChangeText={setDraftMaxPhotos}
+                      keyboardType="number-pad"
+                      placeholder="Введите число (1–20)"
+                      placeholderTextColor="#aaa"
+                      editable={!savingMaxPhotos}
+                      autoFocus
+                      maxLength={2}
+                    />
+                    <View style={styles.editActions}>
+                      <TouchableOpacity
+                        style={[styles.actionBtn, styles.cancelBtn]}
+                        onPress={handleCancelMaxPhotos}
+                        disabled={savingMaxPhotos}
+                      >
+                        <Text style={styles.cancelBtnText}>Отмена</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[
+                          styles.actionBtn,
+                          styles.saveBtn,
+                          savingMaxPhotos && styles.disabledBtn,
+                        ]}
+                        onPress={handleSaveMaxPhotos}
+                        disabled={savingMaxPhotos}
+                      >
+                        {savingMaxPhotos ? (
+                          <ActivityIndicator size="small" color="#fff" />
+                        ) : (
+                          <Text style={styles.saveBtnText}>Сохранить</Text>
+                        )}
+                      </TouchableOpacity>
+                    </View>
+                  </>
+                ) : (
+                  <View style={styles.inlineValueRow}>
+                    <View style={styles.numberBadge}>
+                      <Text style={styles.numberBadgeText}>{maxPhotos}</Text>
+                    </View>
+                    <TouchableOpacity
+                      style={styles.editBtn}
+                      onPress={handleStartEditMaxPhotos}
+                    >
+                      <Text style={styles.editBtnText}>Изменить</Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
               </View>
-            ) : (
-              <>
-                {/* Max photos setting */}
-                <View style={styles.card}>
-                  <View style={styles.sectionHeader}>
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.sectionTitle}>Максимальное количество фото</Text>
-                      <Text style={styles.sectionDesc}>
-                        Сколько фотографий оператор может загрузить для одной книги.
-                      </Text>
-                    </View>
-                  </View>
 
-                  {editingMaxPhotos ? (
-                    <>
-                      <TextInput
-                        style={styles.numberInput}
-                        value={draftMaxPhotos}
-                        onChangeText={setDraftMaxPhotos}
-                        keyboardType="number-pad"
-                        placeholder="Введите число (1–20)"
-                        placeholderTextColor="#aaa"
-                        editable={!savingMaxPhotos}
-                        autoFocus
-                        maxLength={2}
-                      />
-                      <View style={styles.editActions}>
-                        <TouchableOpacity
-                          style={[styles.actionBtn, styles.cancelBtn]}
-                          onPress={handleCancelMaxPhotos}
-                          disabled={savingMaxPhotos}
-                        >
-                          <Text style={styles.cancelBtnText}>Отмена</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                          style={[styles.actionBtn, styles.saveBtn, savingMaxPhotos && styles.disabledBtn]}
-                          onPress={handleSaveMaxPhotos}
-                          disabled={savingMaxPhotos}
-                        >
-                          {savingMaxPhotos ? (
-                            <ActivityIndicator size="small" color="#fff" />
-                          ) : (
-                            <Text style={styles.saveBtnText}>Сохранить</Text>
-                          )}
-                        </TouchableOpacity>
-                      </View>
-                    </>
-                  ) : (
-                    <View style={styles.inlineValueRow}>
-                      <View style={styles.numberBadge}>
-                        <Text style={styles.numberBadgeText}>{maxPhotos}</Text>
-                      </View>
-                      <TouchableOpacity style={styles.editBtn} onPress={handleStartEditMaxPhotos}>
-                        <Text style={styles.editBtnText}>Изменить</Text>
-                      </TouchableOpacity>
-                    </View>
-                  )}
+              {/* AI prompt setting */}
+              <View style={styles.card}>
+                <View style={styles.sectionHeader}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.sectionTitle}>
+                      AI-промпт для распознавания
+                    </Text>
+                    <Text style={styles.sectionDesc}>
+                      Этот промпт передаётся в ИИ при извлечении данных из
+                      фотографий книг.
+                    </Text>
+                  </View>
                 </View>
 
-                {/* AI prompt setting */}
-                <View style={styles.card}>
-                  <View style={styles.sectionHeader}>
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.sectionTitle}>AI-промпт для распознавания</Text>
-                      <Text style={styles.sectionDesc}>
-                        Этот промпт передаётся в ИИ при извлечении данных из фотографий книг.
+                {editingPrompt ? (
+                  <>
+                    <TextInput
+                      style={styles.promptInput}
+                      value={draftPrompt}
+                      onChangeText={setDraftPrompt}
+                      placeholder="Введите кастомный промпт..."
+                      placeholderTextColor="#aaa"
+                      multiline
+                      textAlignVertical="top"
+                      editable={!savingPrompt}
+                      autoFocus
+                    />
+                    <View style={styles.editActions}>
+                      <TouchableOpacity
+                        style={[styles.actionBtn, styles.cancelBtn]}
+                        onPress={handleCancelPrompt}
+                        disabled={savingPrompt}
+                      >
+                        <Text style={styles.cancelBtnText}>Отмена</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[
+                          styles.actionBtn,
+                          styles.saveBtn,
+                          savingPrompt && styles.disabledBtn,
+                        ]}
+                        onPress={handleSavePrompt}
+                        disabled={savingPrompt}
+                      >
+                        {savingPrompt ? (
+                          <ActivityIndicator size="small" color="#fff" />
+                        ) : (
+                          <Text style={styles.saveBtnText}>Сохранить</Text>
+                        )}
+                      </TouchableOpacity>
+                    </View>
+                  </>
+                ) : (
+                  <>
+                    <View style={styles.promptTextBox}>
+                      <Text style={styles.promptText}>
+                        {aiPrompt || "Промпт не задан"}
                       </Text>
                     </View>
-                  </View>
-
-                  {editingPrompt ? (
-                    <>
-                      <TextInput
-                        style={styles.promptInput}
-                        value={draftPrompt}
-                        onChangeText={setDraftPrompt}
-                        placeholder="Введите кастомный промпт..."
-                        placeholderTextColor="#aaa"
-                        multiline
-                        textAlignVertical="top"
-                        editable={!savingPrompt}
-                        autoFocus
-                      />
-                      <View style={styles.editActions}>
-                        <TouchableOpacity
-                          style={[styles.actionBtn, styles.cancelBtn]}
-                          onPress={handleCancelPrompt}
-                          disabled={savingPrompt}
-                        >
-                          <Text style={styles.cancelBtnText}>Отмена</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                          style={[styles.actionBtn, styles.saveBtn, savingPrompt && styles.disabledBtn]}
-                          onPress={handleSavePrompt}
-                          disabled={savingPrompt}
-                        >
-                          {savingPrompt ? (
-                            <ActivityIndicator size="small" color="#fff" />
-                          ) : (
-                            <Text style={styles.saveBtnText}>Сохранить</Text>
-                          )}
-                        </TouchableOpacity>
-                      </View>
-                    </>
-                  ) : (
-                    <>
-                      <View style={styles.promptTextBox}>
-                        <Text style={styles.promptText}>
-                          {aiPrompt || "Промпт не задан"}
-                        </Text>
-                      </View>
-                      <TouchableOpacity style={styles.editBtn} onPress={handleStartEditPrompt}>
-                        <Text style={styles.editBtnText}>Изменить</Text>
-                      </TouchableOpacity>
-                    </>
-                  )}
-                </View>
-              </>
-            )}
-          </>
-        )}
-
-        <Button
-          title="Выйти из аккаунта"
-          onPress={handleLogout}
-          variant="danger"
-          style={{ marginTop: 8 }}
-        />
-      </ScrollView>
-    </KeyboardAvoidingView>
-  );
-}
-
-function InfoItem({ label, value }: { label: string; value: string }) {
-  return (
-    <View style={styles.infoRow}>
-      <Text style={styles.infoLabel}>{label}</Text>
-      <Text style={styles.infoValue}>{value}</Text>
-    </View>
-  );
+                    <TouchableOpacity
+                      style={styles.editBtn}
+                      onPress={handleStartEditPrompt}
+                    >
+                      <Text style={styles.editBtnText}>Изменить</Text>
+                    </TouchableOpacity>
+                  </>
+                )}
+              </View>
+            </>
+          )}
+        </ScrollView>
+      </KeyboardAvoidingView>
+    );
+  }
 }
 
 const styles = StyleSheet.create({
+  blank: {
+    flex: 1,
+    backgroundColor: "#F5F5F5",
+  },
   flex: {
     flex: 1,
     backgroundColor: "#F5F5F5",
@@ -366,50 +372,6 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.08,
     shadowRadius: 4,
     elevation: 2,
-  },
-  avatar: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    backgroundColor: "#1976D2",
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 12,
-  },
-  avatarText: {
-    fontSize: 28,
-    fontWeight: "700",
-    color: "#fff",
-  },
-  name: {
-    fontSize: 20,
-    fontWeight: "700",
-    color: "#222",
-  },
-  role: {
-    fontSize: 14,
-    color: "#888",
-    marginTop: 4,
-  },
-  info: {
-    width: "100%",
-    marginTop: 20,
-  },
-  infoRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    paddingVertical: 10,
-    borderBottomWidth: 0.5,
-    borderBottomColor: "#eee",
-  },
-  infoLabel: {
-    fontSize: 14,
-    color: "#666",
-  },
-  infoValue: {
-    fontSize: 14,
-    color: "#222",
-    fontWeight: "500",
   },
   sectionHeader: {
     flexDirection: "row",
@@ -529,5 +491,10 @@ const styles = StyleSheet.create({
   },
   disabledBtn: {
     opacity: 0.6,
+  },
+  userMgmtArrow: {
+    fontSize: 22,
+    color: '#ccc',
+    fontWeight: '300',
   },
 });

@@ -72,8 +72,8 @@ export class StatsService {
       .getRawMany();
   }
 
-  async getPerUserBookCounts() {
-    return this.activityLogRepository
+  async getPerUserBookCounts(since?: Date) {
+    const qb = this.activityLogRepository
       .createQueryBuilder('log')
       .innerJoin('log.user', 'user')
       .select('user.id', 'userId')
@@ -82,7 +82,12 @@ export class StatsService {
       .where("log.action = 'card_created'")
       .groupBy('user.id')
       .addGroupBy('user.fullName')
-      .orderBy('"booksCount"', 'DESC')
-      .getRawMany();
+      .orderBy('"booksCount"', 'DESC');
+
+    if (since) {
+      qb.andWhere('log.createdAt >= :since', { since });
+    }
+
+    return qb.getRawMany();
   }
 }

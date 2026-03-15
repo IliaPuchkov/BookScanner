@@ -6,6 +6,7 @@ import { CreateCardScreen } from "../screens/operator/CreateCard";
 import { CardDetailScreen } from "../screens/operator/CardDetail";
 import { PhotoUploadScreen } from "../screens/operator/PhotoUpload";
 import { SettingsScreen } from "../screens/operator/SettingsScreen";
+import { ProfileScreen } from "../screens/ProfileScreen";
 import { Text } from "react-native";
 
 export type OperatorStackParamList = {
@@ -77,13 +78,25 @@ export function OperatorNavigator() {
         }}
       />
       <Tab.Screen
-        name="ProfileTab"
+        name="SettingsTab"
         component={SettingsScreen}
         options={{
           tabBarLabel: "Настройки",
-          tabBarIcon: ({ focused }) => <TabIcon label="👤" focused={focused} />,
+          tabBarIcon: ({ focused }) => <TabIcon label="⚙️" focused={focused} />,
           headerShown: true,
           headerTitle: "Настройки",
+          headerStyle: { backgroundColor: "#1976D2" },
+          headerTintColor: "#fff",
+        }}
+      />
+      <Tab.Screen
+        name="ProfileTab"
+        component={ProfileScreen}
+        options={{
+          tabBarLabel: "Профиль",
+          tabBarIcon: ({ focused }) => <TabIcon label="👤" focused={focused} />,
+          headerShown: true,
+          headerTitle: "Профиль",
           headerStyle: { backgroundColor: "#1976D2" },
           headerTintColor: "#fff",
         }}

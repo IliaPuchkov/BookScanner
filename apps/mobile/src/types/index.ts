@@ -71,6 +71,7 @@ export interface Book {
   direction: string;
   boxId: string;
   createdById: string;
+  createdBy?: { id: string; fullName: string };
   photos: BookPhoto[];
   publishedToOzon?: string;
   createdAt: string;

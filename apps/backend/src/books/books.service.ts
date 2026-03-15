@@ -11,6 +11,7 @@ import { CreateBookDto } from './dto/create-book.dto';
 import { UpdateBookDto } from './dto/update-book.dto';
 import { PaginationDto } from '../common/dto/pagination.dto';
 import { BoxesService } from '../boxes/boxes.service';
+import { StatsService } from '../stats/stats.service';
 import { UserRole } from '@bookscanner/shared';
 import {
   DEFAULT_HEIGHT_MM,
@@ -28,6 +29,7 @@ export class BooksService {
     @InjectRepository(Book)
     private readonly booksRepository: Repository<Book>,
     private readonly boxesService: BoxesService,
+    private readonly statsService: StatsService,
   ) {}
 
   async create(dto: CreateBookDto, userId: string): Promise<Book> {
@@ -47,14 +49,26 @@ export class BooksService {
       weightGross: dto.weightGross ?? DEFAULT_WEIGHT_G,
     });
 
-    return this.booksRepository.save(book);
+    const saved = await this.booksRepository.save(book);
+    await this.statsService.logActivity(userId, 'card_created', 'book', saved.id);
+    return saved;
   }
 
-  async findAll(userId: string, role: UserRole, pagination: PaginationDto, boxId?: string, search?: string) {
+  async findAll(
+    userId: string,
+    role: UserRole,
+    pagination: PaginationDto,
+    boxId?: string,
+    search?: string,
+    createdById?: string,
+    dateFrom?: string,
+    dateTo?: string,
+  ) {
     const qb = this.booksRepository
       .createQueryBuilder('book')
       .leftJoinAndSelect('book.box', 'box')
-      .leftJoinAndSelect('book.photos', 'photos');
+      .leftJoinAndSelect('book.photos', 'photos')
+      .leftJoinAndSelect('book.createdBy', 'createdBy');
 
     if (role !== UserRole.ADMIN) {
       qb.andWhere('book.created_by = :userId', { userId });
@@ -62,6 +76,20 @@ export class BooksService {
 
     if (boxId) {
       qb.andWhere('book.box_id = :boxId', { boxId });
+    }
+
+    if (createdById) {
+      qb.andWhere('book.created_by = :createdById', { createdById });
+    }
+
+    if (dateFrom) {
+      qb.andWhere('book.createdAt >= :dateFrom', { dateFrom });
+    }
+
+    if (dateTo) {
+      const to = new Date(dateTo);
+      to.setHours(23, 59, 59, 999);
+      qb.andWhere('book.createdAt <= :dateTo', { dateTo: to.toISOString() });
     }
 
     if (search) {

@@ -77,6 +77,14 @@ export function PhotoUploadScreen() {
     }
   };
 
+  const handleReorder = async (newPhotos: Array<{ uri: string; id?: string }>) => {
+    setPhotos(newPhotos);
+    const ids = newPhotos.map((p) => p.id).filter(Boolean) as string[];
+    if (ids.length > 0) {
+      await photosService.reorderPhotos(bookId, ids).catch(() => {});
+    }
+  };
+
   const handleRemove = async (index: number) => {
     const photo = photos[index];
     if (!photo.id) {
@@ -117,6 +125,7 @@ export function PhotoUploadScreen() {
           photos={photos}
           onAdd={handleAdd}
           onRemove={handleRemove}
+          onReorder={handleReorder}
           maxPhotos={maxPhotos}
         />
       </View>

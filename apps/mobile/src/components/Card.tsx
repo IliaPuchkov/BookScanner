@@ -2,6 +2,11 @@ import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native';
 import type { Book } from '../types';
 
+function formatDate(iso: string): string {
+  const d = new Date(iso);
+  return d.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' });
+}
+
 interface Props {
   book: Book;
   onPress: () => void;
@@ -32,6 +37,14 @@ export function BookCard({ book, onPress }: Props) {
         {book.price != null && Number(book.price) > 0 && (
           <Text style={styles.price}>{Number(book.price).toFixed(0)} ₽</Text>
         )}
+        <View style={styles.meta}>
+          {book.createdBy?.fullName ? (
+            <Text style={styles.metaText} numberOfLines={1}>
+              {book.createdBy.fullName}
+            </Text>
+          ) : null}
+          <Text style={styles.metaText}>{formatDate(book.createdAt)}</Text>
+        </View>
       </View>
     </TouchableOpacity>
   );
@@ -89,5 +102,16 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#1976D2',
     marginTop: 4,
+  },
+  meta: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 6,
+    gap: 4,
+  },
+  metaText: {
+    fontSize: 11,
+    color: '#aaa',
+    flexShrink: 1,
   },
 });

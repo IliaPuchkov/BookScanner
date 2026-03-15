@@ -11,6 +11,7 @@ import { CreateCardScreen } from "../screens/operator/CreateCard";
 import { CardDetailScreen } from "../screens/operator/CardDetail";
 import { PhotoUploadScreen } from "../screens/operator/PhotoUpload";
 import { SettingsScreen } from "../screens/operator/SettingsScreen";
+import { ProfileScreen } from "../screens/ProfileScreen";
 
 export type AdminMainStackParamList = {
   Dashboard: undefined;
@@ -41,11 +42,6 @@ function MainStackScreen() {
         options={{ title: "Панель управления" }}
       />
       <MainStack.Screen
-        name="UserManagement"
-        component={UserManagementScreen}
-        options={{ title: "Пользователи" }}
-      />
-      <MainStack.Screen
         name="Statistics"
         component={StatisticsScreen}
         options={{ title: "Статистика" }}
@@ -56,26 +52,59 @@ function MainStackScreen() {
         options={{ title: "База книг" }}
       />
       <MainStack.Screen
-        name="CardsList"
-        component={CardsListScreen}
-        options={{ title: "Карточки" }}
-      />
-      <MainStack.Screen
-        name="CreateCard"
-        component={CreateCardScreen}
-        options={{ title: "Новая карточка" }}
-      />
-      <MainStack.Screen
         name="CardDetail"
         component={CardDetailScreen}
         options={{ title: "Карточка" }}
       />
-      <MainStack.Screen
+    </MainStack.Navigator>
+  );
+}
+
+const CardsStack = createNativeStackNavigator();
+
+function CardsStackScreen() {
+  return (
+    <CardsStack.Navigator screenOptions={headerStyle}>
+      <CardsStack.Screen
+        name="CardsList"
+        component={CardsListScreen}
+        options={{ title: "Мои карточки" }}
+      />
+      <CardsStack.Screen
+        name="CreateCard"
+        component={CreateCardScreen}
+        options={{ title: "Новая карточка" }}
+      />
+      <CardsStack.Screen
+        name="CardDetail"
+        component={CardDetailScreen}
+        options={{ title: "Карточка" }}
+      />
+      <CardsStack.Screen
         name="PhotoUpload"
         component={PhotoUploadScreen}
         options={{ title: "Фото" }}
       />
-    </MainStack.Navigator>
+    </CardsStack.Navigator>
+  );
+}
+
+const SettingsStack = createNativeStackNavigator();
+
+function SettingsStackScreen() {
+  return (
+    <SettingsStack.Navigator screenOptions={headerStyle}>
+      <SettingsStack.Screen
+        name="Settings"
+        component={SettingsScreen}
+        options={{ title: "Настройки" }}
+      />
+      <SettingsStack.Screen
+        name="UserManagement"
+        component={UserManagementScreen}
+        options={{ title: "Управление пользователями" }}
+      />
+    </SettingsStack.Navigator>
   );
 }
 
@@ -102,13 +131,29 @@ export function AdminNavigator() {
         }}
       />
       <Tab.Screen
-        name="ProfileTab"
-        component={SettingsScreen}
+        name="CardsTab"
+        component={CardsStackScreen}
+        options={{
+          tabBarLabel: "Карточки",
+          tabBarIcon: () => <TabIcon label="📚" />,
+        }}
+      />
+      <Tab.Screen
+        name="SettingsTab"
+        component={SettingsStackScreen}
         options={{
           tabBarLabel: "Настройки",
+          tabBarIcon: () => <TabIcon label="⚙️" />,
+        }}
+      />
+      <Tab.Screen
+        name="ProfileTab"
+        component={ProfileScreen}
+        options={{
+          tabBarLabel: "Профиль",
           tabBarIcon: () => <TabIcon label="👤" />,
           headerShown: true,
-          headerTitle: "Настройки",
+          headerTitle: "Профиль",
           ...headerStyle,
         }}
       />

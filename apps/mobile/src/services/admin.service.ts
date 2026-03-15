@@ -76,9 +76,15 @@ export const adminService = {
     page = 1,
     limit = 20,
     search?: string,
+    filters?: {
+      boxId?: string;
+      createdById?: string;
+      dateFrom?: string;
+      dateTo?: string;
+    },
   ): Promise<PaginatedResponse<Book>> {
     const { data } = await api.get<PaginatedResponse<Book>>('/admin/books/database', {
-      params: { page, limit, search },
+      params: { page, limit, search, ...filters },
     });
     return data;
   },

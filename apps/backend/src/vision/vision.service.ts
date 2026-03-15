@@ -8,7 +8,7 @@ import { PhotosService } from '../photos/photos.service';
 import { SettingsService } from '../settings/settings.service';
 import { IStorageProvider, STORAGE_PROVIDER } from '../photos/storage/storage.interface';
 import { OpenAIVisionExtractor, mergeExtractionResults, applyDefaults } from '@bookscanner/ocr-processor';
-import { PaperType, CoverType } from '@bookscanner/shared';
+import { PaperType, CoverType, ANNOTATION_PREFIX } from '@bookscanner/shared';
 
 @Injectable()
 export class VisionService {
@@ -99,7 +99,9 @@ export class VisionService {
         paperType: extractedData.paperType as PaperType,
         coverType: extractedData.coverType as CoverType,
         pageCount: extractedData.pageCount,
-        annotation: extractedData.annotation,
+        annotation: extractedData.annotation
+          ? `${ANNOTATION_PREFIX}${extractedData.annotation}`
+          : ANNOTATION_PREFIX.trim(),
         language: extractedData.language,
       });
 

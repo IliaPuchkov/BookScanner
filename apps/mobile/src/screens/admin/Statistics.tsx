@@ -39,6 +39,8 @@ export function StatisticsScreen() {
     }, [fetchStats, selectedDays]),
   );
 
+  const maxCount = stats?.perUser?.[0]?.cardsCount ?? 1;
+
   return (
     <ScrollView
       style={styles.container}
@@ -53,6 +55,7 @@ export function StatisticsScreen() {
         />
       }
     >
+      {/* Period selector */}
       <View style={styles.periods}>
         {PERIOD_OPTIONS.map((opt) => (
           <TouchableOpacity
@@ -75,48 +78,79 @@ export function StatisticsScreen() {
         ))}
       </View>
 
-      <View style={styles.summaryGrid}>
-        <SummaryItem label="Всего карточек" value={stats?.totalCards ?? 0} />
-        <SummaryItem label="Сегодня" value={stats?.cardsToday ?? 0} />
-        <SummaryItem label="За период" value={stats?.cardsThisWeek ?? 0} />
-        <SummaryItem label="Пользователей" value={stats?.totalUsers ?? 0} />
+      {/* Карточки */}
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Карточки</Text>
+        <View style={styles.statsRow}>
+          <StatCell label="Всего" value={stats?.totalCards ?? 0} color="#1976D2" />
+          <View style={styles.cellDivider} />
+          <StatCell label="Сегодня" value={stats?.cardsToday ?? 0} color="#FB8C00" />
+          <View style={styles.cellDivider} />
+          <StatCell
+            label={`За ${selectedDays} дн.`}
+            value={stats?.cardsThisWeek ?? 0}
+            color="#FB8C00"
+          />
+        </View>
       </View>
 
-      {stats?.perUser && stats.perUser.length > 0 && (
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Производительность сотрудников</Text>
-          {stats.perUser.map((u, index) => (
+      {/* Пользователи */}
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Пользователи</Text>
+        <View style={styles.statsRow}>
+          <StatCell label="Всего" value={stats?.totalUsers ?? 0} color="#43A047" />
+        </View>
+      </View>
+
+      {/* Производительность сотрудников */}
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Производительность сотрудников</Text>
+        <Text style={styles.periodHint}>За выбранный период</Text>
+        {stats?.perUser && stats.perUser.length > 0 ? (
+          stats.perUser.map((u, index) => (
             <View key={u.userId} style={styles.userRow}>
               <Text style={styles.rank}>#{index + 1}</Text>
-              <Text style={styles.userName}>{u.fullName}</Text>
-              <View style={styles.barContainer}>
-                <View
-                  style={[
-                    styles.bar,
-                    {
-                      width: `${
-                        stats.perUser[0].cardsCount > 0
-                          ? (u.cardsCount / stats.perUser[0].cardsCount) * 100
-                          : 0
-                      }%`,
-                    },
-                  ]}
-                />
+              <View style={styles.userInfo}>
+                <Text style={styles.userName} numberOfLines={1}>
+                  {u.fullName}
+                </Text>
+                <View style={styles.barContainer}>
+                  <View
+                    style={[
+                      styles.bar,
+                      {
+                        width: `${maxCount > 0 ? (u.cardsCount / maxCount) * 100 : 0}%`,
+                      },
+                    ]}
+                  />
+                </View>
               </View>
-              <Text style={styles.count}>{u.cardsCount}</Text>
+              <View style={styles.countBadge}>
+                <Text style={styles.countText}>{u.cardsCount}</Text>
+              </View>
             </View>
-          ))}
-        </View>
-      )}
+          ))
+        ) : (
+          <Text style={styles.emptyText}>Нет данных за период</Text>
+        )}
+      </View>
     </ScrollView>
   );
 }
 
-function SummaryItem({ label, value }: { label: string; value: number }) {
+function StatCell({
+  label,
+  value,
+  color,
+}: {
+  label: string;
+  value: number;
+  color: string;
+}) {
   return (
-    <View style={styles.summaryCard}>
-      <Text style={styles.summaryValue}>{value}</Text>
-      <Text style={styles.summaryLabel}>{label}</Text>
+    <View style={styles.statCell}>
+      <Text style={[styles.statValue, { color }]}>{value}</Text>
+      <Text style={styles.statLabel}>{label}</Text>
     </View>
   );
 }
@@ -128,11 +162,11 @@ const styles = StyleSheet.create({
   },
   scroll: {
     padding: 16,
+    gap: 12,
   },
   periods: {
     flexDirection: 'row',
     gap: 8,
-    marginBottom: 16,
   },
   periodBtn: {
     paddingHorizontal: 16,
@@ -154,73 +188,96 @@ const styles = StyleSheet.create({
   periodTextActive: {
     color: '#fff',
   },
-  summaryGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 10,
-  },
-  summaryCard: {
-    width: '47%',
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 16,
-    alignItems: 'center',
-  },
-  summaryValue: {
-    fontSize: 32,
-    fontWeight: '800',
-    color: '#1976D2',
-  },
-  summaryLabel: {
-    fontSize: 12,
-    color: '#888',
-    marginTop: 4,
-  },
   section: {
-    marginTop: 20,
     backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 16,
+    borderRadius: 14,
+    padding: 18,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 4,
+    elevation: 2,
   },
   sectionTitle: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '700',
-    color: '#333',
-    marginBottom: 16,
+    color: '#222',
+    marginBottom: 14,
+  },
+  periodHint: {
+    fontSize: 12,
+    color: '#aaa',
+    marginTop: -10,
+    marginBottom: 14,
+  },
+  statsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  statCell: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  statValue: {
+    fontSize: 32,
+    fontWeight: '800',
+  },
+  statLabel: {
+    fontSize: 12,
+    color: '#888',
+    marginTop: 3,
+  },
+  cellDivider: {
+    width: 1,
+    height: 40,
+    backgroundColor: '#f0f0f0',
   },
   userRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 12,
+    paddingVertical: 10,
+    borderBottomWidth: 0.5,
+    borderBottomColor: '#f5f5f5',
   },
   rank: {
-    width: 28,
+    width: 32,
     fontSize: 13,
-    color: '#999',
-    fontWeight: '600',
+    color: '#bbb',
+    fontWeight: '700',
+  },
+  userInfo: {
+    flex: 1,
   },
   userName: {
-    width: 100,
-    fontSize: 13,
-    color: '#444',
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#333',
+    marginBottom: 6,
   },
   barContainer: {
-    flex: 1,
-    height: 8,
+    height: 6,
     backgroundColor: '#E3F2FD',
-    borderRadius: 4,
-    marginHorizontal: 8,
+    borderRadius: 3,
   },
   bar: {
-    height: 8,
+    height: 6,
     backgroundColor: '#1976D2',
-    borderRadius: 4,
+    borderRadius: 3,
   },
-  count: {
-    width: 32,
-    textAlign: 'right',
-    fontSize: 14,
-    fontWeight: '700',
+  countBadge: {
+    marginLeft: 12,
+    minWidth: 36,
+    alignItems: 'flex-end',
+  },
+  countText: {
+    fontSize: 16,
+    fontWeight: '800',
     color: '#1976D2',
+  },
+  emptyText: {
+    fontSize: 14,
+    color: '#bbb',
+    textAlign: 'center',
+    paddingVertical: 12,
   },
 });

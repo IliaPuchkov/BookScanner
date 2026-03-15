@@ -207,6 +207,7 @@ export function CreateCardScreen() {
               photos={photos}
               onAdd={handlePickPhotos}
               onRemove={handleRemovePhoto}
+              onReorder={setPhotos}
             />
 
             <View style={styles.photoActions}>
