@@ -89,4 +89,9 @@ export class CreateBookDto {
   @IsArray()
   @IsString({ each: true })
   hashtags?: string[];
+
+  @ApiPropertyOptional({ description: 'ID рабочей сессии' })
+  @IsOptional()
+  @IsUUID()
+  workSessionId?: string;
 }

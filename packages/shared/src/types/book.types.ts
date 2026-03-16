@@ -24,6 +24,11 @@ export interface IBookDimensions {
   depth: number;
 }
 
+export enum BookStatus {
+  PENDING_REVIEW = 'pending_review',
+  PUBLISHED = 'published',
+}
+
 export interface IBookCard {
   id: string;
   sku: string;
@@ -47,6 +52,7 @@ export interface IBookCard {
   bookType: string;
   direction: string;
   createdById: string;
+  status: BookStatus;
   publishedToOzon: Date | null;
   createdAt: Date;
   updatedAt: Date;

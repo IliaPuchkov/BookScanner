@@ -6,10 +6,8 @@ import { DashboardScreen } from "../screens/admin/Dashboard";
 import { UserManagementScreen } from "../screens/admin/UserManagement";
 import { StatisticsScreen } from "../screens/admin/Statistics";
 import { BookDatabaseScreen } from "../screens/admin/BookDatabase";
-import { CardsListScreen } from "../screens/operator/CardsList";
-import { CreateCardScreen } from "../screens/operator/CreateCard";
+import { PendingReviewScreen } from "../screens/admin/PendingReview";
 import { CardDetailScreen } from "../screens/operator/CardDetail";
-import { PhotoUploadScreen } from "../screens/operator/PhotoUpload";
 import { SettingsScreen } from "../screens/operator/SettingsScreen";
 import { ProfileScreen } from "../screens/ProfileScreen";
 
@@ -17,11 +15,9 @@ export type AdminMainStackParamList = {
   Dashboard: undefined;
   UserManagement: undefined;
   Statistics: undefined;
-  BookDatabase: undefined;
-  CardsList: undefined;
-  CreateCard: { boxId?: string } | undefined;
-  CardDetail: { bookId: string };
-  PhotoUpload: { bookId: string };
+  BookDatabase: { filterStatus?: string } | undefined;
+  PendingReview: undefined;
+  CardDetail: { bookId: string; editable?: boolean };
 };
 
 const MainStack = createNativeStackNavigator<AdminMainStackParamList>();
@@ -52,40 +48,16 @@ function MainStackScreen() {
         options={{ title: "База книг" }}
       />
       <MainStack.Screen
+        name="PendingReview"
+        component={PendingReviewScreen}
+        options={{ title: "Ожидают проверки" }}
+      />
+      <MainStack.Screen
         name="CardDetail"
         component={CardDetailScreen}
         options={{ title: "Карточка" }}
       />
     </MainStack.Navigator>
-  );
-}
-
-const CardsStack = createNativeStackNavigator();
-
-function CardsStackScreen() {
-  return (
-    <CardsStack.Navigator screenOptions={headerStyle}>
-      <CardsStack.Screen
-        name="CardsList"
-        component={CardsListScreen}
-        options={{ title: "Мои карточки" }}
-      />
-      <CardsStack.Screen
-        name="CreateCard"
-        component={CreateCardScreen}
-        options={{ title: "Новая карточка" }}
-      />
-      <CardsStack.Screen
-        name="CardDetail"
-        component={CardDetailScreen}
-        options={{ title: "Карточка" }}
-      />
-      <CardsStack.Screen
-        name="PhotoUpload"
-        component={PhotoUploadScreen}
-        options={{ title: "Фото" }}
-      />
-    </CardsStack.Navigator>
   );
 }
 
@@ -128,14 +100,6 @@ export function AdminNavigator() {
         options={{
           tabBarLabel: "Главная",
           tabBarIcon: () => <TabIcon label="📊" />,
-        }}
-      />
-      <Tab.Screen
-        name="CardsTab"
-        component={CardsStackScreen}
-        options={{
-          tabBarLabel: "Карточки",
-          tabBarIcon: () => <TabIcon label="📚" />,
         }}
       />
       <Tab.Screen

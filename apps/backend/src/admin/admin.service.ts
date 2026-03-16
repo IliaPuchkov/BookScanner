@@ -6,7 +6,7 @@ import { CreateUserDto } from '../users/dto/create-user.dto';
 import { UpdateUserDto } from '../users/dto/update-user.dto';
 import { PaginationDto } from '../common/dto/pagination.dto';
 import { SearchBooksDto } from './dto/search-books.dto';
-import { UserRole } from '@bookscanner/shared';
+import { UserRole, BookStatus } from '@bookscanner/shared';
 
 @Injectable()
 export class AdminService {
@@ -47,12 +47,13 @@ export class AdminService {
     miniPagination.page = 1;
     miniPagination.limit = 1;
 
-    const [todayStats, periodStats, perUserRaw, usersResult, booksResult] = await Promise.all([
+    const [todayStats, periodStats, perUserRaw, usersResult, booksResult, pendingReviewCount] = await Promise.all([
       this.statsService.getGlobalStats(startOfToday),
       this.statsService.getGlobalStats(startOfPeriod),
       this.statsService.getPerUserBookCounts(startOfPeriod),
       this.usersService.findAll(miniPagination),
       this.booksService.findAll('', UserRole.ADMIN, miniPagination),
+      this.booksService.countPendingReview(),
     ]);
 
     const getCount = (
@@ -65,6 +66,7 @@ export class AdminService {
       totalUsers: usersResult.meta.total,
       cardsToday: getCount(todayStats, 'card_created'),
       cardsThisWeek: getCount(periodStats, 'card_created'),
+      pendingReviewCount,
       perUser: perUserRaw.map((u: { userId: string; fullName: string; booksCount: string }) => ({
         userId: u.userId,
         fullName: u.fullName,
@@ -74,8 +76,12 @@ export class AdminService {
   }
 
   async searchBooks(dto: SearchBooksDto) {
-    const { search, boxId, createdById, dateFrom, dateTo, ...pagination } = dto;
+    const { search, boxId, createdById, dateFrom, dateTo, status, ...pagination } = dto;
     // Admin sees all books
-    return this.booksService.findAll('', UserRole.ADMIN, pagination as PaginationDto, boxId, search, createdById, dateFrom, dateTo);
+    return this.booksService.findAll('', UserRole.ADMIN, pagination as PaginationDto, boxId, search, createdById, dateFrom, dateTo, undefined, status);
+  }
+
+  async getPendingReviewBooks(pagination: PaginationDto) {
+    return this.booksService.findAll('', UserRole.ADMIN, pagination, undefined, undefined, undefined, undefined, undefined, undefined, BookStatus.PENDING_REVIEW);
   }
 }

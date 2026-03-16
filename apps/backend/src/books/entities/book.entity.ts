@@ -9,12 +9,13 @@ import {
   OneToOne,
   JoinColumn,
 } from 'typeorm';
-import { PaperType, CoverType } from '@bookscanner/shared';
+import { PaperType, CoverType, BookStatus } from '@bookscanner/shared';
 import { User } from '../../users/entities/user.entity';
 import { Box } from '../../boxes/entities/box.entity';
 import { BookPhoto } from '../../photos/entities/book-photo.entity';
 import { OcrResult } from '../../vision/entities/ocr-result.entity';
 import { OzonProduct } from '../../ozon/entities/ozon-product.entity';
+import { WorkSession } from '../../work-sessions/entities/work-session.entity';
 
 @Entity('books')
 export class Book {
@@ -92,6 +93,16 @@ export class Book {
   @Column({ name: 'created_by' })
   createdById: string;
 
+  @ManyToOne(() => WorkSession, (session) => session.books, {
+    onDelete: 'SET NULL',
+    nullable: true,
+  })
+  @JoinColumn({ name: 'work_session_id' })
+  workSession: WorkSession;
+
+  @Column({ name: 'work_session_id', nullable: true })
+  workSessionId: string;
+
   @OneToMany(() => BookPhoto, (photo) => photo.book, { cascade: true })
   photos: BookPhoto[];
 
@@ -103,6 +114,9 @@ export class Book {
 
   @Column({ nullable: true })
   publishedToOzon: Date;
+
+  @Column({ type: 'enum', enum: BookStatus, default: BookStatus.PENDING_REVIEW })
+  status: BookStatus;
 
   @CreateDateColumn()
   createdAt: Date;

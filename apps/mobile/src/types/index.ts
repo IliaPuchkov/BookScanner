@@ -14,6 +14,11 @@ export enum CoverType {
   SOFTCOVER = 'мягкий переплет',
 }
 
+export enum BookStatus {
+  PENDING_REVIEW = 'pending_review',
+  PUBLISHED = 'published',
+}
+
 export interface User {
   id: string;
   fullName: string;
@@ -70,9 +75,12 @@ export interface Book {
   bookType: string;
   direction: string;
   boxId: string;
+  box?: Box;
+  workSessionId?: string;
   createdById: string;
   createdBy?: { id: string; fullName: string };
   photos: BookPhoto[];
+  status: BookStatus;
   publishedToOzon?: string;
   createdAt: string;
   updatedAt: string;
@@ -102,6 +110,7 @@ export interface StatsSummary {
   totalUsers: number;
   cardsToday: number;
   cardsThisWeek: number;
+  pendingReviewCount: number;
   perUser: Array<{
     userId: string;
     fullName: string;
@@ -126,6 +135,16 @@ export interface CreateBookDto {
   price?: number;
   annotation?: string;
   hashtags?: string[];
+  workSessionId?: string;
+}
+
+export interface WorkSession {
+  id: string;
+  userId: string;
+  status: 'active' | 'completed';
+  books: Book[];
+  startedAt: string;
+  endedAt?: string;
 }
 
 export interface UpdateBookDto extends Partial<Omit<CreateBookDto, 'boxId'>> {}

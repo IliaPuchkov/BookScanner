@@ -11,7 +11,7 @@ import { Text } from "react-native";
 
 export type OperatorStackParamList = {
   CardsList: undefined;
-  CreateCard: { boxId?: string } | undefined;
+  CreateCard: { boxId?: string; sessionId?: string } | undefined;
   CardDetail: { bookId: string };
   PhotoUpload: { bookId: string };
 };

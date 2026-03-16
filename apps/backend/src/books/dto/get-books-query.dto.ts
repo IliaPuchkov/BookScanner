@@ -3,31 +3,21 @@ import { ApiPropertyOptional } from '@nestjs/swagger';
 import { PaginationDto } from '../../common/dto/pagination.dto';
 import { BookStatus } from '@bookscanner/shared';
 
-export class SearchBooksDto extends PaginationDto {
-  @ApiPropertyOptional({ description: 'Поиск по названию, автору, ISBN' })
-  @IsOptional()
-  @IsString()
-  search?: string;
-
+export class GetBooksQueryDto extends PaginationDto {
   @ApiPropertyOptional({ description: 'Фильтр по коробке' })
   @IsOptional()
   @IsUUID()
   boxId?: string;
 
-  @ApiPropertyOptional({ description: 'Фильтр по оператору' })
+  @ApiPropertyOptional({ description: 'Поиск по названию, автору, ISBN' })
+  @IsOptional()
+  @IsString()
+  search?: string;
+
+  @ApiPropertyOptional({ description: 'Фильтр по рабочей сессии' })
   @IsOptional()
   @IsUUID()
-  createdById?: string;
-
-  @ApiPropertyOptional({ description: 'Дата от (YYYY-MM-DD)' })
-  @IsOptional()
-  @IsString()
-  dateFrom?: string;
-
-  @ApiPropertyOptional({ description: 'Дата до (YYYY-MM-DD)' })
-  @IsOptional()
-  @IsString()
-  dateTo?: string;
+  workSessionId?: string;
 
   @ApiPropertyOptional({ description: 'Фильтр по статусу', enum: BookStatus })
   @IsOptional()

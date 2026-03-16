@@ -65,6 +65,13 @@ export class AdminController {
     return this.adminService.getStatistics(days);
   }
 
+  // Pending review
+  @Get('books/pending-review')
+  @ApiOperation({ summary: 'Карточки ожидающие проверки' })
+  getPendingReviewBooks(@Query() pagination: PaginationDto) {
+    return this.adminService.getPendingReviewBooks(pagination);
+  }
+
   // Book database
   @Get('books/database')
   @ApiOperation({ summary: 'Поиск по базе книг' })

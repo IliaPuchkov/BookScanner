@@ -14,6 +14,7 @@ export interface IExtractionResult {
   pageCount?: number;
   annotation?: string;
   language?: string;
+  price?: number;
 }
 
 export interface IOcrResult {

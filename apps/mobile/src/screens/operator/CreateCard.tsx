@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from "react";
 import {
   View,
   ScrollView,
@@ -6,21 +6,21 @@ import {
   Alert,
   Text,
   TouchableOpacity,
-} from 'react-native';
-import { useRoute, type RouteProp } from '@react-navigation/native';
-import * as ImagePicker from 'expo-image-picker';
-import { Input } from '../../components/Input';
-import { Button } from '../../components/Button';
-import { PhotoGrid } from '../../components/PhotoGrid';
-import { LoadingOverlay } from '../../components/LoadingOverlay';
-import { booksService } from '../../services/books.service';
-import { boxesService } from '../../services/boxes.service';
-import { photosService } from '../../services/photos.service';
-import { visionService } from '../../services/vision.service';
-import type { Box } from '../../types';
-import type { OperatorStackParamList } from '../../navigation/OperatorNavigator';
+} from "react-native";
+import { useRoute, type RouteProp } from "@react-navigation/native";
+import * as ImagePicker from "expo-image-picker";
+import { Input } from "../../components/Input";
+import { Button } from "../../components/Button";
+import { PhotoGrid } from "../../components/PhotoGrid";
+import { LoadingOverlay } from "../../components/LoadingOverlay";
+import { booksService } from "../../services/books.service";
+import { boxesService } from "../../services/boxes.service";
+import { photosService } from "../../services/photos.service";
+import { visionService } from "../../services/vision.service";
+import type { Box } from "../../types";
+import type { OperatorStackParamList } from "../../navigation/OperatorNavigator";
 
-type Route = RouteProp<OperatorStackParamList, 'CreateCard'>;
+type Route = RouteProp<OperatorStackParamList, "CreateCard">;
 
 interface PhotoItem {
   uri: string;
@@ -30,38 +30,47 @@ interface PhotoItem {
 export function CreateCardScreen() {
   const route = useRoute<Route>();
 
-  const [step, setStep] = useState<'box' | 'photos'>('box');
+  const [step, setStep] = useState<"box" | "photos">("box");
   const [loading, setLoading] = useState(false);
-  const [loadingMessage, setLoadingMessage] = useState('');
+  const [loadingMessage, setLoadingMessage] = useState("");
 
   // Box
   const [boxes, setBoxes] = useState<Box[]>([]);
+  const sessionId = route.params?.sessionId;
   const [selectedBoxId, setSelectedBoxId] = useState<string | null>(
     route.params?.boxId ?? null,
   );
-  const [newBoxNumber, setNewBoxNumber] = useState('');
+  const [newBoxNumber, setNewBoxNumber] = useState("");
 
   // Photos
   const [photos, setPhotos] = useState<PhotoItem[]>([]);
 
   useEffect(() => {
-    boxesService.getBoxes(1, 100).then((res) => setBoxes(res.data)).catch(() => {});
+    boxesService
+      .getBoxes(1, 100)
+      .then((res) => setBoxes(res.data))
+      .catch(() => {});
   }, []);
 
   const handleCreateBox = async () => {
     if (!newBoxNumber.trim()) {
-      Alert.alert('Ошибка', 'Введите номер коробки');
+      Alert.alert("Ошибка", "Введите номер коробки");
       return;
     }
     setLoading(true);
     try {
-      const box = await boxesService.createBox({ boxNumber: newBoxNumber.trim() });
+      const box = await boxesService.createBox({
+        boxNumber: newBoxNumber.trim(),
+      });
       setBoxes((prev) => [box, ...prev]);
       setSelectedBoxId(box.id);
-      setNewBoxNumber('');
-      setStep('photos');
+      setNewBoxNumber("");
+      setStep("photos");
     } catch (err: any) {
-      Alert.alert('Ошибка', err?.response?.data?.message || 'Не удалось создать коробку');
+      Alert.alert(
+        "Ошибка",
+        err?.response?.data?.message || "Не удалось создать коробку",
+      );
     } finally {
       setLoading(false);
     }
@@ -69,7 +78,7 @@ export function CreateCardScreen() {
 
   const handlePickPhotos = async () => {
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'],
+      mediaTypes: ["images"],
       allowsMultipleSelection: true,
       quality: 0.8,
       selectionLimit: 10 - photos.length,
@@ -85,8 +94,8 @@ export function CreateCardScreen() {
 
   const handleTakePhoto = async () => {
     const { status } = await ImagePicker.requestCameraPermissionsAsync();
-    if (status !== 'granted') {
-      Alert.alert('Ошибка', 'Нужно разрешение на камеру');
+    if (status !== "granted") {
+      Alert.alert("Ошибка", "Нужно разрешение на камеру");
       return;
     }
 
@@ -105,23 +114,27 @@ export function CreateCardScreen() {
 
   const handleSubmitForProcessing = async () => {
     if (!selectedBoxId) {
-      Alert.alert('Ошибка', 'Выберите коробку');
+      Alert.alert("Ошибка", "Выберите коробку");
       return;
     }
     if (photos.length < 2) {
-      Alert.alert('Ошибка', 'Нужно минимум 2 фото (обложка и страница с информацией)');
+      Alert.alert(
+        "Ошибка",
+        "Нужно минимум 2 фото (обложка и страница с информацией)",
+      );
       return;
     }
 
     setLoading(true);
-    setLoadingMessage('Создание карточки...');
+    setLoadingMessage("Создание карточки...");
     try {
       const book = await booksService.createBook({
-        title: 'Новая книга',
+        title: "Новая книга",
         boxId: selectedBoxId,
+        workSessionId: sessionId,
       });
 
-      setLoadingMessage('Загрузка фотографий...');
+      setLoadingMessage("Загрузка фотографий...");
       await photosService.uploadPhotos(
         book.id,
         photos.map((p) => p.uri),
@@ -131,12 +144,15 @@ export function CreateCardScreen() {
       visionService.extract(book.id).catch(() => {});
 
       setPhotos([]);
-      Alert.alert('Отправлено', 'Фотографии загружены. ИИ обрабатывает их в фоне.');
+      Alert.alert(
+        "Отправлено, артикул: " + book.sku,
+        "Карточка создана. Можете приступать к созданию следующей.",
+      );
     } catch (err: any) {
-      Alert.alert('Ошибка', err?.response?.data?.message || 'Ошибка создания');
+      Alert.alert("Ошибка", err?.response?.data?.message || "Ошибка создания");
     } finally {
       setLoading(false);
-      setLoadingMessage('');
+      setLoadingMessage("");
     }
   };
 
@@ -148,9 +164,11 @@ export function CreateCardScreen() {
         contentContainerStyle={styles.scroll}
         keyboardShouldPersistTaps="handled"
       >
-        {step === 'box' && (
+        {step === "box" && (
           <View>
-            <Text style={styles.stepTitle}>Шаг 1: Выберите коробку</Text>
+            <Text style={styles.stepTitle}>
+              Выберите коробку в которой работаете
+            </Text>
 
             {boxes.length > 0 && (
               <View style={styles.boxList}>
@@ -182,23 +200,29 @@ export function CreateCardScreen() {
               label="Номер коробки"
               value={newBoxNumber}
               onChangeText={setNewBoxNumber}
-              placeholder="Например: BOX-001"
+              placeholder="Например: 123"
             />
             <Button title="Создать коробку" onPress={handleCreateBox} />
 
             {selectedBoxId && (
               <Button
                 title="Далее"
-                onPress={() => setStep('photos')}
+                onPress={() => setStep("photos")}
                 style={{ marginTop: 16 }}
               />
             )}
           </View>
         )}
 
-        {step === 'photos' && (
+        {step === "photos" && (
           <View>
-            <Text style={styles.stepTitle}>Шаг 2: Фотографии</Text>
+            <Text style={styles.stepTitle}>Загрузка фотографий</Text>
+            <Text style={styles.attention}>
+              {""}
+              Вы работаете с коробкой №
+              {boxes.find((b) => b.id === selectedBoxId)?.boxNumber}
+              {""}
+            </Text>
             <Text style={styles.hint}>
               Фото 1 — обложка с линейкой. Фото 2 — страница с информацией.
             </Text>
@@ -226,14 +250,14 @@ export function CreateCardScreen() {
             </View>
 
             <Button
-              title="Отправить в обработку"
+              title="Создать карточку книги"
               onPress={handleSubmitForProcessing}
               disabled={photos.length < 2}
               style={{ marginTop: 16 }}
             />
             <Button
               title="Назад"
-              onPress={() => setStep('box')}
+              onPress={() => setStep("box")}
               variant="secondary"
               style={{ marginTop: 8 }}
             />
@@ -247,7 +271,7 @@ export function CreateCardScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: "#fff",
   },
   scroll: {
     padding: 16,
@@ -255,19 +279,26 @@ const styles = StyleSheet.create({
   },
   stepTitle: {
     fontSize: 20,
-    fontWeight: '700',
-    color: '#222',
+    fontWeight: "700",
+    color: "#222",
     marginBottom: 8,
   },
   hint: {
     fontSize: 13,
-    color: '#888',
+    color: "#888",
+    marginBottom: 16,
+    lineHeight: 18,
+  },
+  attention: {
+    fontSize: 13,
+    fontWeight: "bold",
+    color: "#D32F2F",
     marginBottom: 16,
     lineHeight: 18,
   },
   boxList: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
+    flexDirection: "row",
+    flexWrap: "wrap",
     gap: 8,
     marginBottom: 16,
   },
@@ -276,28 +307,28 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     borderRadius: 8,
     borderWidth: 1.5,
-    borderColor: '#ddd',
+    borderColor: "#ddd",
   },
   boxItemSelected: {
-    borderColor: '#1976D2',
-    backgroundColor: '#E3F2FD',
+    borderColor: "#1976D2",
+    backgroundColor: "#E3F2FD",
   },
   boxItemText: {
     fontSize: 14,
-    fontWeight: '500',
-    color: '#555',
+    fontWeight: "500",
+    color: "#555",
   },
   boxItemTextSelected: {
-    color: '#1976D2',
+    color: "#1976D2",
   },
   orDivider: {
-    textAlign: 'center',
-    color: '#aaa',
+    textAlign: "center",
+    color: "#aaa",
     marginVertical: 12,
     fontSize: 13,
   },
   photoActions: {
-    flexDirection: 'row',
+    flexDirection: "row",
     marginTop: 16,
   },
 });

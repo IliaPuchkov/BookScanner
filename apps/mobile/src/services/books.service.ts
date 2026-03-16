@@ -6,6 +6,7 @@ interface GetBooksParams {
   limit?: number;
   boxId?: string;
   search?: string;
+  workSessionId?: string;
 }
 
 export const booksService = {
@@ -31,5 +32,9 @@ export const booksService = {
 
   async deleteBook(id: string): Promise<void> {
     await api.delete(`/books/${id}`);
+  },
+
+  async publishToOzon(bookId: string): Promise<void> {
+    await api.post('/ozon/publish', { bookId });
   },
 };

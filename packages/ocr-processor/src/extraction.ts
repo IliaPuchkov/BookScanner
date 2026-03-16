@@ -30,6 +30,7 @@ export function mergeExtractionResults(
   result.annotation = p2.annotation;
   result.paperType = p2.paperType;
   result.coverType = p2.coverType;
+  result.price = p2.price || p1.price;
 
   // Dimensions: photo01 (from ruler) primary, photo02 fallback
   result.width = p1.width || p2.width;

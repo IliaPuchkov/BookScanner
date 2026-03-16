@@ -9,26 +9,31 @@ import {
   ScrollView,
   ActivityIndicator,
 } from "react-native";
-import { useFocusEffect, useNavigation } from "@react-navigation/native";
+import { useFocusEffect, useNavigation, useRoute } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import type { RouteProp } from "@react-navigation/native";
 import { Input } from "../../components/Input";
 import { BookCard } from "../../components/Card";
 import { adminService } from "../../services/admin.service";
 import { boxesService } from "../../services/boxes.service";
+import { BookStatus } from "../../types";
 import type { Book, Box, User } from "../../types";
 import type { AdminMainStackParamList } from "../../navigation/AdminNavigator";
 
 type Nav = NativeStackNavigationProp<AdminMainStackParamList>;
+type Route = RouteProp<AdminMainStackParamList, "BookDatabase">;
 
 interface Filters {
   boxId?: string;
   createdById?: string;
   dateFrom?: string;
   dateTo?: string;
+  status?: string;
 }
 
 export function BookDatabaseScreen() {
   const navigation = useNavigation<Nav>();
+  const route = useRoute<Route>();
   const [books, setBooks] = useState<Book[]>([]);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
@@ -36,10 +41,13 @@ export function BookDatabaseScreen() {
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
-  const [showFilters, setShowFilters] = useState(false);
 
   // Filter state
-  const [filters, setFilters] = useState<Filters>({});
+  const initialStatus = route.params?.filterStatus;
+  const [showFilters, setShowFilters] = useState(!!initialStatus);
+  const [filters, setFilters] = useState<Filters>(
+    initialStatus ? { status: initialStatus } : {},
+  );
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
 
@@ -90,6 +98,7 @@ export function BookDatabaseScreen() {
           params.createdById = currentFilters.createdById;
         if (currentFilters.dateFrom) params.dateFrom = currentFilters.dateFrom;
         if (currentFilters.dateTo) params.dateTo = currentFilters.dateTo;
+        if (currentFilters.status) params.status = currentFilters.status;
 
         const res = await adminService.getBookDatabase(
           p,
@@ -154,6 +163,7 @@ export function BookDatabaseScreen() {
     else delete newFilters.dateFrom;
     if (dateTo) newFilters.dateTo = dateTo;
     else delete newFilters.dateTo;
+    if (!newFilters.status) delete newFilters.status;
     setFilters(newFilters);
     setShowFilters(false);
     fetchBooks(1, search, newFilters, "initial");
@@ -172,7 +182,8 @@ export function BookDatabaseScreen() {
     (filters.boxId ? 1 : 0) +
     (filters.createdById ? 1 : 0) +
     (filters.dateFrom ? 1 : 0) +
-    (filters.dateTo ? 1 : 0);
+    (filters.dateTo ? 1 : 0) +
+    (filters.status ? 1 : 0);
 
   return (
     <View style={styles.container}>
@@ -206,6 +217,66 @@ export function BookDatabaseScreen() {
       {/* Filter panel */}
       {showFilters && (
         <View style={styles.filterPanel}>
+          {/* Status filter */}
+          <Text style={styles.filterLabel}>Статус</Text>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={styles.chipRow}
+          >
+            <TouchableOpacity
+              style={[styles.chip, !filters.status && styles.chipActive]}
+              onPress={() => setFilters((f) => ({ ...f, status: undefined }))}
+            >
+              <Text
+                style={[
+                  styles.chipText,
+                  !filters.status && styles.chipTextActive,
+                ]}
+              >
+                Все
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                styles.chip,
+                filters.status === BookStatus.PENDING_REVIEW && styles.chipActive,
+              ]}
+              onPress={() =>
+                setFilters((f) => ({ ...f, status: BookStatus.PENDING_REVIEW }))
+              }
+            >
+              <Text
+                style={[
+                  styles.chipText,
+                  filters.status === BookStatus.PENDING_REVIEW &&
+                    styles.chipTextActive,
+                ]}
+              >
+                Ожидает проверки
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                styles.chip,
+                filters.status === BookStatus.PUBLISHED && styles.chipActive,
+              ]}
+              onPress={() =>
+                setFilters((f) => ({ ...f, status: BookStatus.PUBLISHED }))
+              }
+            >
+              <Text
+                style={[
+                  styles.chipText,
+                  filters.status === BookStatus.PUBLISHED &&
+                    styles.chipTextActive,
+                ]}
+              >
+                Опубликовано
+              </Text>
+            </TouchableOpacity>
+          </ScrollView>
+
           {/* Box filter */}
           <Text style={styles.filterLabel}>Коробка</Text>
           <ScrollView

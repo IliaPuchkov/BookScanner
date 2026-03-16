@@ -11,6 +11,7 @@ import { OzonModule } from './ozon/ozon.module';
 import { AdminModule } from './admin/admin.module';
 import { StatsModule } from './stats/stats.module';
 import { SettingsModule } from './settings/settings.module';
+import { WorkSessionsModule } from './work-sessions/work-sessions.module';
 
 @Module({
   imports: [
@@ -38,6 +39,7 @@ import { SettingsModule } from './settings/settings.module';
     AdminModule,
     StatsModule,
     SettingsModule,
+    WorkSessionsModule,
   ],
 })
 export class AppModule {}

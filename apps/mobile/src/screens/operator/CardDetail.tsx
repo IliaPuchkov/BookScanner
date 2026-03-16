@@ -8,13 +8,16 @@ import {
   Alert,
   Dimensions,
   ActivityIndicator,
+  TextInput,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { useRoute, useNavigation, type RouteProp } from '@react-navigation/native';
 import { type NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Button } from '../../components/Button';
 import { booksService } from '../../services/books.service';
 import { visionService } from '../../services/vision.service';
-import type { Book } from '../../types';
+import type { Book, UpdateBookDto } from '../../types';
 import type { OperatorStackParamList } from '../../navigation/OperatorNavigator';
 import { formatPrice, formatDate } from '../../utils/format';
 
@@ -27,18 +30,92 @@ export function CardDetailScreen() {
   const route = useRoute<Route>();
   const navigation = useNavigation<Nav>();
   const { bookId } = route.params;
+  const editable = (route.params as { editable?: boolean }).editable ?? false;
 
   const [book, setBook] = useState<Book | null>(null);
   const [loading, setLoading] = useState(true);
   const [extracting, setExtracting] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  // Edit fields
+  const [editTitle, setEditTitle] = useState('');
+  const [editAuthor, setEditAuthor] = useState('');
+  const [editIsbn, setEditIsbn] = useState('');
+  const [editPublisher, setEditPublisher] = useState('');
+  const [editYear, setEditYear] = useState('');
+  const [editPages, setEditPages] = useState('');
+  const [editPrice, setEditPrice] = useState('');
+  const [editWeight, setEditWeight] = useState('');
+  const [editWidth, setEditWidth] = useState('');
+  const [editHeight, setEditHeight] = useState('');
+  const [editDepth, setEditDepth] = useState('');
+  const [editAnnotation, setEditAnnotation] = useState('');
 
   useEffect(() => {
     booksService
       .getBook(bookId)
-      .then(setBook)
+      .then((b) => {
+        setBook(b);
+        populateEditFields(b);
+      })
       .catch(() => Alert.alert('Ошибка', 'Не удалось загрузить карточку'))
       .finally(() => setLoading(false));
   }, [bookId]);
+
+  const populateEditFields = (b: Book) => {
+    setEditTitle(b.title ?? '');
+    setEditAuthor(b.author ?? '');
+    setEditIsbn(b.isbn ?? '');
+    setEditPublisher(b.publisher ?? '');
+    setEditYear(b.yearPublished?.toString() ?? '');
+    setEditPages(b.pageCount?.toString() ?? '');
+    setEditPrice(b.price?.toString() ?? '');
+    setEditWeight(b.weightGross?.toString() ?? '');
+    setEditWidth(b.dimensions?.width?.toString() ?? '');
+    setEditHeight(b.dimensions?.height?.toString() ?? '');
+    setEditDepth(b.dimensions?.depth?.toString() ?? '');
+    setEditAnnotation(b.annotation ?? '');
+  };
+
+  const handleSave = async () => {
+    if (!book) return;
+    setSaving(true);
+    try {
+      const dto: UpdateBookDto = {
+        title: editTitle || undefined,
+        author: editAuthor || undefined,
+        isbn: editIsbn || undefined,
+        publisher: editPublisher || undefined,
+        yearPublished: editYear ? parseInt(editYear, 10) : undefined,
+        pageCount: editPages ? parseInt(editPages, 10) : undefined,
+        price: editPrice ? parseFloat(editPrice) : undefined,
+        weightGross: editWeight ? parseFloat(editWeight) : undefined,
+        dimensions:
+          editWidth || editHeight || editDepth
+            ? {
+                width: parseFloat(editWidth) || 0,
+                height: parseFloat(editHeight) || 0,
+                depth: parseFloat(editDepth) || 0,
+              }
+            : undefined,
+        annotation: editAnnotation || undefined,
+      };
+      const updated = await booksService.updateBook(book.id, dto);
+      setBook(updated);
+      setEditing(false);
+      Alert.alert('Готово', 'Карточка обновлена');
+    } catch {
+      Alert.alert('Ошибка', 'Не удалось сохранить');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleCancelEdit = () => {
+    if (book) populateEditFields(book);
+    setEditing(false);
+  };
 
   const handleExtract = async () => {
     setExtracting(true);
@@ -46,6 +123,7 @@ export function CardDetailScreen() {
       await visionService.extract(bookId);
       const updated = await booksService.getBook(bookId);
       setBook(updated);
+      populateEditFields(updated);
       Alert.alert('Готово', 'Данные обновлены');
     } catch {
       Alert.alert('Ошибка', 'Не удалось распознать');
@@ -93,84 +171,138 @@ export function CardDetailScreen() {
   );
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.scroll}>
-      {sortedPhotos.length > 0 && (
-        <ScrollView
-          horizontal
-          pagingEnabled
-          showsHorizontalScrollIndicator={false}
-          style={styles.photoScroll}
-        >
-          {sortedPhotos.map((photo) => (
-            <Image
-              key={photo.id}
-              source={{ uri: photo.fileUrl }}
-              style={styles.photo}
-              resizeMode="cover"
-            />
-          ))}
-        </ScrollView>
-      )}
-
-      <View style={styles.content}>
-        <Text style={styles.title}>{book.title}</Text>
-        {book.author && <Text style={styles.author}>{book.author}</Text>}
-        <Text style={styles.sku}>SKU: {book.sku}</Text>
-
-        <View style={styles.section}>
-          <InfoRow label="ISBN" value={book.isbn} />
-          <InfoRow label="Издательство" value={book.publisher} />
-          <InfoRow label="Год" value={book.yearPublished?.toString()} />
-          <InfoRow label="Страниц" value={book.pageCount?.toString()} />
-          <InfoRow label="Тип обложки" value={book.coverType} />
-          <InfoRow label="Тип бумаги" value={book.paperType} />
-          <InfoRow label="Язык" value={book.language} />
-          <InfoRow label="Состояние" value={book.condition} />
-          <InfoRow label="Цена" value={book.price > 0 ? formatPrice(book.price) : undefined} />
-          {book.dimensions && (
-            <InfoRow
-              label="Размеры"
-              value={`${book.dimensions.width}x${book.dimensions.height}x${book.dimensions.depth} мм`}
-            />
-          )}
-          {book.weightGross && (
-            <InfoRow label="Вес" value={`${book.weightGross} г`} />
-          )}
-        </View>
-
-        {book.annotation && (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Аннотация</Text>
-            <Text style={styles.annotationText}>{book.annotation}</Text>
-          </View>
+    <KeyboardAvoidingView
+      style={{ flex: 1 }}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+    >
+      <ScrollView style={styles.container} contentContainerStyle={styles.scroll}>
+        {sortedPhotos.length > 0 && (
+          <ScrollView
+            horizontal
+            pagingEnabled
+            showsHorizontalScrollIndicator={false}
+            style={styles.photoScroll}
+          >
+            {sortedPhotos.map((photo) => (
+              <Image
+                key={photo.id}
+                source={{ uri: photo.fileUrl }}
+                style={styles.photo}
+                resizeMode="cover"
+              />
+            ))}
+          </ScrollView>
         )}
 
-        <Text style={styles.date}>
-          Создана: {formatDate(book.createdAt)}
-        </Text>
+        <View style={styles.content}>
+          {editing ? (
+            <>
+              <EditField label="Название" value={editTitle} onChangeText={setEditTitle} />
+              <EditField label="Автор" value={editAuthor} onChangeText={setEditAuthor} />
+              <EditField label="ISBN" value={editIsbn} onChangeText={setEditIsbn} />
+              <EditField label="Издательство" value={editPublisher} onChangeText={setEditPublisher} />
+              <EditField label="Год" value={editYear} onChangeText={setEditYear} keyboardType="numeric" />
+              <EditField label="Страниц" value={editPages} onChangeText={setEditPages} keyboardType="numeric" />
+              <EditField label="Цена (₽)" value={editPrice} onChangeText={setEditPrice} keyboardType="numeric" />
+              <EditField label="Вес (г)" value={editWeight} onChangeText={setEditWeight} keyboardType="numeric" />
+              <Text style={styles.sectionTitle}>Размеры (мм)</Text>
+              <View style={styles.dimRow}>
+                <EditField label="Ш" value={editWidth} onChangeText={setEditWidth} keyboardType="numeric" style={{ flex: 1 }} />
+                <EditField label="В" value={editHeight} onChangeText={setEditHeight} keyboardType="numeric" style={{ flex: 1 }} />
+                <EditField label="Г" value={editDepth} onChangeText={setEditDepth} keyboardType="numeric" style={{ flex: 1 }} />
+              </View>
+              <EditField
+                label="Аннотация"
+                value={editAnnotation}
+                onChangeText={setEditAnnotation}
+                multiline
+              />
 
-        <View style={styles.actions}>
-          <Button
-            title="Фото"
-            onPress={() => navigation.navigate('PhotoUpload', { bookId })}
-            variant="secondary"
-            style={{ marginBottom: 8 }}
-          />
-          <Button
-            title="Распознать заново"
-            onPress={handleExtract}
-            loading={extracting}
-            variant="secondary"
-            style={{ marginBottom: 8 }}
-          />
-          <Button
-            title="Удалить"
-            onPress={handleDelete}
-            variant="danger"
-          />
+              <View style={styles.editActions}>
+                <Button
+                  title="Сохранить"
+                  onPress={handleSave}
+                  loading={saving}
+                  style={{ flex: 1, marginRight: 8 }}
+                />
+                <Button
+                  title="Отмена"
+                  onPress={handleCancelEdit}
+                  variant="secondary"
+                  style={{ flex: 1 }}
+                />
+              </View>
+            </>
+          ) : (
+            <>
+              <Text style={styles.title}>{book.title}</Text>
+              {book.author && <Text style={styles.author}>{book.author}</Text>}
+              <Text style={styles.sku}>SKU: {book.sku}</Text>
+
+              <View style={styles.section}>
+                <InfoRow label="ISBN" value={book.isbn} />
+                <InfoRow label="Издательство" value={book.publisher} />
+                <InfoRow label="Год" value={book.yearPublished?.toString()} />
+                <InfoRow label="Страниц" value={book.pageCount?.toString()} />
+                <InfoRow label="Тип обложки" value={book.coverType} />
+                <InfoRow label="Тип бумаги" value={book.paperType} />
+                <InfoRow label="Язык" value={book.language} />
+                <InfoRow label="Состояние" value={book.condition} />
+                <InfoRow label="Цена" value={book.price > 0 ? formatPrice(book.price) : undefined} />
+                {book.dimensions && (
+                  <InfoRow
+                    label="Размеры"
+                    value={`${book.dimensions.width}x${book.dimensions.height}x${book.dimensions.depth} мм`}
+                  />
+                )}
+                {book.weightGross && (
+                  <InfoRow label="Вес" value={`${book.weightGross} г`} />
+                )}
+              </View>
+
+              {book.annotation && (
+                <View style={styles.section}>
+                  <Text style={styles.sectionTitle}>Аннотация</Text>
+                  <Text style={styles.annotationText}>{book.annotation}</Text>
+                </View>
+              )}
+
+              <Text style={styles.date}>
+                Создана: {formatDate(book.createdAt)}
+              </Text>
+
+              <View style={styles.actions}>
+                {editable && (
+                  <Button
+                    title="Редактировать"
+                    onPress={() => setEditing(true)}
+                    style={{ marginBottom: 8 }}
+                  />
+                )}
+                <Button
+                  title="Фото"
+                  onPress={() => navigation.navigate('PhotoUpload', { bookId })}
+                  variant="secondary"
+                  style={{ marginBottom: 8 }}
+                />
+                <Button
+                  title="Распознать заново"
+                  onPress={handleExtract}
+                  loading={extracting}
+                  variant="secondary"
+                  style={{ marginBottom: 8 }}
+                />
+                <Button
+                  title="Удалить"
+                  onPress={handleDelete}
+                  variant="danger"
+                />
+              </View>
+            </>
+          )}
         </View>
-      </View>
-    </ScrollView>
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 
@@ -180,6 +312,36 @@ function InfoRow({ label, value }: { label: string; value?: string }) {
     <View style={styles.row}>
       <Text style={styles.rowLabel}>{label}</Text>
       <Text style={styles.rowValue}>{value}</Text>
+    </View>
+  );
+}
+
+function EditField({
+  label,
+  value,
+  onChangeText,
+  keyboardType,
+  multiline,
+  style,
+}: {
+  label: string;
+  value: string;
+  onChangeText: (t: string) => void;
+  keyboardType?: 'numeric' | 'default';
+  multiline?: boolean;
+  style?: object;
+}) {
+  return (
+    <View style={[styles.editField, style]}>
+      <Text style={styles.editLabel}>{label}</Text>
+      <TextInput
+        style={[styles.editInput, multiline && styles.editInputMultiline]}
+        value={value}
+        onChangeText={onChangeText}
+        keyboardType={keyboardType ?? 'default'}
+        multiline={multiline}
+        placeholderTextColor="#999"
+      />
     </View>
   );
 }
@@ -264,5 +426,37 @@ const styles = StyleSheet.create({
   },
   actions: {
     marginTop: 24,
+  },
+  editActions: {
+    flexDirection: 'row',
+    marginTop: 16,
+  },
+  editField: {
+    marginBottom: 12,
+  },
+  editLabel: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: '#666',
+    marginBottom: 4,
+  },
+  editInput: {
+    height: 44,
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    fontSize: 15,
+    color: '#333',
+    backgroundColor: '#FAFAFA',
+  },
+  editInputMultiline: {
+    height: 100,
+    textAlignVertical: 'top',
+    paddingTop: 10,
+  },
+  dimRow: {
+    flexDirection: 'row',
+    gap: 8,
   },
 });

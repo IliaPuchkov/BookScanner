@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native';
+import { BookStatus } from '../types';
 import type { Book } from '../types';
 
 function formatDate(iso: string): string {
@@ -37,6 +38,24 @@ export function BookCard({ book, onPress }: Props) {
         {book.price != null && Number(book.price) > 0 && (
           <Text style={styles.price}>{Number(book.price).toFixed(0)} ₽</Text>
         )}
+        <View style={styles.statusBadge}>
+          <View
+            style={[
+              styles.statusDot,
+              { backgroundColor: book.status === BookStatus.PUBLISHED ? '#43A047' : '#FB8C00' },
+            ]}
+          />
+          <Text
+            style={[
+              styles.statusText,
+              { color: book.status === BookStatus.PUBLISHED ? '#43A047' : '#FB8C00' },
+            ]}
+          >
+            {book.status === BookStatus.PUBLISHED
+              ? 'Создана на Озоне'
+              : 'Ожидает подтверждения'}
+          </Text>
+        </View>
         <View style={styles.meta}>
           {book.createdBy?.fullName ? (
             <Text style={styles.metaText} numberOfLines={1}>
@@ -113,5 +132,19 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: '#aaa',
     flexShrink: 1,
+  },
+  statusBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 4,
+  },
+  statusDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    marginRight: 4,
+  },
+  statusText: {
+    fontSize: 11,
   },
 });

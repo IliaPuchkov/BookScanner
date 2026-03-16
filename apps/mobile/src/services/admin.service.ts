@@ -81,10 +81,18 @@ export const adminService = {
       createdById?: string;
       dateFrom?: string;
       dateTo?: string;
+      status?: string;
     },
   ): Promise<PaginatedResponse<Book>> {
     const { data } = await api.get<PaginatedResponse<Book>>('/admin/books/database', {
       params: { page, limit, search, ...filters },
+    });
+    return data;
+  },
+
+  async getPendingReviewBooks(page = 1, limit = 10): Promise<PaginatedResponse<Book>> {
+    const { data } = await api.get<PaginatedResponse<Book>>('/admin/books/pending-review', {
+      params: { page, limit },
     });
     return data;
   },

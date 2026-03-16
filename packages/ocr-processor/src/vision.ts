@@ -33,7 +33,7 @@ export class OpenAIVisionExtractor {
         },
       ],
       response_format: { type: 'json_object' },
-      max_tokens: 500,
+      max_tokens: 1500,
     });
 
     const raw = response.choices[0]?.message?.content ?? '{}';

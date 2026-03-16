@@ -1,14 +1,53 @@
-import { Injectable, Logger, Inject } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { ConfigService } from '@nestjs/config';
-import { OcrResult } from './entities/ocr-result.entity';
-import { BooksService } from '../books/books.service';
-import { PhotosService } from '../photos/photos.service';
-import { SettingsService } from '../settings/settings.service';
-import { IStorageProvider, STORAGE_PROVIDER } from '../photos/storage/storage.interface';
-import { OpenAIVisionExtractor, mergeExtractionResults, applyDefaults } from '@bookscanner/ocr-processor';
-import { PaperType, CoverType, ANNOTATION_PREFIX } from '@bookscanner/shared';
+import { Injectable, Logger, Inject } from "@nestjs/common";
+import { InjectRepository } from "@nestjs/typeorm";
+import { Repository } from "typeorm";
+import { ConfigService } from "@nestjs/config";
+import { OcrResult } from "./entities/ocr-result.entity";
+import { BooksService } from "../books/books.service";
+import { PhotosService } from "../photos/photos.service";
+import { SettingsService } from "../settings/settings.service";
+import {
+  IStorageProvider,
+  STORAGE_PROVIDER,
+} from "../photos/storage/storage.interface";
+import {
+  OpenAIVisionExtractor,
+  mergeExtractionResults,
+  applyDefaults,
+} from "@bookscanner/ocr-processor";
+import {
+  PaperType,
+  CoverType,
+  ANNOTATION_PREFIX,
+  DEFAULT_PRICE,
+  DEFAULT_LOWER_PRICE,
+} from "@bookscanner/shared";
+
+function calculatePrice(aiPrice: number | undefined | null): number {
+  if (!aiPrice || aiPrice <= 0) return DEFAULT_PRICE;
+  if (aiPrice < DEFAULT_LOWER_PRICE) return DEFAULT_LOWER_PRICE;
+  if (aiPrice > 1200) return Math.round(aiPrice * 0.85);
+  return Math.round(aiPrice);
+}
+
+function normalizePaperType(
+  value: string | undefined | null,
+): PaperType | undefined {
+  if (!value) return undefined;
+  const lower = value.toLowerCase().trim();
+  if (lower.includes("глянц")) return PaperType.GLOSSY;
+  if (lower.includes("матов")) return PaperType.MATTE;
+  return PaperType.OFFSET; // офсетная — default
+}
+
+function normalizeCoverType(
+  value: string | undefined | null,
+): CoverType | undefined {
+  if (!value) return undefined;
+  const lower = value.toLowerCase().trim();
+  if (lower.includes("мягк")) return CoverType.SOFTCOVER;
+  return CoverType.HARDCOVER; // твердый переплет — default
+}
 
 @Injectable()
 export class VisionService {
@@ -29,24 +68,29 @@ export class VisionService {
     const book = await this.booksService.findOne(bookId);
     const photos = await this.photosService.findByBookId(bookId);
 
-    let ocrResult = await this.ocrResultRepository.findOne({ where: { bookId } });
+    let ocrResult = await this.ocrResultRepository.findOne({
+      where: { bookId },
+    });
 
     if (!ocrResult) {
-      ocrResult = this.ocrResultRepository.create({ bookId, status: 'processing' });
+      ocrResult = this.ocrResultRepository.create({
+        bookId,
+        status: "processing",
+      });
     } else {
-      ocrResult.status = 'processing';
+      ocrResult.status = "processing";
     }
 
     ocrResult = await this.ocrResultRepository.save(ocrResult);
 
     try {
-      const apiKey = this.configService.get<string>('OPENAI_API_KEY');
+      const apiKey = this.configService.get<string>("OPENAI_API_KEY");
       if (!apiKey) {
-        throw new Error('OPENAI_API_KEY не настроен в переменных окружения');
+        throw new Error("OPENAI_API_KEY не настроен в переменных окружения");
       }
 
       const prompt = await this.settingsService.getValue<string>(
-        'ocr_prompt',
+        "ocr_prompt",
         this.getDefaultPrompt(),
       );
 
@@ -60,14 +104,14 @@ export class VisionService {
           ? extractor.extractBookData(
               await this.storage.download(photo01.fileKey),
               prompt,
-              photo01.mimeType as 'image/jpeg' | 'image/png',
+              photo01.mimeType as "image/jpeg" | "image/png",
             )
           : null,
         photo02
           ? extractor.extractBookData(
               await this.storage.download(photo02.fileKey),
               prompt,
-              photo02.mimeType as 'image/jpeg' | 'image/png',
+              photo02.mimeType as "image/jpeg" | "image/png",
             )
           : null,
       ]);
@@ -75,10 +119,19 @@ export class VisionService {
       const merged = mergeExtractionResults(result01, result02);
       const extractedData = applyDefaults(merged);
 
-      ocrResult.photo01Extraction = result01 as unknown as Record<string, unknown>;
-      ocrResult.photo02Extraction = result02 as unknown as Record<string, unknown>;
-      ocrResult.extractedData = extractedData as unknown as Record<string, unknown>;
-      ocrResult.status = 'completed';
+      ocrResult.photo01Extraction = result01 as unknown as Record<
+        string,
+        unknown
+      >;
+      ocrResult.photo02Extraction = result02 as unknown as Record<
+        string,
+        unknown
+      >;
+      ocrResult.extractedData = extractedData as unknown as Record<
+        string,
+        unknown
+      >;
+      ocrResult.status = "completed";
       await this.ocrResultRepository.save(ocrResult);
 
       await this.booksService.updateFromExtraction(bookId, {
@@ -96,9 +149,10 @@ export class VisionService {
         }),
         weightGross: extractedData.weightGross,
         weightNet: extractedData.weightNet,
-        paperType: extractedData.paperType as PaperType,
-        coverType: extractedData.coverType as CoverType,
+        paperType: normalizePaperType(extractedData.paperType),
+        coverType: normalizeCoverType(extractedData.coverType),
         pageCount: extractedData.pageCount,
+        price: calculatePrice(extractedData.price),
         annotation: extractedData.annotation
           ? `${ANNOTATION_PREFIX}${extractedData.annotation}`
           : ANNOTATION_PREFIX.trim(),
@@ -111,8 +165,9 @@ export class VisionService {
         photosProcessed: photos.length,
       };
     } catch (error) {
-      ocrResult.status = 'failed';
-      ocrResult.errorMessage = error instanceof Error ? error.message : 'Неизвестная ошибка';
+      ocrResult.status = "failed";
+      ocrResult.errorMessage =
+        error instanceof Error ? error.message : "Неизвестная ошибка";
       await this.ocrResultRepository.save(ocrResult);
       throw error;
     }
@@ -123,12 +178,13 @@ export class VisionService {
     return {
       isbn,
       found: false,
-      message: 'Поиск по ISBN будет реализован при интеграции с Ozon API',
+      message: "Поиск по ISBN будет реализован при интеграции с Ozon API",
     };
   }
 
   private getDefaultPrompt(): string {
     return `Извлеки из фотографии книги следующую информацию в формате JSON:
+
 - title (название)
 - author (автор)
 - isbn
@@ -142,6 +198,10 @@ export class VisionService {
 - coverType (тип обложки)
 - pageCount (количество страниц)
 - annotation (аннотация)
+- price (цена книги в рублях на Озоне (ozon.ru) или на аналогичных маркетплейсах - найди актуальную рыночную цену б/у экземпляра этой книги исходя из isbn, названия и автора; верни число без валюты)
+
+Если не найдешь название выполни поиск названия по isbn. 
+
 Если какое-то поле не удается определить, верни null для этого поля.`;
   }
 }

@@ -12,7 +12,7 @@ import { UpdateBookDto } from './dto/update-book.dto';
 import { PaginationDto } from '../common/dto/pagination.dto';
 import { BoxesService } from '../boxes/boxes.service';
 import { StatsService } from '../stats/stats.service';
-import { UserRole } from '@bookscanner/shared';
+import { UserRole, BookStatus } from '@bookscanner/shared';
 import {
   DEFAULT_HEIGHT_MM,
   DEFAULT_WEIGHT_G,
@@ -47,6 +47,7 @@ export class BooksService {
       price: dto.price ?? DEFAULT_PRICE,
       dimensions: dto.dimensions || { width: 0, height: DEFAULT_HEIGHT_MM, depth: 0 },
       weightGross: dto.weightGross ?? DEFAULT_WEIGHT_G,
+      workSessionId: dto.workSessionId || undefined,
     });
 
     const saved = await this.booksRepository.save(book);
@@ -63,6 +64,8 @@ export class BooksService {
     createdById?: string,
     dateFrom?: string,
     dateTo?: string,
+    workSessionId?: string,
+    status?: BookStatus,
   ) {
     const qb = this.booksRepository
       .createQueryBuilder('book')
@@ -72,6 +75,12 @@ export class BooksService {
 
     if (role !== UserRole.ADMIN) {
       qb.andWhere('book.created_by = :userId', { userId });
+    } else {
+      // Admins only see books whose session is completed (or has no session)
+      qb.leftJoin('book.workSession', 'workSession')
+        .andWhere(
+          "(book.work_session_id IS NULL OR workSession.status = 'completed')",
+        );
     }
 
     if (boxId) {
@@ -90,6 +99,14 @@ export class BooksService {
       const to = new Date(dateTo);
       to.setHours(23, 59, 59, 999);
       qb.andWhere('book.createdAt <= :dateTo', { dateTo: to.toISOString() });
+    }
+
+    if (workSessionId) {
+      qb.andWhere('book.work_session_id = :workSessionId', { workSessionId });
+    }
+
+    if (status) {
+      qb.andWhere('book.status = :status', { status });
     }
 
     if (search) {
@@ -114,6 +131,17 @@ export class BooksService {
         totalPages: Math.ceil(total / pagination.limit),
       },
     };
+  }
+
+  async countPendingReview(): Promise<number> {
+    return this.booksRepository
+      .createQueryBuilder('book')
+      .leftJoin('book.workSession', 'workSession')
+      .where('book.status = :status', { status: BookStatus.PENDING_REVIEW })
+      .andWhere(
+        "(book.work_session_id IS NULL OR workSession.status = 'completed')",
+      )
+      .getCount();
   }
 
   async findOne(id: string): Promise<Book> {

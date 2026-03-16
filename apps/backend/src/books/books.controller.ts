@@ -10,11 +10,11 @@ import {
   UseGuards,
   ParseUUIDPipe,
 } from '@nestjs/common';
-import { ApiTags, ApiBearerAuth, ApiOperation, ApiQuery } from '@nestjs/swagger';
+import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { BooksService } from './books.service';
 import { CreateBookDto } from './dto/create-book.dto';
 import { UpdateBookDto } from './dto/update-book.dto';
-import { PaginationDto } from '../common/dto/pagination.dto';
+import { GetBooksQueryDto } from './dto/get-books-query.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { User } from '../users/entities/user.entity';
@@ -34,15 +34,14 @@ export class BooksController {
 
   @Get()
   @ApiOperation({ summary: 'Список книг' })
-  @ApiQuery({ name: 'boxId', required: false })
-  @ApiQuery({ name: 'search', required: false })
   findAll(
-    @Query() pagination: PaginationDto,
-    @Query('boxId') boxId: string,
-    @Query('search') search: string,
+    @Query() query: GetBooksQueryDto,
     @CurrentUser() user: User,
   ) {
-    return this.booksService.findAll(user.id, user.role, pagination, boxId, search);
+    return this.booksService.findAll(
+      user.id, user.role, query, query.boxId, query.search,
+      undefined, undefined, undefined, query.workSessionId, query.status,
+    );
   }
 
   @Get(':id')
