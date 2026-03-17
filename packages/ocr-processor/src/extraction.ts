@@ -41,6 +41,12 @@ export function mergeExtractionResults(
   result.weightGross = p2.weightGross;
   result.weightNet = p2.weightNet;
 
+  // Hashtags: combine from both photos, deduplicate, limit to 30
+  const allHashtags = [...(p1.hashtags || []), ...(p2.hashtags || [])];
+  if (allHashtags.length > 0) {
+    result.hashtags = [...new Set(allHashtags)].slice(0, 30);
+  }
+
   return result;
 }
 

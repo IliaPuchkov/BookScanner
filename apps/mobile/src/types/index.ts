@@ -16,7 +16,9 @@ export enum CoverType {
 
 export enum BookStatus {
   PENDING_REVIEW = 'pending_review',
+  PENDING_PUBLICATION = 'pending_publication',
   PUBLISHED = 'published',
+  PUBLICATION_FAILED = 'publication_failed',
 }
 
 export interface User {

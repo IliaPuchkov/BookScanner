@@ -26,7 +26,9 @@ export interface IBookDimensions {
 
 export enum BookStatus {
   PENDING_REVIEW = 'pending_review',
+  PENDING_PUBLICATION = 'pending_publication',
   PUBLISHED = 'published',
+  PUBLICATION_FAILED = 'publication_failed',
 }
 
 export interface IBookCard {

@@ -15,6 +15,7 @@ export interface IExtractionResult {
   annotation?: string;
   language?: string;
   price?: number;
+  hashtags?: string[];
 }
 
 export interface IOcrResult {

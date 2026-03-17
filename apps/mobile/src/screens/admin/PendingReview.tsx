@@ -86,7 +86,7 @@ export function PendingReviewScreen() {
             setPublishingId(book.id);
             try {
               await booksService.publishToOzon(book.id);
-              Alert.alert('Готово', 'Карточка загружена в Озон');
+              Alert.alert('Готово', 'Карточка отправлена на модерацию Ozon');
               setBooks((prev) => prev.filter((b) => b.id !== book.id));
             } catch {
               Alert.alert('Ошибка', 'Не удалось загрузить в Озон');

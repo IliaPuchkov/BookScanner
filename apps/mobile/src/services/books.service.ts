@@ -37,4 +37,9 @@ export const booksService = {
   async publishToOzon(bookId: string): Promise<void> {
     await api.post('/ozon/publish', { bookId });
   },
+
+  async checkOzonStatus(bookId: string): Promise<{ status: string; message: string }> {
+    const { data } = await api.post<{ status: string; message: string }>('/ozon/check-status', { bookId });
+    return data;
+  },
 };

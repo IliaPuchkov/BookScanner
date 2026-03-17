@@ -12,6 +12,7 @@ import { UpdateBookDto } from './dto/update-book.dto';
 import { PaginationDto } from '../common/dto/pagination.dto';
 import { BoxesService } from '../boxes/boxes.service';
 import { StatsService } from '../stats/stats.service';
+import { PhotosService } from '../photos/photos.service';
 import { UserRole, BookStatus } from '@bookscanner/shared';
 import {
   DEFAULT_HEIGHT_MM,
@@ -30,6 +31,7 @@ export class BooksService {
     private readonly booksRepository: Repository<Book>,
     private readonly boxesService: BoxesService,
     private readonly statsService: StatsService,
+    private readonly photosService: PhotosService,
   ) {}
 
   async create(dto: CreateBookDto, userId: string): Promise<Book> {
@@ -169,6 +171,7 @@ export class BooksService {
   async remove(id: string, userId: string, role: UserRole): Promise<void> {
     const book = await this.findOne(id);
     this.checkOwnership(book, userId, role);
+    await this.photosService.deleteAllForBook(id);
     await this.booksRepository.remove(book);
   }
 

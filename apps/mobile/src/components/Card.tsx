@@ -13,8 +13,23 @@ interface Props {
   onPress: () => void;
 }
 
+function getStatusConfig(status: BookStatus): { color: string; label: string } {
+  switch (status) {
+    case BookStatus.PUBLISHED:
+      return { color: '#43A047', label: 'Опубликовано' };
+    case BookStatus.PENDING_PUBLICATION:
+      return { color: '#1976D2', label: 'Ожидает публикации' };
+    case BookStatus.PUBLICATION_FAILED:
+      return { color: '#E53935', label: 'Ошибка публикации' };
+    case BookStatus.PENDING_REVIEW:
+    default:
+      return { color: '#FB8C00', label: 'Ожидает подтверждения' };
+  }
+}
+
 export function BookCard({ book, onPress }: Props) {
   const coverPhoto = book.photos?.find((p) => p.sortOrder === 0);
+  const statusConfig = getStatusConfig(book.status);
 
   return (
     <TouchableOpacity style={styles.card} onPress={onPress} activeOpacity={0.7}>
@@ -42,18 +57,16 @@ export function BookCard({ book, onPress }: Props) {
           <View
             style={[
               styles.statusDot,
-              { backgroundColor: book.status === BookStatus.PUBLISHED ? '#43A047' : '#FB8C00' },
+              { backgroundColor: statusConfig.color },
             ]}
           />
           <Text
             style={[
               styles.statusText,
-              { color: book.status === BookStatus.PUBLISHED ? '#43A047' : '#FB8C00' },
+              { color: statusConfig.color },
             ]}
           >
-            {book.status === BookStatus.PUBLISHED
-              ? 'Создана на Озоне'
-              : 'Ожидает подтверждения'}
+            {statusConfig.label}
           </Text>
         </View>
         <View style={styles.meta}>

@@ -24,6 +24,9 @@ export class OzonProduct {
   @Column({ nullable: true })
   ozonProductId: string;
 
+  @Column({ type: 'bigint', nullable: true })
+  taskId: number;
+
   @Column({ type: 'jsonb', nullable: true })
   publishPayload: Record<string, unknown>;
 
