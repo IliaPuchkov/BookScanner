@@ -52,6 +52,11 @@ export function PhotoUploadScreen() {
   }, [bookId]);
 
   const handleAdd = async () => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Ошибка', 'Нужно разрешение на доступ к галерее');
+      return;
+    }
     const remaining = maxPhotos - photos.length;
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['images'],

@@ -74,6 +74,11 @@ export function CreateCardScreen() {
   };
 
   const handlePickPhotos = async () => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== "granted") {
+      Alert.alert("Ошибка", "Нужно разрешение на доступ к галерее");
+      return;
+    }
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ["images"],
       allowsMultipleSelection: true,

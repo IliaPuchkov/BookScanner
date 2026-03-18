@@ -8,6 +8,7 @@ import {
   Dimensions,
   PanResponder,
   Animated,
+  Pressable,
 } from 'react-native';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
@@ -28,7 +29,6 @@ interface Props {
   maxPhotos?: number;
 }
 
-/** Pixel position of cell at index relative to the grid container */
 function cellXY(idx: number) {
   return {
     x: (idx % COLS) * (ITEM_SIZE + GAP),
@@ -36,7 +36,6 @@ function cellXY(idx: number) {
   };
 }
 
-/** Which photo index does a container-relative point map to? */
 function indexAtPoint(rx: number, ry: number, count: number): number | null {
   if (rx < 0 || ry < 0) return null;
   const col = Math.floor(rx / (ITEM_SIZE + GAP));
@@ -53,7 +52,6 @@ export function PhotoGrid({
   onReorder,
   maxPhotos = 10,
 }: Props) {
-  // Stable refs for PanResponder (avoids stale closures)
   const photosRef = useRef(photos);
   photosRef.current = photos;
   const onReorderRef = useRef(onReorder);
@@ -72,50 +70,66 @@ export function PhotoGrid({
 
   const isDragging = fromIdx !== null;
 
-  // Grid needs explicit height for absolute layout
   const hasAdd = photos.length < maxPhotos && !!onAdd;
   const totalCells = photos.length + (hasAdd ? 1 : 0);
   const rows = Math.max(1, Math.ceil(totalCells / COLS));
   const gridHeight = rows * ITEM_SIZE + (rows - 1) * GAP;
 
+  const updateContainerPage = () => {
+    containerRef.current?.measureInWindow((x, y) => {
+      containerPage.current = { x, y };
+    });
+  };
+
+  // Called by long-press on drag handle — activates drag mode before PanResponder moves
+  const startDrag = (index: number) => {
+    updateContainerPage();
+    const pos = cellXY(index);
+    floatAnim.setValue({ x: pos.x, y: pos.y });
+    Animated.spring(floatScale, { toValue: 1.08, useNativeDriver: true }).start();
+    fromIdxRef.current = index;
+    toIdxRef.current = index;
+    setFromIdx(index);
+    setToIdx(index);
+  };
+
+  const endDrag = () => {
+    Animated.spring(floatScale, { toValue: 1, useNativeDriver: true }).start();
+    const from = fromIdxRef.current;
+    const to = toIdxRef.current;
+    fromIdxRef.current = null;
+    toIdxRef.current = null;
+    setFromIdx(null);
+    setToIdx(null);
+
+    if (from !== null && to !== null && from !== to && onReorderRef.current) {
+      const arr = [...photosRef.current];
+      const [moved] = arr.splice(from, 1);
+      arr.splice(to, 0, moved);
+      onReorderRef.current(arr);
+    }
+  };
+
   const panResponder = useRef(
     PanResponder.create({
-      // Don't steal taps — let TouchableOpacity children handle them
+      // Never capture at start — let Pressable.onLongPress fire first
       onStartShouldSetPanResponder: () => false,
       onStartShouldSetPanResponderCapture: () => false,
-      // Activate once the finger starts moving
-      onMoveShouldSetPanResponder: (_evt, gs) =>
-        Math.abs(gs.dx) > 5 || Math.abs(gs.dy) > 5,
-      onMoveShouldSetPanResponderCapture: () => false,
+      // Only take move events once drag is active (set by onLongPress)
+      onMoveShouldSetPanResponder: () => fromIdxRef.current !== null,
+      onMoveShouldSetPanResponderCapture: () => fromIdxRef.current !== null,
 
       onPanResponderGrant: (_evt, gs) => {
-        // gs.x0/y0 = page coords of the very first touch (set at touch-start)
-        const relX = gs.x0 - containerPage.current.x;
-        const relY = gs.y0 - containerPage.current.y;
-        const idx = indexAtPoint(relX, relY, photosRef.current.length);
-        if (idx === null) return;
-
-        const pos = cellXY(idx);
-        floatAnim.setValue({ x: pos.x, y: pos.y });
-        Animated.spring(floatScale, {
-          toValue: 1.08,
-          useNativeDriver: true,
-        }).start();
-
-        fromIdxRef.current = idx;
-        toIdxRef.current = idx;
-        setFromIdx(idx);
-        setToIdx(idx);
+        if (fromIdxRef.current === null) return;
+        // Adjust float to current finger offset from the long-press start
+        const startPos = cellXY(fromIdxRef.current);
+        floatAnim.setValue({ x: startPos.x + gs.dx, y: startPos.y + gs.dy });
       },
 
       onPanResponderMove: (_evt, gs) => {
         if (fromIdxRef.current === null) return;
-
         const startPos = cellXY(fromIdxRef.current);
-        floatAnim.setValue({
-          x: startPos.x + gs.dx,
-          y: startPos.y + gs.dy,
-        });
+        floatAnim.setValue({ x: startPos.x + gs.dx, y: startPos.y + gs.dy });
 
         const relX = gs.moveX - containerPage.current.x;
         const relY = gs.moveY - containerPage.current.y;
@@ -126,37 +140,8 @@ export function PhotoGrid({
         }
       },
 
-      onPanResponderRelease: () => {
-        Animated.spring(floatScale, {
-          toValue: 1,
-          useNativeDriver: true,
-        }).start();
-
-        const from = fromIdxRef.current;
-        const to = toIdxRef.current;
-        fromIdxRef.current = null;
-        toIdxRef.current = null;
-        setFromIdx(null);
-        setToIdx(null);
-
-        if (from !== null && to !== null && from !== to && onReorderRef.current) {
-          const arr = [...photosRef.current];
-          const [moved] = arr.splice(from, 1);
-          arr.splice(to, 0, moved);
-          onReorderRef.current(arr);
-        }
-      },
-
-      onPanResponderTerminate: () => {
-        Animated.spring(floatScale, {
-          toValue: 1,
-          useNativeDriver: true,
-        }).start();
-        fromIdxRef.current = null;
-        toIdxRef.current = null;
-        setFromIdx(null);
-        setToIdx(null);
-      },
+      onPanResponderRelease: endDrag,
+      onPanResponderTerminate: endDrag,
     }),
   ).current;
 
@@ -166,11 +151,7 @@ export function PhotoGrid({
     <View
       ref={containerRef}
       style={[styles.grid, { height: gridHeight }]}
-      onLayout={() => {
-        containerRef.current?.measure((_fx, _fy, _w, _h, px, py) => {
-          containerPage.current = { x: px, y: py };
-        });
-      }}
+      onLayout={updateContainerPage}
       {...(onReorder ? panResponder.panHandlers : {})}
     >
       {photos.map((photo, index) => {
@@ -204,15 +185,18 @@ export function PhotoGrid({
               </View>
             )}
             {onReorder && (
-              <View style={styles.dragHandle} pointerEvents="none">
+              <Pressable
+                style={styles.dragHandle}
+                onLongPress={() => startDrag(index)}
+                delayLongPress={250}
+              >
                 <Text style={styles.dragHandleIcon}>⠿</Text>
-              </View>
+              </Pressable>
             )}
           </View>
         );
       })}
 
-      {/* Add button */}
       {hasAdd && !isDragging && (
         <TouchableOpacity
           style={[
@@ -226,13 +210,13 @@ export function PhotoGrid({
         </TouchableOpacity>
       )}
 
-      {/* Floating copy that follows the finger */}
       {dragPhoto && (
         <Animated.View
           style={[
-            styles.item,
             styles.floatingItem,
             {
+              width: ITEM_SIZE,
+              height: ITEM_SIZE,
               transform: [
                 { translateX: floatAnim.x },
                 { translateY: floatAnim.y },
@@ -242,7 +226,11 @@ export function PhotoGrid({
           ]}
           pointerEvents="none"
         >
-          <Image source={{ uri: dragPhoto.uri }} style={styles.image} />
+          {/* borderRadius on Image avoids Android Animated.View + overflow:hidden bug */}
+          <Image
+            source={{ uri: dragPhoto.uri }}
+            style={styles.floatingImage}
+          />
         </Animated.View>
       )}
     </View>
@@ -268,14 +256,22 @@ const styles = StyleSheet.create({
     borderColor: '#1976D2',
   },
   floatingItem: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
     zIndex: 100,
+    elevation: 10,
+    borderRadius: 8,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.25,
     shadowRadius: 10,
-    elevation: 10,
+    // No overflow:'hidden' — causes images to vanish on Android with elevation
+  },
+  floatingImage: {
+    width: ITEM_SIZE,
+    height: ITEM_SIZE,
     borderRadius: 8,
-    overflow: 'hidden',
   },
   image: {
     width: '100%',
@@ -315,8 +311,8 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 4,
     left: 4,
-    width: 20,
-    height: 20,
+    width: 24,
+    height: 24,
     borderRadius: 4,
     backgroundColor: 'rgba(0,0,0,0.35)',
     alignItems: 'center',

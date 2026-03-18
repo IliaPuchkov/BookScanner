@@ -1,4 +1,3 @@
-import { Platform } from "react-native";
 import Constants from "expo-constants";
 
 // IP компьютера в локальной сети (обновляется автоматически из Expo)
@@ -8,11 +7,7 @@ const DEV_MACHINE_IP =
 
 const getBaseUrl = (): string => {
   if (__DEV__) {
-    if (Platform.OS === "android") {
-      // Android эмулятор — специальный адрес host machine
-      return `http://10.0.2.2:3000/api`;
-    }
-    // iOS симулятор и реальное устройство — IP компьютера
+    // Реальное устройство (iOS и Android) — IP компьютера из Expo
     return `http://${DEV_MACHINE_IP}:3000/api`;
   }
 
