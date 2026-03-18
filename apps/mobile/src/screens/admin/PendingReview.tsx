@@ -108,7 +108,7 @@ export function PendingReviewScreen() {
         style={styles.card}
         activeOpacity={0.7}
         onPress={() =>
-          navigation.navigate('CardDetail', { bookId: item.id, editable: true })
+          navigation.navigate('ProductDetail', { bookId: item.id, editable: true })
         }
       >
         {coverPhoto ? (

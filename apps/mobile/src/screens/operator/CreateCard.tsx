@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import {
   View,
   ScrollView,
@@ -17,6 +17,7 @@ import { booksService } from "../../services/books.service";
 import { boxesService } from "../../services/boxes.service";
 import { photosService } from "../../services/photos.service";
 import { visionService } from "../../services/vision.service";
+import { sessionStore } from "../../utils/sessionStore";
 import type { Box } from "../../types";
 import type { OperatorStackParamList } from "../../navigation/OperatorNavigator";
 
@@ -35,8 +36,10 @@ export function CreateCardScreen() {
   const [loadingMessage, setLoadingMessage] = useState("");
 
   // Box
-  const [boxes, setBoxes] = useState<Box[]>([]);
   const sessionId = route.params?.sessionId;
+  const [boxes, setBoxes] = useState<Box[]>(() =>
+    sessionId ? sessionStore.getBoxes(sessionId) : [],
+  );
   const [selectedBoxId, setSelectedBoxId] = useState<string | null>(
     route.params?.boxId ?? null,
   );
@@ -44,13 +47,6 @@ export function CreateCardScreen() {
 
   // Photos
   const [photos, setPhotos] = useState<PhotoItem[]>([]);
-
-  useEffect(() => {
-    boxesService
-      .getBoxes(1, 100)
-      .then((res) => setBoxes(res.data))
-      .catch(() => {});
-  }, []);
 
   const handleCreateBox = async () => {
     if (!newBoxNumber.trim()) {
@@ -62,6 +58,7 @@ export function CreateCardScreen() {
       const box = await boxesService.createBox({
         boxNumber: newBoxNumber.trim(),
       });
+      if (sessionId) sessionStore.addBox(box);
       setBoxes((prev) => [box, ...prev]);
       setSelectedBoxId(box.id);
       setNewBoxNumber("");
@@ -171,30 +168,31 @@ export function CreateCardScreen() {
             </Text>
 
             {boxes.length > 0 && (
-              <View style={styles.boxList}>
-                {boxes.map((box) => (
-                  <TouchableOpacity
-                    key={box.id}
-                    style={[
-                      styles.boxItem,
-                      selectedBoxId === box.id && styles.boxItemSelected,
-                    ]}
-                    onPress={() => setSelectedBoxId(box.id)}
-                  >
-                    <Text
+              <>
+                <View style={styles.boxList}>
+                  {boxes.map((box) => (
+                    <TouchableOpacity
+                      key={box.id}
                       style={[
-                        styles.boxItemText,
-                        selectedBoxId === box.id && styles.boxItemTextSelected,
+                        styles.boxItem,
+                        selectedBoxId === box.id && styles.boxItemSelected,
                       ]}
+                      onPress={() => setSelectedBoxId(box.id)}
                     >
-                      {box.boxNumber}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
+                      <Text
+                        style={[
+                          styles.boxItemText,
+                          selectedBoxId === box.id && styles.boxItemTextSelected,
+                        ]}
+                      >
+                        {box.boxNumber}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+                <Text style={styles.orDivider}>или создайте новую</Text>
+              </>
             )}
-
-            <Text style={styles.orDivider}>или создайте новую</Text>
 
             <Input
               label="Номер коробки"

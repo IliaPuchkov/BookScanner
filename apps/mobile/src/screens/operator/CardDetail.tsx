@@ -11,6 +11,7 @@ import {
   TextInput,
   KeyboardAvoidingView,
   Platform,
+  TouchableOpacity,
 } from 'react-native';
 import { useRoute, useNavigation, type RouteProp } from '@react-navigation/native';
 import { type NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -18,8 +19,9 @@ import { Button } from '../../components/Button';
 import { booksService } from '../../services/books.service';
 import { visionService } from '../../services/vision.service';
 import type { Book, UpdateBookDto } from '../../types';
+import { CoverType, PaperType } from '../../types';
 import type { OperatorStackParamList } from '../../navigation/OperatorNavigator';
-import { formatPrice, formatDate } from '../../utils/format';
+import { formatDate } from '../../utils/format';
 
 type Route = RouteProp<OperatorStackParamList, 'CardDetail'>;
 type Nav = NativeStackNavigationProp<OperatorStackParamList, 'CardDetail'>;
@@ -30,12 +32,12 @@ export function CardDetailScreen() {
   const route = useRoute<Route>();
   const navigation = useNavigation<Nav>();
   const { bookId } = route.params;
-  const editable = (route.params as { editable?: boolean }).editable ?? false;
+  const editable = route.params.editable ?? false;
 
   const [book, setBook] = useState<Book | null>(null);
   const [loading, setLoading] = useState(true);
   const [extracting, setExtracting] = useState(false);
-  const [editing, setEditing] = useState(false);
+  const [editing, setEditing] = useState(editable);
   const [saving, setSaving] = useState(false);
 
   // Edit fields
@@ -45,12 +47,13 @@ export function CardDetailScreen() {
   const [editPublisher, setEditPublisher] = useState('');
   const [editYear, setEditYear] = useState('');
   const [editPages, setEditPages] = useState('');
-  const [editPrice, setEditPrice] = useState('');
   const [editWeight, setEditWeight] = useState('');
   const [editWidth, setEditWidth] = useState('');
   const [editHeight, setEditHeight] = useState('');
   const [editDepth, setEditDepth] = useState('');
-  const [editAnnotation, setEditAnnotation] = useState('');
+  const [editCoverType, setEditCoverType] = useState('');
+  const [editPaperType, setEditPaperType] = useState('');
+  const [editLanguage, setEditLanguage] = useState('');
 
   useEffect(() => {
     booksService
@@ -70,12 +73,13 @@ export function CardDetailScreen() {
     setEditPublisher(b.publisher ?? '');
     setEditYear(b.yearPublished?.toString() ?? '');
     setEditPages(b.pageCount?.toString() ?? '');
-    setEditPrice(b.price?.toString() ?? '');
     setEditWeight(b.weightGross?.toString() ?? '');
     setEditWidth(b.dimensions?.width?.toString() ?? '');
     setEditHeight(b.dimensions?.height?.toString() ?? '');
     setEditDepth(b.dimensions?.depth?.toString() ?? '');
-    setEditAnnotation(b.annotation ?? '');
+    setEditCoverType(b.coverType ?? '');
+    setEditPaperType(b.paperType ?? '');
+    setEditLanguage(b.language ?? '');
   };
 
   const handleSave = async () => {
@@ -89,7 +93,6 @@ export function CardDetailScreen() {
         publisher: editPublisher || undefined,
         yearPublished: editYear ? parseInt(editYear, 10) : undefined,
         pageCount: editPages ? parseInt(editPages, 10) : undefined,
-        price: editPrice ? parseFloat(editPrice) : undefined,
         weightGross: editWeight ? parseFloat(editWeight) : undefined,
         dimensions:
           editWidth || editHeight || editDepth
@@ -99,7 +102,9 @@ export function CardDetailScreen() {
                 depth: parseFloat(editDepth) || 0,
               }
             : undefined,
-        annotation: editAnnotation || undefined,
+        coverType: (editCoverType as CoverType) || undefined,
+        paperType: (editPaperType as PaperType) || undefined,
+        language: editLanguage || undefined,
       };
       const updated = await booksService.updateBook(book.id, dto);
       setBook(updated);
@@ -197,26 +202,48 @@ export function CardDetailScreen() {
         <View style={styles.content}>
           {editing ? (
             <>
-              <EditField label="Название" value={editTitle} onChangeText={setEditTitle} />
-              <EditField label="Автор" value={editAuthor} onChangeText={setEditAuthor} />
-              <EditField label="ISBN" value={editIsbn} onChangeText={setEditIsbn} />
-              <EditField label="Издательство" value={editPublisher} onChangeText={setEditPublisher} />
-              <EditField label="Год" value={editYear} onChangeText={setEditYear} keyboardType="numeric" />
-              <EditField label="Страниц" value={editPages} onChangeText={setEditPages} keyboardType="numeric" />
-              <EditField label="Цена (₽)" value={editPrice} onChangeText={setEditPrice} keyboardType="numeric" />
-              <EditField label="Вес (г)" value={editWeight} onChangeText={setEditWeight} keyboardType="numeric" />
+              <EditField label="Название" value={editTitle} onChangeText={setEditTitle} placeholder="Введите название" />
+              <EditField label="Автор" value={editAuthor} onChangeText={setEditAuthor} placeholder="Введите автора" />
+              <EditField label="ISBN" value={editIsbn} onChangeText={setEditIsbn} placeholder="Введите ISBN" />
+              <EditField label="Издательство" value={editPublisher} onChangeText={setEditPublisher} placeholder="Введите издательство" />
+              <EditField label="Год издания" value={editYear} onChangeText={setEditYear} keyboardType="numeric" placeholder="Например: 2005" />
+              <EditField label="Количество страниц" value={editPages} onChangeText={setEditPages} keyboardType="numeric" placeholder="Например: 320" />
+              <EditField label="Вес (г)" value={editWeight} onChangeText={setEditWeight} keyboardType="numeric" placeholder="Например: 450" />
+
               <Text style={styles.sectionTitle}>Размеры (мм)</Text>
               <View style={styles.dimRow}>
-                <EditField label="Ш" value={editWidth} onChangeText={setEditWidth} keyboardType="numeric" style={{ flex: 1 }} />
-                <EditField label="В" value={editHeight} onChangeText={setEditHeight} keyboardType="numeric" style={{ flex: 1 }} />
-                <EditField label="Г" value={editDepth} onChangeText={setEditDepth} keyboardType="numeric" style={{ flex: 1 }} />
+                <EditField label="Ширина" value={editWidth} onChangeText={setEditWidth} keyboardType="numeric" style={{ flex: 1 }} placeholder="Ш" />
+                <EditField label="Высота" value={editHeight} onChangeText={setEditHeight} keyboardType="numeric" style={{ flex: 1 }} placeholder="В" />
+                <EditField label="Глубина" value={editDepth} onChangeText={setEditDepth} keyboardType="numeric" style={{ flex: 1 }} placeholder="Г" />
               </View>
-              <EditField
-                label="Аннотация"
-                value={editAnnotation}
-                onChangeText={setEditAnnotation}
-                multiline
-              />
+
+              <Text style={styles.editLabel}>Тип обложки</Text>
+              <View style={styles.optionsRow}>
+                {Object.values(CoverType).map((val) => (
+                  <TouchableOpacity
+                    key={val}
+                    style={[styles.optionBtn, editCoverType === val && styles.optionBtnSelected]}
+                    onPress={() => setEditCoverType(val)}
+                  >
+                    <Text style={[styles.optionText, editCoverType === val && styles.optionTextSelected]}>{val}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              <Text style={styles.editLabel}>Тип бумаги</Text>
+              <View style={styles.optionsRow}>
+                {Object.values(PaperType).map((val) => (
+                  <TouchableOpacity
+                    key={val}
+                    style={[styles.optionBtn, editPaperType === val && styles.optionBtnSelected]}
+                    onPress={() => setEditPaperType(val)}
+                  >
+                    <Text style={[styles.optionText, editPaperType === val && styles.optionTextSelected]}>{val}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              <EditField label="Язык" value={editLanguage} onChangeText={setEditLanguage} placeholder="Например: русский" />
 
               <View style={styles.editActions}>
                 <Button
@@ -248,37 +275,27 @@ export function CardDetailScreen() {
                 <InfoRow label="Тип бумаги" value={book.paperType} />
                 <InfoRow label="Язык" value={book.language} />
                 <InfoRow label="Состояние" value={book.condition} />
-                <InfoRow label="Цена" value={book.price > 0 ? formatPrice(book.price) : undefined} />
                 {book.dimensions && (
                   <InfoRow
                     label="Размеры"
                     value={`${book.dimensions.width}x${book.dimensions.height}x${book.dimensions.depth} мм`}
                   />
                 )}
-                {book.weightGross && (
+                {book.weightGross ? (
                   <InfoRow label="Вес" value={`${book.weightGross} г`} />
-                )}
+                ) : null}
               </View>
-
-              {book.annotation && (
-                <View style={styles.section}>
-                  <Text style={styles.sectionTitle}>Аннотация</Text>
-                  <Text style={styles.annotationText}>{book.annotation}</Text>
-                </View>
-              )}
 
               <Text style={styles.date}>
                 Создана: {formatDate(book.createdAt)}
               </Text>
 
               <View style={styles.actions}>
-                {editable && (
-                  <Button
-                    title="Редактировать"
-                    onPress={() => setEditing(true)}
-                    style={{ marginBottom: 8 }}
-                  />
-                )}
+                <Button
+                  title="Редактировать"
+                  onPress={() => setEditing(true)}
+                  style={{ marginBottom: 8 }}
+                />
                 <Button
                   title="Фото"
                   onPress={() => navigation.navigate('PhotoUpload', { bookId })}
@@ -323,6 +340,7 @@ function EditField({
   keyboardType,
   multiline,
   style,
+  placeholder,
 }: {
   label: string;
   value: string;
@@ -330,6 +348,7 @@ function EditField({
   keyboardType?: 'numeric' | 'default';
   multiline?: boolean;
   style?: object;
+  placeholder?: string;
 }) {
   return (
     <View style={[styles.editField, style]}>
@@ -340,7 +359,8 @@ function EditField({
         onChangeText={onChangeText}
         keyboardType={keyboardType ?? 'default'}
         multiline={multiline}
-        placeholderTextColor="#999"
+        placeholder={placeholder}
+        placeholderTextColor="#bbb"
       />
     </View>
   );
@@ -395,6 +415,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#333',
     marginBottom: 8,
+    marginTop: 4,
   },
   row: {
     flexDirection: 'row',
@@ -413,11 +434,6 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     maxWidth: '60%',
     textAlign: 'right',
-  },
-  annotationText: {
-    fontSize: 14,
-    color: '#444',
-    lineHeight: 20,
   },
   date: {
     fontSize: 12,
@@ -458,5 +474,32 @@ const styles = StyleSheet.create({
   dimRow: {
     flexDirection: 'row',
     gap: 8,
+    marginBottom: 12,
+  },
+  optionsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 16,
+  },
+  optionBtn: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 8,
+    borderWidth: 1.5,
+    borderColor: '#ddd',
+    backgroundColor: '#FAFAFA',
+  },
+  optionBtnSelected: {
+    borderColor: '#1976D2',
+    backgroundColor: '#E3F2FD',
+  },
+  optionText: {
+    fontSize: 14,
+    color: '#555',
+  },
+  optionTextSelected: {
+    color: '#1976D2',
+    fontWeight: '600',
   },
 });

@@ -34,12 +34,16 @@ interface OzonAttribute {
   values: Array<{ dictionary_value_id?: number; value: string }>;
 }
 
-function attr(id: number, value: string | number): OzonAttribute {
-  return {
-    complex_id: 0,
-    id,
-    values: [{ value: String(value) }],
+function attr(
+  id: number,
+  value: string | number,
+  dictValueId?: number,
+): OzonAttribute {
+  const val: { value: string; dictionary_value_id?: number } = {
+    value: String(value),
   };
+  if (dictValueId) val.dictionary_value_id = dictValueId;
+  return { complex_id: 0, id, values: [val] };
 }
 
 // Defaults when AI returns 0: длина=100, ширина=100, толщина=35
@@ -47,7 +51,10 @@ const DEFAULT_WIDTH_MM = 100; // ширина
 const DEFAULT_LENGTH_MM = 100; // длина (= height в модели книги)
 const DEFAULT_THICKNESS_MM = 35; // толщина (= depth в модели книги)
 
-export function buildOzonImportPayload(book: Book): Record<string, unknown> {
+export function buildOzonImportPayload(
+  book: Book,
+  resolved: { brandDictValueId?: number; authorDictValueId?: number } = {},
+): Record<string, unknown> {
   const raw = book.dimensions || { width: 0, height: 0, depth: 0 };
   const dimensions = {
     width: raw.width || DEFAULT_WIDTH_MM, // ширина
@@ -60,11 +67,15 @@ export function buildOzonImportPayload(book: Book): Record<string, unknown> {
     // Required
     attr(OZON_ATTR_NAME, book.title),
     attr(OZON_ATTR_AUTHOR_COVER, book.author || "Не указан"),
-    attr(OZON_ATTR_BRAND, book.publisher || "Нет бренда"),
+    attr(OZON_ATTR_BRAND, book.publisher || "Нет бренда", resolved.brandDictValueId),
     attr(OZON_ATTR_TYPE, book.bookType || DEFAULT_BOOK_TYPE),
     attr(OZON_ATTR_DIRECTION, book.direction || DEFAULT_DIRECTION),
-    // attr(OZON_ATTR_AUTHOR, book.author || "Не указан"),
   ];
+
+  // OZON_ATTR_AUTHOR — строгий словарный атрибут, отправляем только если нашли dictionary_value_id
+  if (resolved.authorDictValueId) {
+    attributes.push(attr(OZON_ATTR_AUTHOR, book.author!, resolved.authorDictValueId));
+  }
 
   // Optional attributes
 

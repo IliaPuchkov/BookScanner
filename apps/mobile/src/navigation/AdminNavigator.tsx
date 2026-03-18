@@ -7,7 +7,7 @@ import { UserManagementScreen } from "../screens/admin/UserManagement";
 import { StatisticsScreen } from "../screens/admin/Statistics";
 import { BookDatabaseScreen } from "../screens/admin/BookDatabase";
 import { PendingReviewScreen } from "../screens/admin/PendingReview";
-import { CardDetailScreen } from "../screens/operator/CardDetail";
+import { ProductDetailScreen } from "../screens/admin/ProductDetail";
 import { SettingsScreen } from "../screens/operator/SettingsScreen";
 import { ProfileScreen } from "../screens/ProfileScreen";
 
@@ -17,7 +17,7 @@ export type AdminMainStackParamList = {
   Statistics: undefined;
   BookDatabase: { filterStatus?: string } | undefined;
   PendingReview: undefined;
-  CardDetail: { bookId: string; editable?: boolean };
+  ProductDetail: { bookId: string; editable?: boolean };
 };
 
 const MainStack = createNativeStackNavigator<AdminMainStackParamList>();
@@ -53,9 +53,9 @@ function MainStackScreen() {
         options={{ title: "Ожидают проверки" }}
       />
       <MainStack.Screen
-        name="CardDetail"
-        component={CardDetailScreen}
-        options={{ title: "Карточка" }}
+        name="ProductDetail"
+        component={ProductDetailScreen}
+        options={{ title: "Товар" }}
       />
     </MainStack.Navigator>
   );

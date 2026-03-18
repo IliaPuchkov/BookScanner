@@ -14,6 +14,7 @@ import { type NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { BookCard } from "../../components/Card";
 import { booksService } from "../../services/books.service";
 import { sessionsService } from "../../services/sessions.service";
+import { sessionStore } from "../../utils/sessionStore";
 import type { Book, WorkSession, PaginatedResponse } from "../../types";
 import type { OperatorStackParamList } from "../../navigation/OperatorNavigator";
 
@@ -32,6 +33,7 @@ export function CardsListScreen() {
   const fetchActiveSession = useCallback(async () => {
     try {
       const active = await sessionsService.getActiveSession();
+      if (active) sessionStore.setSession(active.id);
       setSession(active);
       return active;
     } catch {
@@ -108,6 +110,7 @@ export function CardsListScreen() {
     setStarting(true);
     try {
       const newSession = await sessionsService.startSession();
+      sessionStore.setSession(newSession.id);
       setSession(newSession);
       setBooks([]);
     } catch (err: any) {
@@ -133,6 +136,7 @@ export function CardsListScreen() {
           onPress: async () => {
             try {
               await sessionsService.endSession(session.id);
+              sessionStore.clear();
               setSession(null);
               setBooks([]);
             } catch (err: any) {
@@ -207,7 +211,7 @@ export function CardsListScreen() {
           <BookCard
             book={item}
             onPress={() =>
-              navigation.navigate("CardDetail", { bookId: item.id })
+              navigation.navigate("CardDetail", { bookId: item.id, editable: true })
             }
           />
         )}

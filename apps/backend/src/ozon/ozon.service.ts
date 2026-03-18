@@ -10,7 +10,7 @@ import { OzonProduct } from './entities/ozon-product.entity';
 import { BooksService } from '../books/books.service';
 import { OzonApiClient, OzonApiError } from './ozon-api.client';
 import { buildOzonImportPayload } from './ozon-payload.builder';
-import { BookStatus } from '@bookscanner/shared';
+import { BookStatus, OZON_ATTR_BRAND, OZON_ATTR_AUTHOR } from '@bookscanner/shared';
 
 const IMPORTABLE_STATUSES = ['importing', 'moderation_pending'];
 
@@ -42,7 +42,22 @@ export class OzonService {
       throw new BadRequestException('Необходимо минимум 2 фото для публикации на Ozon.');
     }
 
-    const payload = buildOzonImportPayload(book);
+    const [brandDictValueId, authorDictValueId] = await Promise.all([
+      this.ozonApiClient.findDictionaryValue(
+        OZON_ATTR_BRAND,
+        book.publisher || 'Нет бренда',
+      ),
+      this.ozonApiClient.findDictionaryValue(
+        OZON_ATTR_AUTHOR,
+        book.author || 'Не указан',
+      ),
+    ]);
+
+    this.logger.log(
+      `Dictionary lookup: brand="${book.publisher}" → ${brandDictValueId}, author="${book.author}" → ${authorDictValueId}`,
+    );
+
+    const payload = buildOzonImportPayload(book, { brandDictValueId, authorDictValueId });
 
     // Create or update OzonProduct entry
     let ozonProduct = await this.ozonProductRepository.findOne({

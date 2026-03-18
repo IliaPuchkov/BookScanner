@@ -78,7 +78,7 @@ export function DashboardScreen() {
             <TouchableOpacity
               key={book.id}
               style={styles.bookRow}
-              onPress={() => navigation.navigate('CardDetail', { bookId: book.id })}
+              onPress={() => navigation.navigate('ProductDetail', { bookId: book.id })}
             >
               <View style={styles.pendingBookRow}>
                 <View style={{ flex: 1 }}>

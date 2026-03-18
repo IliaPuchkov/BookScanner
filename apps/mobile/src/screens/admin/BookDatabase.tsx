@@ -410,7 +410,7 @@ export function BookDatabaseScreen() {
             <BookCard
               book={item}
               onPress={() =>
-                navigation.navigate("CardDetail", { bookId: item.id })
+                navigation.navigate("ProductDetail", { bookId: item.id })
               }
             />
           )}

@@ -12,7 +12,7 @@ import { Text } from "react-native";
 export type OperatorStackParamList = {
   CardsList: undefined;
   CreateCard: { boxId?: string; sessionId?: string } | undefined;
-  CardDetail: { bookId: string };
+  CardDetail: { bookId: string; editable?: boolean };
   PhotoUpload: { bookId: string };
 };
 
@@ -77,18 +77,7 @@ export function OperatorNavigator() {
           tabBarIcon: ({ focused }) => <TabIcon label="📚" focused={focused} />,
         }}
       />
-      <Tab.Screen
-        name="SettingsTab"
-        component={SettingsScreen}
-        options={{
-          tabBarLabel: "Настройки",
-          tabBarIcon: ({ focused }) => <TabIcon label="⚙️" focused={focused} />,
-          headerShown: true,
-          headerTitle: "Настройки",
-          headerStyle: { backgroundColor: "#1976D2" },
-          headerTintColor: "#fff",
-        }}
-      />
+
       <Tab.Screen
         name="ProfileTab"
         component={ProfileScreen}
