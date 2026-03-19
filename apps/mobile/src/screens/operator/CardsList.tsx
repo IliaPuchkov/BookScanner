@@ -211,7 +211,7 @@ export function CardsListScreen() {
           <BookCard
             book={item}
             onPress={() =>
-              navigation.navigate("CardDetail", { bookId: item.id, editable: true })
+              navigation.navigate("CardDetail", { bookId: item.id })
             }
           />
         )}

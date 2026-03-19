@@ -7,7 +7,7 @@ import { CardDetailScreen } from "../screens/operator/CardDetail";
 import { PhotoUploadScreen } from "../screens/operator/PhotoUpload";
 import { SettingsScreen } from "../screens/operator/SettingsScreen";
 import { ProfileScreen } from "../screens/ProfileScreen";
-import { Text } from "react-native";
+import { Text, Pressable } from "react-native";
 
 export type OperatorStackParamList = {
   CardsList: undefined;
@@ -22,11 +22,29 @@ const Stack = createNativeStackNavigator<OperatorStackParamList>();
 function CardsStack() {
   return (
     <Stack.Navigator
-      screenOptions={{
+      screenOptions={({ navigation }) => ({
         headerStyle: { backgroundColor: "#1976D2" },
         headerTintColor: "#fff",
         headerTitleStyle: { fontWeight: "600" },
-      }}
+        headerBackVisible: false,
+        headerLeft: ({ canGoBack }) =>
+          canGoBack ? (
+            <Pressable
+              onPress={() => navigation.goBack()}
+              android_ripple={{ color: "transparent", borderless: true }}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              style={{
+                width: 44,
+                height: 44,
+                backgroundColor: "#1976D2",
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              <Text style={{ color: "#fff", fontSize: 32 }}>‹</Text>
+            </Pressable>
+          ) : null,
+      })}
     >
       <Stack.Screen
         name="CardsList"

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from "react";
 import {
   View,
   ScrollView,
@@ -11,31 +11,35 @@ import {
   TextInput,
   KeyboardAvoidingView,
   Platform,
-} from 'react-native';
-import { useRoute, useNavigation, type RouteProp } from '@react-navigation/native';
-import { type NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { Button } from '../../components/Button';
-import { booksService } from '../../services/books.service';
-import type { Book, UpdateBookDto } from '../../types';
-import { BookStatus } from '../../types';
-import type { AdminMainStackParamList } from '../../navigation/AdminNavigator';
-import { formatPrice, formatDate } from '../../utils/format';
+} from "react-native";
+import {
+  useRoute,
+  useNavigation,
+  type RouteProp,
+} from "@react-navigation/native";
+import { type NativeStackNavigationProp } from "@react-navigation/native-stack";
+import { Button } from "../../components/Button";
+import { booksService } from "../../services/books.service";
+import type { Book, UpdateBookDto } from "../../types";
+import { BookStatus } from "../../types";
+import type { AdminMainStackParamList } from "../../navigation/AdminNavigator";
+import { formatPrice, formatDate } from "../../utils/format";
 
-type Route = RouteProp<AdminMainStackParamList, 'ProductDetail'>;
-type Nav = NativeStackNavigationProp<AdminMainStackParamList, 'ProductDetail'>;
+type Route = RouteProp<AdminMainStackParamList, "ProductDetail">;
+type Nav = NativeStackNavigationProp<AdminMainStackParamList, "ProductDetail">;
 
-const SCREEN_WIDTH = Dimensions.get('window').width;
+const SCREEN_WIDTH = Dimensions.get("window").width;
 
 // Ozon defaults (mirrored from @bookscanner/shared ozon.constants)
 const ANNOTATION_PREFIX =
-  'ВНИМАНИЕ! Книга не новая! Состояние - на фото.\n\nПри необходимости мы можем добавить больше фотографий для оценки состояния экземпляра.\n\n';
+  "ВНИМАНИЕ! Книга не новая! Состояние - на фото.\n\nПри необходимости мы можем добавить больше фотографий для оценки состояния экземпляра.\n\n";
 const DEFAULT_WIDTH_MM = 100;
 const DEFAULT_LENGTH_MM = 100;
 const DEFAULT_THICKNESS_MM = 35;
 const DEFAULT_WEIGHT_G = 450;
-const DEFAULT_BOOK_TYPE = 'Печатная книга';
-const DEFAULT_DIRECTION = 'Проза';
-const DEFAULT_CONDITION = 'Хорошая';
+const DEFAULT_BOOK_TYPE = "Печатная книга";
+const DEFAULT_DIRECTION = "Проза";
+const DEFAULT_CONDITION = "Хорошая";
 
 interface OzonPreview {
   name: string;
@@ -63,13 +67,13 @@ function computeOzonPreview(book: Book): OzonPreview {
 
   return {
     name: book.title,
-    authorOnCover: book.author || 'Не указан',
-    brand: book.publisher || 'Нет бренда',
+    authorOnCover: book.author || "Не указан",
+    brand: book.publisher || "Нет бренда",
     bookType: book.bookType || DEFAULT_BOOK_TYPE,
     direction: book.direction || DEFAULT_DIRECTION,
     condition: book.condition || DEFAULT_CONDITION,
-    annotation: ANNOTATION_PREFIX + (book.annotation || ''),
-    hashtags: (book.hashtags || []).join(' '),
+    annotation: ANNOTATION_PREFIX + (book.annotation || ""),
+    hashtags: (book.hashtags || []).join(" "),
     dimWidth,
     dimLength,
     dimThickness,
@@ -80,11 +84,30 @@ function computeOzonPreview(book: Book): OzonPreview {
   };
 }
 
-const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string }> = {
-  [BookStatus.PENDING_REVIEW]: { label: 'Ожидает проверки', color: '#F57C00', bg: '#FFF3E0' },
-  [BookStatus.PENDING_PUBLICATION]: { label: 'Ожидает публикации', color: '#1976D2', bg: '#E3F2FD' },
-  [BookStatus.PUBLISHED]: { label: 'Опубликовано', color: '#388E3C', bg: '#E8F5E9' },
-  [BookStatus.PUBLICATION_FAILED]: { label: 'Ошибка публикации', color: '#D32F2F', bg: '#FFEBEE' },
+const STATUS_CONFIG: Record<
+  string,
+  { label: string; color: string; bg: string }
+> = {
+  [BookStatus.PENDING_REVIEW]: {
+    label: "Ожидает проверки",
+    color: "#F57C00",
+    bg: "#FFF3E0",
+  },
+  [BookStatus.PENDING_PUBLICATION]: {
+    label: "Ожидает публикации",
+    color: "#1976D2",
+    bg: "#E3F2FD",
+  },
+  [BookStatus.PUBLISHED]: {
+    label: "Опубликовано",
+    color: "#388E3C",
+    bg: "#E8F5E9",
+  },
+  [BookStatus.PUBLICATION_FAILED]: {
+    label: "Ошибка публикации",
+    color: "#D32F2F",
+    bg: "#FFEBEE",
+  },
 };
 
 export function ProductDetailScreen() {
@@ -101,19 +124,19 @@ export function ProductDetailScreen() {
   const [checkingStatus, setCheckingStatus] = useState(false);
 
   // Edit fields
-  const [editTitle, setEditTitle] = useState('');
-  const [editAuthor, setEditAuthor] = useState('');
-  const [editIsbn, setEditIsbn] = useState('');
-  const [editPublisher, setEditPublisher] = useState('');
-  const [editYear, setEditYear] = useState('');
-  const [editPages, setEditPages] = useState('');
-  const [editPrice, setEditPrice] = useState('');
-  const [editWeight, setEditWeight] = useState('');
-  const [editWidth, setEditWidth] = useState('');
-  const [editHeight, setEditHeight] = useState('');
-  const [editDepth, setEditDepth] = useState('');
-  const [editAnnotation, setEditAnnotation] = useState('');
-  const [editHashtags, setEditHashtags] = useState('');
+  const [editTitle, setEditTitle] = useState("");
+  const [editAuthor, setEditAuthor] = useState("");
+  const [editIsbn, setEditIsbn] = useState("");
+  const [editPublisher, setEditPublisher] = useState("");
+  const [editYear, setEditYear] = useState("");
+  const [editPages, setEditPages] = useState("");
+  const [editPrice, setEditPrice] = useState("");
+  const [editWeight, setEditWeight] = useState("");
+  const [editWidth, setEditWidth] = useState("");
+  const [editHeight, setEditHeight] = useState("");
+  const [editDepth, setEditDepth] = useState("");
+  const [editAnnotation, setEditAnnotation] = useState("");
+  const [editHashtags, setEditHashtags] = useState("");
 
   useEffect(() => {
     booksService
@@ -122,33 +145,31 @@ export function ProductDetailScreen() {
         setBook(b);
         populateEditFields(b);
       })
-      .catch(() => Alert.alert('Ошибка', 'Не удалось загрузить карточку'))
+      .catch(() => Alert.alert("Ошибка", "Не удалось загрузить карточку"))
       .finally(() => setLoading(false));
   }, [bookId]);
 
   const populateEditFields = (b: Book) => {
-    setEditTitle(b.title ?? '');
-    setEditAuthor(b.author ?? '');
-    setEditIsbn(b.isbn ?? '');
-    setEditPublisher(b.publisher ?? '');
-    setEditYear(b.yearPublished?.toString() ?? '');
-    setEditPages(b.pageCount?.toString() ?? '');
-    setEditPrice(b.price?.toString() ?? '');
-    setEditWeight(b.weightGross?.toString() ?? '');
-    setEditWidth(b.dimensions?.width?.toString() ?? '');
-    setEditHeight(b.dimensions?.height?.toString() ?? '');
-    setEditDepth(b.dimensions?.depth?.toString() ?? '');
-    setEditAnnotation(b.annotation ?? '');
-    setEditHashtags((b.hashtags || []).join(' '));
+    setEditTitle(b.title ?? "");
+    setEditAuthor(b.author ?? "");
+    setEditIsbn(b.isbn ?? "");
+    setEditPublisher(b.publisher ?? "");
+    setEditYear(b.yearPublished?.toString() ?? "");
+    setEditPages(b.pageCount?.toString() ?? "");
+    setEditPrice(b.price?.toString() ?? "");
+    setEditWeight(b.weightGross?.toString() ?? "");
+    setEditWidth(b.dimensions?.width?.toString() ?? "");
+    setEditHeight(b.dimensions?.height?.toString() ?? "");
+    setEditDepth(b.dimensions?.depth?.toString() ?? "");
+    setEditAnnotation(b.annotation ?? "");
+    setEditHashtags((b.hashtags || []).join(" "));
   };
 
   const handleSave = async () => {
     if (!book) return;
     setSaving(true);
     try {
-      const hashtags = editHashtags
-        .split(/\s+/)
-        .filter((h) => h.length > 0);
+      const hashtags = editHashtags.split(/\s+/).filter((h) => h.length > 0);
       const dto: UpdateBookDto = {
         title: editTitle || undefined,
         author: editAuthor || undefined,
@@ -173,9 +194,9 @@ export function ProductDetailScreen() {
       setBook(updated);
       populateEditFields(updated);
       setEditing(false);
-      Alert.alert('Готово', 'Карточка обновлена');
+      Alert.alert("Готово", "Карточка обновлена");
     } catch {
-      Alert.alert('Ошибка', 'Не удалось сохранить');
+      Alert.alert("Ошибка", "Не удалось сохранить");
     } finally {
       setSaving(false);
     }
@@ -189,21 +210,21 @@ export function ProductDetailScreen() {
   const handlePublish = () => {
     if (!book) return;
     Alert.alert(
-      'Загрузить в Озон?',
+      "Загрузить в Озон?",
       `"${book.title}" будет опубликована на Озоне`,
       [
-        { text: 'Отмена', style: 'cancel' },
+        { text: "Отмена", style: "cancel" },
         {
-          text: 'Загрузить',
+          text: "Загрузить",
           onPress: async () => {
             setPublishing(true);
             try {
               await booksService.publishToOzon(book.id);
               const updated = await booksService.getBook(bookId);
               setBook(updated);
-              Alert.alert('Готово', 'Карточка отправлена на модерацию Ozon');
+              Alert.alert("Готово", "Карточка отправлена на модерацию Ozon");
             } catch {
-              Alert.alert('Ошибка', 'Не удалось загрузить в Озон');
+              Alert.alert("Ошибка", "Не удалось загрузить в Озон");
             } finally {
               setPublishing(false);
             }
@@ -220,26 +241,26 @@ export function ProductDetailScreen() {
       const result = await booksService.checkOzonStatus(book.id);
       const updated = await booksService.getBook(bookId);
       setBook(updated);
-      Alert.alert('Статус Ozon', result.message || result.status);
+      Alert.alert("Статус Ozon", result.message || result.status);
     } catch {
-      Alert.alert('Ошибка', 'Не удалось проверить статус');
+      Alert.alert("Ошибка", "Не удалось проверить статус");
     } finally {
       setCheckingStatus(false);
     }
   };
 
   const handleDelete = () => {
-    Alert.alert('Удалить карточку?', 'Это действие необратимо', [
-      { text: 'Отмена', style: 'cancel' },
+    Alert.alert("Удалить карточку?", "Это действие необратимо", [
+      { text: "Отмена", style: "cancel" },
       {
-        text: 'Удалить',
-        style: 'destructive',
+        text: "Удалить",
+        style: "destructive",
         onPress: async () => {
           try {
             await booksService.deleteBook(bookId);
             navigation.goBack();
           } catch {
-            Alert.alert('Ошибка', 'Не удалось удалить');
+            Alert.alert("Ошибка", "Не удалось удалить");
           }
         },
       },
@@ -257,7 +278,7 @@ export function ProductDetailScreen() {
   if (!book) {
     return (
       <View style={styles.center}>
-        <Text style={{ color: '#999' }}>Карточка не найдена</Text>
+        <Text style={{ color: "#999" }}>Карточка не найдена</Text>
       </View>
     );
   }
@@ -266,14 +287,18 @@ export function ProductDetailScreen() {
   const sortedPhotos = [...(book.photos ?? [])].sort(
     (a, b) => a.sortOrder - b.sortOrder,
   );
-  const statusCfg = STATUS_CONFIG[book.status] || STATUS_CONFIG[BookStatus.PENDING_REVIEW];
+  const statusCfg =
+    STATUS_CONFIG[book.status] || STATUS_CONFIG[BookStatus.PENDING_REVIEW];
 
   return (
     <KeyboardAvoidingView
       style={{ flex: 1 }}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
-      <ScrollView style={styles.container} contentContainerStyle={styles.scroll}>
+      <ScrollView
+        style={styles.container}
+        contentContainerStyle={styles.scroll}
+      >
         {sortedPhotos.length > 0 && (
           <ScrollView
             horizontal
@@ -295,19 +320,73 @@ export function ProductDetailScreen() {
         <View style={styles.content}>
           {editing ? (
             <>
-              <EditField label="Название" value={editTitle} onChangeText={setEditTitle} />
-              <EditField label="Автор" value={editAuthor} onChangeText={setEditAuthor} />
-              <EditField label="ISBN" value={editIsbn} onChangeText={setEditIsbn} />
-              <EditField label="Издательство" value={editPublisher} onChangeText={setEditPublisher} />
-              <EditField label="Год" value={editYear} onChangeText={setEditYear} keyboardType="numeric" />
-              <EditField label="Страниц" value={editPages} onChangeText={setEditPages} keyboardType="numeric" />
-              <EditField label="Цена (₽)" value={editPrice} onChangeText={setEditPrice} keyboardType="numeric" />
-              <EditField label="Вес (г)" value={editWeight} onChangeText={setEditWeight} keyboardType="numeric" />
+              <EditField
+                label="Название"
+                value={editTitle}
+                onChangeText={setEditTitle}
+              />
+              <EditField
+                label="Автор"
+                value={editAuthor}
+                onChangeText={setEditAuthor}
+              />
+              <EditField
+                label="ISBN"
+                value={editIsbn}
+                onChangeText={setEditIsbn}
+              />
+              <EditField
+                label="Издательство"
+                value={editPublisher}
+                onChangeText={setEditPublisher}
+              />
+              <EditField
+                label="Год"
+                value={editYear}
+                onChangeText={setEditYear}
+                keyboardType="numeric"
+              />
+              <EditField
+                label="Страниц"
+                value={editPages}
+                onChangeText={setEditPages}
+                keyboardType="numeric"
+              />
+              <EditField
+                label="Цена (₽)"
+                value={editPrice}
+                onChangeText={setEditPrice}
+                keyboardType="numeric"
+              />
+              <EditField
+                label="Вес (г)"
+                value={editWeight}
+                onChangeText={setEditWeight}
+                keyboardType="numeric"
+              />
               <Text style={styles.sectionTitle}>Размеры (мм)</Text>
               <View style={styles.dimRow}>
-                <EditField label="Ш" value={editWidth} onChangeText={setEditWidth} keyboardType="numeric" style={{ flex: 1 }} />
-                <EditField label="В" value={editHeight} onChangeText={setEditHeight} keyboardType="numeric" style={{ flex: 1 }} />
-                <EditField label="Г" value={editDepth} onChangeText={setEditDepth} keyboardType="numeric" style={{ flex: 1 }} />
+                <EditField
+                  label="Ш"
+                  value={editWidth}
+                  onChangeText={setEditWidth}
+                  keyboardType="numeric"
+                  style={{ flex: 1 }}
+                />
+                <EditField
+                  label="В"
+                  value={editHeight}
+                  onChangeText={setEditHeight}
+                  keyboardType="numeric"
+                  style={{ flex: 1 }}
+                />
+                <EditField
+                  label="Г"
+                  value={editDepth}
+                  onChangeText={setEditDepth}
+                  keyboardType="numeric"
+                  style={{ flex: 1 }}
+                />
               </View>
               <EditField
                 label="Аннотация"
@@ -341,7 +420,7 @@ export function ProductDetailScreen() {
               {/* Header */}
               <Text style={styles.title}>{ozon.name}</Text>
               <View style={styles.headerMeta}>
-                <Text style={styles.sku}>offer_id: {ozon.offerId}</Text>
+                <Text style={styles.sku}>SKU: {ozon.offerId}</Text>
                 <View style={[styles.badge, { backgroundColor: statusCfg.bg }]}>
                   <Text style={[styles.badgeText, { color: statusCfg.color }]}>
                     {statusCfg.label}
@@ -367,7 +446,10 @@ export function ProductDetailScreen() {
                 <InfoRow label="Язык" value={book.language} />
                 <InfoRow label="Размеры (ДxШxВ)" value={ozon.dimString} />
                 <InfoRow label="Вес" value={`${ozon.weight} г`} />
-                <InfoRow label="Цена" value={ozon.price > 0 ? formatPrice(ozon.price) : undefined} />
+                <InfoRow
+                  label="Цена"
+                  value={ozon.price > 0 ? formatPrice(ozon.price) : undefined}
+                />
               </View>
 
               {/* Annotation with prefix */}
@@ -466,7 +548,7 @@ function EditField({
   label: string;
   value: string;
   onChangeText: (t: string) => void;
-  keyboardType?: 'numeric' | 'default';
+  keyboardType?: "numeric" | "default";
   multiline?: boolean;
   style?: object;
 }) {
@@ -477,7 +559,7 @@ function EditField({
         style={[styles.editInput, multiline && styles.editInputMultiline]}
         value={value}
         onChangeText={onChangeText}
-        keyboardType={keyboardType ?? 'default'}
+        keyboardType={keyboardType ?? "default"}
         multiline={multiline}
         placeholderTextColor="#999"
       />
@@ -488,15 +570,15 @@ function EditField({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: "#fff",
   },
   scroll: {
     paddingBottom: 40,
   },
   center: {
     flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
   },
   photoScroll: {
     height: 250,
@@ -510,19 +592,19 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 22,
-    fontWeight: '700',
-    color: '#222',
+    fontWeight: "700",
+    color: "#222",
   },
   headerMeta: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     marginTop: 6,
     marginBottom: 4,
   },
   sku: {
     fontSize: 13,
-    color: '#999',
+    color: "#999",
   },
   badge: {
     paddingHorizontal: 10,
@@ -531,53 +613,53 @@ const styles = StyleSheet.create({
   },
   badgeText: {
     fontSize: 12,
-    fontWeight: '600',
+    fontWeight: "600",
   },
   section: {
     marginTop: 20,
-    backgroundColor: '#FAFAFA',
+    backgroundColor: "#FAFAFA",
     borderRadius: 12,
     padding: 16,
   },
   sectionTitle: {
     fontSize: 15,
-    fontWeight: '600',
-    color: '#333',
+    fontWeight: "600",
+    color: "#333",
     marginBottom: 8,
   },
   row: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    justifyContent: "space-between",
     paddingVertical: 6,
     borderBottomWidth: 0.5,
-    borderBottomColor: '#eee',
+    borderBottomColor: "#eee",
   },
   rowLabel: {
     fontSize: 14,
-    color: '#666',
+    color: "#666",
   },
   rowValue: {
     fontSize: 14,
-    color: '#222',
-    fontWeight: '500',
-    maxWidth: '60%',
-    textAlign: 'right',
+    color: "#222",
+    fontWeight: "500",
+    maxWidth: "60%",
+    textAlign: "right",
   },
   annotationBox: {
-    backgroundColor: '#FFFDE7',
+    backgroundColor: "#FFFDE7",
     borderRadius: 8,
     padding: 12,
     borderWidth: 1,
-    borderColor: '#FFF9C4',
+    borderColor: "#FFF9C4",
   },
   annotationText: {
     fontSize: 14,
-    color: '#444',
+    color: "#444",
     lineHeight: 20,
   },
   hashtagsText: {
     fontSize: 14,
-    color: '#1976D2',
+    color: "#1976D2",
     lineHeight: 20,
   },
   metaSection: {
@@ -585,14 +667,14 @@ const styles = StyleSheet.create({
   },
   metaText: {
     fontSize: 12,
-    color: '#bbb',
+    color: "#bbb",
     marginBottom: 2,
   },
   actions: {
     marginTop: 24,
   },
   editActions: {
-    flexDirection: 'row',
+    flexDirection: "row",
     marginTop: 16,
   },
   editField: {
@@ -600,27 +682,27 @@ const styles = StyleSheet.create({
   },
   editLabel: {
     fontSize: 13,
-    fontWeight: '500',
-    color: '#666',
+    fontWeight: "500",
+    color: "#666",
     marginBottom: 4,
   },
   editInput: {
     height: 44,
     borderWidth: 1,
-    borderColor: '#ddd',
+    borderColor: "#ddd",
     borderRadius: 10,
     paddingHorizontal: 12,
     fontSize: 15,
-    color: '#333',
-    backgroundColor: '#FAFAFA',
+    color: "#333",
+    backgroundColor: "#FAFAFA",
   },
   editInputMultiline: {
     height: 100,
-    textAlignVertical: 'top',
+    textAlignVertical: "top",
     paddingTop: 10,
   },
   dimRow: {
-    flexDirection: 'row',
+    flexDirection: "row",
     gap: 8,
   },
 });

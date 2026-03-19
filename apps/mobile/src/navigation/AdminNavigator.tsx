@@ -1,7 +1,7 @@
 import React from "react";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
-import { Text } from "react-native";
+import { Text, Pressable } from "react-native";
 import { DashboardScreen } from "../screens/admin/Dashboard";
 import { UserManagementScreen } from "../screens/admin/UserManagement";
 import { StatisticsScreen } from "../screens/admin/Statistics";
@@ -23,15 +23,33 @@ export type AdminMainStackParamList = {
 const MainStack = createNativeStackNavigator<AdminMainStackParamList>();
 const Tab = createBottomTabNavigator();
 
-const headerStyle = {
+const stackScreenOptions = ({ navigation }: { navigation: any }) => ({
   headerStyle: { backgroundColor: "#1976D2" } as const,
   headerTintColor: "#fff",
   headerTitleStyle: { fontWeight: "600" as const },
-};
+  headerBackVisible: false,
+  headerLeft: ({ canGoBack }: { canGoBack?: boolean }) =>
+    canGoBack ? (
+      <Pressable
+        onPress={() => navigation.goBack()}
+        android_ripple={{ color: "transparent", borderless: true }}
+        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+        style={{
+          width: 44,
+          height: 44,
+          backgroundColor: "#1976D2",
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+      >
+        <Text style={{ color: "#fff", fontSize: 32 }}>‹</Text>
+      </Pressable>
+    ) : null,
+});
 
 function MainStackScreen() {
   return (
-    <MainStack.Navigator screenOptions={headerStyle}>
+    <MainStack.Navigator screenOptions={stackScreenOptions}>
       <MainStack.Screen
         name="Dashboard"
         component={DashboardScreen}
@@ -65,7 +83,7 @@ const SettingsStack = createNativeStackNavigator();
 
 function SettingsStackScreen() {
   return (
-    <SettingsStack.Navigator screenOptions={headerStyle}>
+    <SettingsStack.Navigator screenOptions={stackScreenOptions}>
       <SettingsStack.Screen
         name="Settings"
         component={SettingsScreen}
@@ -118,7 +136,9 @@ export function AdminNavigator() {
           tabBarIcon: () => <TabIcon label="👤" />,
           headerShown: true,
           headerTitle: "Профиль",
-          ...headerStyle,
+          headerStyle: { backgroundColor: "#1976D2" },
+          headerTintColor: "#fff",
+          headerTitleStyle: { fontWeight: "600" },
         }}
       />
     </Tab.Navigator>
