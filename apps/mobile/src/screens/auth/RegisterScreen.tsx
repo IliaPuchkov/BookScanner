@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState } from "react";
 import {
   View,
   Text,
@@ -7,34 +7,41 @@ import {
   Platform,
   ScrollView,
   Alert,
-} from 'react-native';
-import { useNavigation } from '@react-navigation/native';
-import { Input } from '../../components/Input';
-import { Button } from '../../components/Button';
-import { useAuth } from '../../hooks/useAuth';
+} from "react-native";
+import { useNavigation } from "@react-navigation/native";
+import { Input } from "../../components/Input";
+import { Button } from "../../components/Button";
+import { useAuth } from "../../hooks/useAuth";
 
 export function RegisterScreen() {
   const navigation = useNavigation();
   const { register } = useAuth();
 
-  const [fullName, setFullName] = useState('');
-  const [phone, setPhone] = useState('');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
+  const [fullName, setFullName] = useState("");
+  const [phone, setPhone] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [loading, setLoading] = useState(false);
 
   const handleRegister = async () => {
     if (!fullName.trim() || !phone.trim() || !email.trim() || !password) {
-      Alert.alert('Ошибка', 'Заполните все поля');
+      Alert.alert("Ошибка", "Заполните все поля");
       return;
     }
     if (password !== confirmPassword) {
-      Alert.alert('Ошибка', 'Пароли не совпадают');
+      Alert.alert("Ошибка", "Пароли не совпадают");
       return;
     }
-    if (password.length < 6) {
-      Alert.alert('Ошибка', 'Пароль должен быть не менее 6 символов');
+    if (password.length < 8) {
+      Alert.alert("Ошибка", "Пароль должен быть не менее 8 символов");
+      return;
+    }
+    if (!/(?=.*[a-zа-яё])(?=.*[A-ZА-ЯЁ])(?=.*\d)/.test(password)) {
+      Alert.alert(
+        "Ошибка",
+        "Пароль должен содержать строчные и заглавные буквы, а также цифры",
+      );
       return;
     }
 
@@ -42,14 +49,16 @@ export function RegisterScreen() {
     try {
       await register(fullName.trim(), phone.trim(), email.trim(), password);
       Alert.alert(
-        'Регистрация',
-        'Заявка отправлена. Ожидайте подтверждения администратора.',
-        [{ text: 'OK', onPress: () => navigation.goBack() }],
+        "Регистрация",
+        "Заявка отправлена. Ожидайте подтверждения администратора.",
+        [{ text: "OK", onPress: () => navigation.goBack() }],
       );
     } catch (err: any) {
-      const message =
-        err?.response?.data?.message || 'Ошибка регистрации';
-      Alert.alert('Ошибка', message);
+      const raw = err?.response?.data?.message;
+      const message = Array.isArray(raw)
+        ? raw.join("\n")
+        : raw || "Ошибка регистрации";
+      Alert.alert("Ошибка", message);
     } finally {
       setLoading(false);
     }
@@ -58,7 +67,7 @@ export function RegisterScreen() {
   return (
     <KeyboardAvoidingView
       style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
       <ScrollView
         contentContainerStyle={styles.scroll}
@@ -95,7 +104,7 @@ export function RegisterScreen() {
             label="Пароль"
             value={password}
             onChangeText={setPassword}
-            placeholder="Минимум 6 символов"
+            placeholder="Минимум 8 символов"
             secureTextEntry
           />
           <Input
@@ -127,7 +136,7 @@ export function RegisterScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: "#fff",
   },
   scroll: {
     flexGrow: 1,
@@ -136,18 +145,18 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 28,
-    fontWeight: '800',
-    color: '#1976D2',
-    textAlign: 'center',
+    fontWeight: "800",
+    color: "#1976D2",
+    textAlign: "center",
   },
   subtitle: {
     fontSize: 14,
-    color: '#888',
-    textAlign: 'center',
+    color: "#888",
+    textAlign: "center",
     marginTop: 8,
     marginBottom: 32,
   },
   form: {
-    width: '100%',
+    width: "100%",
   },
 });
