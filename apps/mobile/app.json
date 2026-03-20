@@ -19,6 +19,11 @@
         "android.permission.READ_MEDIA_IMAGES",
         "android.permission.READ_EXTERNAL_STORAGE"
       ]
+    },
+    "extra": {
+      "eas": {
+        "projectId": "56a26556-2620-4015-8627-92d22f3d02b8"
+      }
     }
   }
 }

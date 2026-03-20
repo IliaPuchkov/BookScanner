@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { View, StyleSheet, Alert, ActivityIndicator } from 'react-native';
 import { useRoute, type RouteProp } from '@react-navigation/native';
 import * as ImagePicker from 'expo-image-picker';
+import { ImageManipulator, SaveFormat } from 'expo-image-manipulator';
 import { PhotoGrid } from '../../components/PhotoGrid';
 import { LoadingOverlay } from '../../components/LoadingOverlay';
 import { booksService } from '../../services/books.service';
@@ -82,6 +83,31 @@ export function PhotoUploadScreen() {
     }
   };
 
+  const handleRotate = async (index: number) => {
+    const photo = photos[index];
+    setUploading(true);
+    try {
+      const ctx = ImageManipulator.manipulate(photo.uri);
+      ctx.rotate(90);
+      const rendered = await ctx.renderAsync();
+      const saved = await rendered.saveAsync({ compress: 0.8, format: SaveFormat.JPEG });
+      if (photo.id) {
+        const updated = await photosService.replacePhoto(bookId, photo.id, saved.uri);
+        setPhotos((prev) =>
+          prev.map((p, i) => (i === index ? { uri: updated.fileUrl, id: updated.id } : p)),
+        );
+      } else {
+        setPhotos((prev) =>
+          prev.map((p, i) => (i === index ? { ...p, uri: saved.uri } : p)),
+        );
+      }
+    } catch {
+      Alert.alert('Ошибка', 'Не удалось повернуть фото');
+    } finally {
+      setUploading(false);
+    }
+  };
+
   const handleReorder = async (newPhotos: Array<{ uri: string; id?: string }>) => {
     setPhotos(newPhotos);
     const ids = newPhotos.map((p) => p.id).filter(Boolean) as string[];
@@ -131,6 +157,7 @@ export function PhotoUploadScreen() {
           onAdd={handleAdd}
           onRemove={handleRemove}
           onReorder={handleReorder}
+          onRotate={handleRotate}
           maxPhotos={maxPhotos}
         />
       </View>
