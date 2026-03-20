@@ -10,6 +10,14 @@ export interface SystemSetting {
   updatedAt: string;
 }
 
+export interface OzonStore {
+  id: string;
+  name: string;
+  clientId: string;
+  apiKeyMasked: string;
+  isActive: boolean;
+}
+
 interface UpsertSettingDto {
   key: string;
   value: string;
@@ -95,5 +103,23 @@ export const adminService = {
       params: { page, limit },
     });
     return data;
+  },
+
+  async getOzonStores(): Promise<{ stores: OzonStore[]; activeId: string }> {
+    const { data } = await api.get<{ stores: OzonStore[]; activeId: string }>('/ozon/stores');
+    return data;
+  },
+
+  async addOzonStore(dto: { name: string; clientId: string; apiKey: string }): Promise<OzonStore> {
+    const { data } = await api.post<OzonStore>('/ozon/stores', dto);
+    return data;
+  },
+
+  async removeOzonStore(id: string): Promise<void> {
+    await api.delete(`/ozon/stores/${id}`);
+  },
+
+  async activateOzonStore(id: string): Promise<void> {
+    await api.patch(`/ozon/stores/${id}/activate`);
   },
 };

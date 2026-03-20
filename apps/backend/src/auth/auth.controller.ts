@@ -5,8 +5,11 @@ import {
   UseGuards,
   HttpCode,
   HttpStatus,
+  UnauthorizedException,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
+import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
+import { JwtService } from '@nestjs/jwt';
 import { AuthService } from './auth.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
@@ -18,16 +21,22 @@ import { User } from '../users/entities/user.entity';
 
 @ApiTags('Auth')
 @Controller('auth')
+@UseGuards(ThrottlerGuard)
 export class AuthController {
-  constructor(private readonly authService: AuthService) {}
+  constructor(
+    private readonly authService: AuthService,
+    private readonly jwtService: JwtService,
+  ) {}
 
   @Post('register')
+  @Throttle({ default: { ttl: 60_000, limit: 5 } })
   @ApiOperation({ summary: 'Регистрация нового пользователя' })
   register(@Body() dto: RegisterDto) {
     return this.authService.register(dto);
   }
 
   @Post('login')
+  @Throttle({ default: { ttl: 60_000, limit: 5 } })
   @UseGuards(LocalAuthGuard)
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Вход в систему' })
@@ -39,12 +48,13 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Обновление токенов' })
   refresh(@Body() dto: RefreshTokenDto) {
-    // Decode the refresh token to get userId without full validation
-    // In production, you'd want a separate refresh token secret
-    const decoded = JSON.parse(
-      Buffer.from(dto.refreshToken.split('.')[1], 'base64').toString(),
-    );
-    return this.authService.refreshTokens(decoded.sub, dto.refreshToken);
+    let payload: { sub: string };
+    try {
+      payload = this.jwtService.verify(dto.refreshToken);
+    } catch {
+      throw new UnauthorizedException('Недействительный или просроченный refresh token');
+    }
+    return this.authService.refreshTokens(payload.sub, dto.refreshToken);
   }
 
   @Post('logout')

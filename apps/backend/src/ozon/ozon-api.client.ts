@@ -1,6 +1,12 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { SettingsService } from '../settings/settings.service';
+import { EncryptionService } from '../common/encryption.service';
 import { OZON_DESCRIPTION_CATEGORY_ID, OZON_TYPE_ID } from '@bookscanner/shared';
+import type { OzonStoreRecord } from './dto/ozon-store.dto';
+
+const OZON_STORES_KEY = 'ozon_stores';
+const ACTIVE_STORE_KEY = 'active_ozon_store_id';
 
 export interface OzonImportResult {
   task_id: number;
@@ -34,29 +40,59 @@ export interface OzonProductInfo {
 export class OzonApiClient {
   private readonly logger = new Logger(OzonApiClient.name);
   private readonly baseUrl = 'https://api-seller.ozon.ru';
-  private readonly apiKey: string;
-  private readonly clientId: string;
+  private readonly envApiKey: string;
+  private readonly envClientId: string;
 
-  constructor(private readonly configService: ConfigService) {
-    this.apiKey = this.configService.get<string>('OZON_API_KEY', '');
-    this.clientId = this.configService.get<string>('OZON_CLIENT_ID', '');
+  constructor(
+    private readonly configService: ConfigService,
+    @Optional() private readonly settingsService?: SettingsService,
+    @Optional() private readonly encryptionService?: EncryptionService,
+  ) {
+    this.envApiKey = this.configService.get<string>('OZON_API_KEY', '');
+    this.envClientId = this.configService.get<string>('OZON_CLIENT_ID', '');
   }
 
-  get isConfigured(): boolean {
-    return !!this.apiKey && !!this.clientId;
+  async getCredentials(): Promise<{ apiKey: string; clientId: string } | null> {
+    if (this.settingsService) {
+      try {
+        const activeId = await this.settingsService.getValue<string>(ACTIVE_STORE_KEY, '');
+        if (activeId) {
+          const stores = await this.settingsService.getValue<OzonStoreRecord[]>(OZON_STORES_KEY, []);
+          const store = stores.find((s) => s.id === activeId);
+          if (store?.apiKey && store?.clientId) {
+            const apiKey = this.encryptionService
+              ? this.encryptionService.decrypt(store.apiKey)
+              : store.apiKey;
+            return { apiKey, clientId: store.clientId };
+          }
+        }
+      } catch {
+        // fall through to env vars
+      }
+    }
+
+    if (this.envApiKey && this.envClientId) {
+      return { apiKey: this.envApiKey, clientId: this.envClientId };
+    }
+
+    return null;
   }
 
   private async post<T>(endpoint: string, body: Record<string, unknown>): Promise<T> {
-    const url = `${this.baseUrl}${endpoint}`;
+    const credentials = await this.getCredentials();
+    if (!credentials) {
+      throw new OzonApiError('Ozon API не настроен', 0, '');
+    }
 
+    const url = `${this.baseUrl}${endpoint}`;
     this.logger.debug(`POST ${endpoint}`);
 
     const res = await fetch(url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Client-Id': this.clientId,
-        'Api-Key': this.apiKey,
+        'Client-Id': credentials.clientId,
+        'Api-Key': credentials.apiKey,
       },
       body: JSON.stringify(body),
     });

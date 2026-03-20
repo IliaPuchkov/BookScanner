@@ -28,9 +28,10 @@ export class OzonService {
   async publish(bookId: string) {
     const book = await this.booksService.findOne(bookId);
 
-    if (!this.ozonApiClient.isConfigured) {
+    const credentials = await this.ozonApiClient.getCredentials();
+    if (!credentials) {
       throw new BadRequestException(
-        'Ozon API не настроен. Проверьте OZON_API_KEY и OZON_CLIENT_ID.',
+        'Ozon API не настроен. Добавьте магазин в настройках администратора или проверьте OZON_API_KEY и OZON_CLIENT_ID.',
       );
     }
 

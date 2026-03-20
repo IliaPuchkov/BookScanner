@@ -6,11 +6,13 @@ import { OzonProduct } from './entities/ozon-product.entity';
 import { OzonApiClient } from './ozon-api.client';
 import { OzonStatusCron } from './ozon-status.cron';
 import { BooksModule } from '../books/books.module';
+import { SettingsModule } from '../settings/settings.module';
+import { EncryptionService } from '../common/encryption.service';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([OzonProduct]), BooksModule],
+  imports: [TypeOrmModule.forFeature([OzonProduct]), BooksModule, SettingsModule],
   controllers: [OzonController],
-  providers: [OzonService, OzonApiClient, OzonStatusCron],
+  providers: [OzonService, OzonApiClient, OzonStatusCron, EncryptionService],
   exports: [OzonService],
 })
 export class OzonModule {}

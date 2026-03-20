@@ -14,9 +14,7 @@ import {
 } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import { useAuth } from "../../hooks/useAuth";
-import { adminService } from "../../services/admin.service";
-
-// Operator sees a blank screen; only admin gets settings content
+import { adminService, type OzonStore } from "../../services/admin.service";
 
 const AI_PROMPT_KEY = "vision_ai_prompt";
 const MAX_PHOTOS_KEY = "max_photo_count";
@@ -39,6 +37,17 @@ export function SettingsScreen() {
   const [draftMaxPhotos, setDraftMaxPhotos] = useState("");
   const [savingMaxPhotos, setSavingMaxPhotos] = useState(false);
 
+  // Ozon stores
+  const [ozonStores, setOzonStores] = useState<OzonStore[]>([]);
+  const [activeStoreId, setActiveStoreId] = useState("");
+  const [loadingStores, setLoadingStores] = useState(false);
+  const [addingStore, setAddingStore] = useState(false);
+  const [savingStore, setSavingStore] = useState(false);
+  const [draftStoreName, setDraftStoreName] = useState("");
+  const [draftClientId, setDraftClientId] = useState("");
+  const [draftApiKey, setDraftApiKey] = useState("");
+  const [activatingId, setActivatingId] = useState<string | null>(null);
+
   const [loadingSettings, setLoadingSettings] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -51,6 +60,19 @@ export function SettingsScreen() {
     const maxP = settings.find((s) => s.key === MAX_PHOTOS_KEY);
     if (maxP) setMaxPhotos(parseInt(maxP.value, 10) || DEFAULT_MAX_PHOTOS);
   };
+
+  const loadStores = useCallback(async () => {
+    setLoadingStores(true);
+    try {
+      const res = await adminService.getOzonStores();
+      setOzonStores(res.stores);
+      setActiveStoreId(res.activeId);
+    } catch {
+      // ignore
+    } finally {
+      setLoadingStores(false);
+    }
+  }, []);
 
   const loadSettings = useCallback(async () => {
     setLoadingSettings(true);
@@ -65,14 +87,20 @@ export function SettingsScreen() {
   }, []);
 
   useEffect(() => {
-    if (isAdmin) loadSettings();
-  }, [isAdmin, loadSettings]);
+    if (isAdmin) {
+      loadSettings();
+      loadStores();
+    }
+  }, [isAdmin, loadSettings, loadStores]);
 
   const handleRefresh = useCallback(async () => {
     setRefreshing(true);
     try {
       if (isAdmin) {
-        const settings = await adminService.getSettings();
+        const [settings] = await Promise.all([
+          adminService.getSettings(),
+          loadStores(),
+        ]);
         applySettings(settings);
       }
     } catch {
@@ -80,7 +108,7 @@ export function SettingsScreen() {
     } finally {
       setRefreshing(false);
     }
-  }, [isAdmin]);
+  }, [isAdmin, loadStores]);
 
   // Prompt handlers
   const handleStartEditPrompt = () => {
@@ -153,196 +181,406 @@ export function SettingsScreen() {
     }
   };
 
+  // Ozon store handlers
+  const handleActivateStore = async (id: string) => {
+    if (id === activeStoreId) return;
+    setActivatingId(id);
+    try {
+      await adminService.activateOzonStore(id);
+      setActiveStoreId(id);
+      setOzonStores((prev) =>
+        prev.map((s) => ({ ...s, isActive: s.id === id })),
+      );
+    } catch {
+      Alert.alert("Ошибка", "Не удалось выбрать магазин");
+    } finally {
+      setActivatingId(null);
+    }
+  };
+
+  const handleDeleteStore = (store: OzonStore) => {
+    Alert.alert(
+      "Удалить магазин",
+      `Удалить "${store.name}"?`,
+      [
+        { text: "Отмена", style: "cancel" },
+        {
+          text: "Удалить",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await adminService.removeOzonStore(store.id);
+              setOzonStores((prev) => prev.filter((s) => s.id !== store.id));
+              if (activeStoreId === store.id) setActiveStoreId("");
+            } catch {
+              Alert.alert("Ошибка", "Не удалось удалить магазин");
+            }
+          },
+        },
+      ],
+    );
+  };
+
+  const handleCancelAddStore = () => {
+    setAddingStore(false);
+    setDraftStoreName("");
+    setDraftClientId("");
+    setDraftApiKey("");
+  };
+
+  const handleSaveStore = async () => {
+    if (!draftStoreName.trim()) {
+      Alert.alert("Ошибка", "Введите название магазина");
+      return;
+    }
+    if (!draftClientId.trim()) {
+      Alert.alert("Ошибка", "Введите Client-Id");
+      return;
+    }
+    if (!draftApiKey.trim()) {
+      Alert.alert("Ошибка", "Введите Api-Key");
+      return;
+    }
+    setSavingStore(true);
+    try {
+      const newStore = await adminService.addOzonStore({
+        name: draftStoreName.trim(),
+        clientId: draftClientId.trim(),
+        apiKey: draftApiKey.trim(),
+      });
+      setOzonStores((prev) => [...prev, newStore]);
+      handleCancelAddStore();
+    } catch {
+      Alert.alert("Ошибка", "Не удалось добавить магазин");
+    } finally {
+      setSavingStore(false);
+    }
+  };
+
   if (!isAdmin) {
     return <View style={styles.blank} />;
   }
 
-  if (isAdmin) {
-    return (
-      <KeyboardAvoidingView
-        style={styles.flex}
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
-        keyboardVerticalOffset={Platform.OS === "ios" ? 88 : 0}
+  return (
+    <KeyboardAvoidingView
+      style={styles.flex}
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      keyboardVerticalOffset={Platform.OS === "ios" ? 88 : 0}
+    >
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={styles.container}
+        keyboardShouldPersistTaps="handled"
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            colors={["#1976D2"]}
+            tintColor="#1976D2"
+          />
+        }
       >
-        <ScrollView
-          style={styles.scroll}
-          contentContainerStyle={styles.container}
-          keyboardShouldPersistTaps="handled"
-          refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={handleRefresh}
-              colors={["#1976D2"]}
-              tintColor="#1976D2"
-            />
-          }
-        >
-          {loadingSettings ? (
+        {loadingSettings ? (
+          <View style={styles.card}>
+            <ActivityIndicator color="#1976D2" />
+          </View>
+        ) : (
+          <>
+            {/* User management */}
+            <TouchableOpacity
+              style={styles.card}
+              activeOpacity={0.75}
+              onPress={() => navigation.navigate("UserManagement")}
+            >
+              <View style={[styles.sectionHeader, { marginBottom: 0 }]}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.sectionTitle}>
+                    Управление пользователями
+                  </Text>
+                  <Text style={styles.sectionDesc}>
+                    Создание, редактирование и удаление пользователей.
+                  </Text>
+                </View>
+                <Text style={styles.userMgmtArrow}>›</Text>
+              </View>
+            </TouchableOpacity>
+
+            {/* Ozon stores */}
             <View style={styles.card}>
-              <ActivityIndicator color="#1976D2" />
-            </View>
-          ) : (
-            <>
-              {/* User management */}
-              <TouchableOpacity
-                style={styles.card}
-                activeOpacity={0.75}
-                onPress={() => navigation.navigate('UserManagement')}
-              >
-                <View style={[styles.sectionHeader, { marginBottom: 0 }]}>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.sectionTitle}>
-                      Управление пользователями
-                    </Text>
-                    <Text style={styles.sectionDesc}>
-                      Создание, редактирование и удаление пользователей.
-                    </Text>
-                  </View>
-                  <Text style={styles.userMgmtArrow}>›</Text>
+              <View style={styles.sectionHeader}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.sectionTitle}>Магазины Ozon</Text>
+                  <Text style={styles.sectionDesc}>
+                    Выберите магазин, в который будут загружаться товары.
+                  </Text>
                 </View>
-              </TouchableOpacity>
-
-              {/* Max photos setting */}
-              <View style={styles.card}>
-                <View style={styles.sectionHeader}>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.sectionTitle}>
-                      Максимальное количество фото
-                    </Text>
-                    <Text style={styles.sectionDesc}>
-                      Сколько фотографий оператор может загрузить для одной
-                      книги.
-                    </Text>
-                  </View>
-                </View>
-
-                {editingMaxPhotos ? (
-                  <>
-                    <TextInput
-                      style={styles.numberInput}
-                      value={draftMaxPhotos}
-                      onChangeText={setDraftMaxPhotos}
-                      keyboardType="number-pad"
-                      placeholder="Введите число (1–20)"
-                      placeholderTextColor="#aaa"
-                      editable={!savingMaxPhotos}
-                      autoFocus
-                      maxLength={2}
-                    />
-                    <View style={styles.editActions}>
-                      <TouchableOpacity
-                        style={[styles.actionBtn, styles.cancelBtn]}
-                        onPress={handleCancelMaxPhotos}
-                        disabled={savingMaxPhotos}
-                      >
-                        <Text style={styles.cancelBtnText}>Отмена</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        style={[
-                          styles.actionBtn,
-                          styles.saveBtn,
-                          savingMaxPhotos && styles.disabledBtn,
-                        ]}
-                        onPress={handleSaveMaxPhotos}
-                        disabled={savingMaxPhotos}
-                      >
-                        {savingMaxPhotos ? (
-                          <ActivityIndicator size="small" color="#fff" />
-                        ) : (
-                          <Text style={styles.saveBtnText}>Сохранить</Text>
-                        )}
-                      </TouchableOpacity>
-                    </View>
-                  </>
-                ) : (
-                  <View style={styles.inlineValueRow}>
-                    <View style={styles.numberBadge}>
-                      <Text style={styles.numberBadgeText}>{maxPhotos}</Text>
-                    </View>
-                    <TouchableOpacity
-                      style={styles.editBtn}
-                      onPress={handleStartEditMaxPhotos}
-                    >
-                      <Text style={styles.editBtnText}>Изменить</Text>
-                    </TouchableOpacity>
-                  </View>
-                )}
               </View>
 
-              {/* AI prompt setting */}
-              <View style={styles.card}>
-                <View style={styles.sectionHeader}>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.sectionTitle}>
-                      AI-промпт для распознавания
+              {loadingStores ? (
+                <ActivityIndicator
+                  color="#1976D2"
+                  style={{ marginVertical: 8 }}
+                />
+              ) : (
+                <>
+                  {ozonStores.length === 0 && !addingStore && (
+                    <Text style={styles.emptyStoresText}>
+                      Нет подключённых магазинов
                     </Text>
-                    <Text style={styles.sectionDesc}>
-                      Этот промпт передаётся в ИИ при извлечении данных из
-                      фотографий книг.
-                    </Text>
-                  </View>
-                </View>
+                  )}
 
-                {editingPrompt ? (
-                  <>
-                    <TextInput
-                      style={styles.promptInput}
-                      value={draftPrompt}
-                      onChangeText={setDraftPrompt}
-                      placeholder="Введите кастомный промпт..."
-                      placeholderTextColor="#aaa"
-                      multiline
-                      textAlignVertical="top"
-                      editable={!savingPrompt}
-                      autoFocus
-                    />
-                    <View style={styles.editActions}>
-                      <TouchableOpacity
-                        style={[styles.actionBtn, styles.cancelBtn]}
-                        onPress={handleCancelPrompt}
-                        disabled={savingPrompt}
-                      >
-                        <Text style={styles.cancelBtnText}>Отмена</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        style={[
-                          styles.actionBtn,
-                          styles.saveBtn,
-                          savingPrompt && styles.disabledBtn,
-                        ]}
-                        onPress={handleSavePrompt}
-                        disabled={savingPrompt}
-                      >
-                        {savingPrompt ? (
-                          <ActivityIndicator size="small" color="#fff" />
-                        ) : (
-                          <Text style={styles.saveBtnText}>Сохранить</Text>
-                        )}
-                      </TouchableOpacity>
-                    </View>
-                  </>
-                ) : (
-                  <>
-                    <View style={styles.promptTextBox}>
-                      <Text style={styles.promptText}>
-                        {aiPrompt || "Промпт не задан"}
+                  {ozonStores.map((store) => {
+                    const isActive = store.id === activeStoreId;
+                    const isActivating = activatingId === store.id;
+                    return (
+                      <View key={store.id} style={styles.storeRow}>
+                        <TouchableOpacity
+                          style={styles.storeRadioBtn}
+                          onPress={() => handleActivateStore(store.id)}
+                          disabled={isActivating}
+                        >
+                          {isActivating ? (
+                            <ActivityIndicator size="small" color="#1976D2" />
+                          ) : (
+                            <View
+                              style={[
+                                styles.radioOuter,
+                                isActive && styles.radioOuterActive,
+                              ]}
+                            >
+                              {isActive && (
+                                <View style={styles.radioInner} />
+                              )}
+                            </View>
+                          )}
+                        </TouchableOpacity>
+
+                        <View style={styles.storeInfo}>
+                          <Text style={styles.storeName}>{store.name}</Text>
+                          <Text style={styles.storeDetails}>
+                            ID: {store.clientId} · Key: {store.apiKeyMasked}
+                          </Text>
+                        </View>
+
+                        <TouchableOpacity
+                          style={styles.storeDeleteBtn}
+                          onPress={() => handleDeleteStore(store)}
+                          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                        >
+                          <Text style={styles.storeDeleteIcon}>✕</Text>
+                        </TouchableOpacity>
+                      </View>
+                    );
+                  })}
+
+                  {addingStore ? (
+                    <>
+                      <TextInput
+                        style={[styles.storeInput, { marginTop: 12 }]}
+                        value={draftStoreName}
+                        onChangeText={setDraftStoreName}
+                        placeholder="Название магазина"
+                        placeholderTextColor="#aaa"
+                        editable={!savingStore}
+                      />
+                      <TextInput
+                        style={styles.storeInput}
+                        value={draftClientId}
+                        onChangeText={setDraftClientId}
+                        placeholder="Client-Id"
+                        placeholderTextColor="#aaa"
+                        autoCapitalize="none"
+                        editable={!savingStore}
+                      />
+                      <TextInput
+                        style={styles.storeInput}
+                        value={draftApiKey}
+                        onChangeText={setDraftApiKey}
+                        placeholder="Api-Key"
+                        placeholderTextColor="#aaa"
+                        autoCapitalize="none"
+                        secureTextEntry
+                        editable={!savingStore}
+                      />
+                      <View style={styles.editActions}>
+                        <TouchableOpacity
+                          style={[styles.actionBtn, styles.cancelBtn]}
+                          onPress={handleCancelAddStore}
+                          disabled={savingStore}
+                        >
+                          <Text style={styles.cancelBtnText}>Отмена</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={[
+                            styles.actionBtn,
+                            styles.saveBtn,
+                            savingStore && styles.disabledBtn,
+                          ]}
+                          onPress={handleSaveStore}
+                          disabled={savingStore}
+                        >
+                          {savingStore ? (
+                            <ActivityIndicator size="small" color="#fff" />
+                          ) : (
+                            <Text style={styles.saveBtnText}>Добавить</Text>
+                          )}
+                        </TouchableOpacity>
+                      </View>
+                    </>
+                  ) : (
+                    <TouchableOpacity
+                      style={styles.addStoreBtn}
+                      onPress={() => setAddingStore(true)}
+                    >
+                      <Text style={styles.addStoreBtnText}>
+                        + Добавить магазин
                       </Text>
-                    </View>
-                    <TouchableOpacity
-                      style={styles.editBtn}
-                      onPress={handleStartEditPrompt}
-                    >
-                      <Text style={styles.editBtnText}>Изменить</Text>
                     </TouchableOpacity>
-                  </>
-                )}
+                  )}
+                </>
+              )}
+            </View>
+
+            {/* Max photos setting */}
+            <View style={styles.card}>
+              <View style={styles.sectionHeader}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.sectionTitle}>
+                    Максимальное количество фото
+                  </Text>
+                  <Text style={styles.sectionDesc}>
+                    Сколько фотографий оператор может загрузить для одной
+                    книги.
+                  </Text>
+                </View>
               </View>
-            </>
-          )}
-        </ScrollView>
-      </KeyboardAvoidingView>
-    );
-  }
+
+              {editingMaxPhotos ? (
+                <>
+                  <TextInput
+                    style={styles.numberInput}
+                    value={draftMaxPhotos}
+                    onChangeText={setDraftMaxPhotos}
+                    keyboardType="number-pad"
+                    placeholder="Введите число (1–20)"
+                    placeholderTextColor="#aaa"
+                    editable={!savingMaxPhotos}
+                    autoFocus
+                    maxLength={2}
+                  />
+                  <View style={styles.editActions}>
+                    <TouchableOpacity
+                      style={[styles.actionBtn, styles.cancelBtn]}
+                      onPress={handleCancelMaxPhotos}
+                      disabled={savingMaxPhotos}
+                    >
+                      <Text style={styles.cancelBtnText}>Отмена</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[
+                        styles.actionBtn,
+                        styles.saveBtn,
+                        savingMaxPhotos && styles.disabledBtn,
+                      ]}
+                      onPress={handleSaveMaxPhotos}
+                      disabled={savingMaxPhotos}
+                    >
+                      {savingMaxPhotos ? (
+                        <ActivityIndicator size="small" color="#fff" />
+                      ) : (
+                        <Text style={styles.saveBtnText}>Сохранить</Text>
+                      )}
+                    </TouchableOpacity>
+                  </View>
+                </>
+              ) : (
+                <View style={styles.inlineValueRow}>
+                  <View style={styles.numberBadge}>
+                    <Text style={styles.numberBadgeText}>{maxPhotos}</Text>
+                  </View>
+                  <TouchableOpacity
+                    style={styles.editBtn}
+                    onPress={handleStartEditMaxPhotos}
+                  >
+                    <Text style={styles.editBtnText}>Изменить</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+            </View>
+
+            {/* AI prompt setting */}
+            <View style={styles.card}>
+              <View style={styles.sectionHeader}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.sectionTitle}>
+                    AI-промпт для распознавания
+                  </Text>
+                  <Text style={styles.sectionDesc}>
+                    Этот промпт передаётся в ИИ при извлечении данных из
+                    фотографий книг.
+                  </Text>
+                </View>
+              </View>
+
+              {editingPrompt ? (
+                <>
+                  <TextInput
+                    style={styles.promptInput}
+                    value={draftPrompt}
+                    onChangeText={setDraftPrompt}
+                    placeholder="Введите кастомный промпт..."
+                    placeholderTextColor="#aaa"
+                    multiline
+                    textAlignVertical="top"
+                    editable={!savingPrompt}
+                    autoFocus
+                  />
+                  <View style={styles.editActions}>
+                    <TouchableOpacity
+                      style={[styles.actionBtn, styles.cancelBtn]}
+                      onPress={handleCancelPrompt}
+                      disabled={savingPrompt}
+                    >
+                      <Text style={styles.cancelBtnText}>Отмена</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[
+                        styles.actionBtn,
+                        styles.saveBtn,
+                        savingPrompt && styles.disabledBtn,
+                      ]}
+                      onPress={handleSavePrompt}
+                      disabled={savingPrompt}
+                    >
+                      {savingPrompt ? (
+                        <ActivityIndicator size="small" color="#fff" />
+                      ) : (
+                        <Text style={styles.saveBtnText}>Сохранить</Text>
+                      )}
+                    </TouchableOpacity>
+                  </View>
+                </>
+              ) : (
+                <>
+                  <View style={styles.promptTextBox}>
+                    <Text style={styles.promptText}>
+                      {aiPrompt || "Промпт не задан"}
+                    </Text>
+                  </View>
+                  <TouchableOpacity
+                    style={styles.editBtn}
+                    onPress={handleStartEditPrompt}
+                  >
+                    <Text style={styles.editBtnText}>Изменить</Text>
+                  </TouchableOpacity>
+                </>
+              )}
+            </View>
+          </>
+        )}
+      </ScrollView>
+    </KeyboardAvoidingView>
+  );
 }
 
 const styles = StyleSheet.create({
@@ -388,6 +626,97 @@ const styles = StyleSheet.create({
   sectionDesc: {
     fontSize: 13,
     color: "#888",
+  },
+  emptyStoresText: {
+    fontSize: 14,
+    color: "#aaa",
+    alignSelf: "flex-start",
+    marginBottom: 8,
+  },
+  storeRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    alignSelf: "stretch",
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: "#F0F0F0",
+  },
+  storeRadioBtn: {
+    width: 32,
+    height: 32,
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 10,
+  },
+  radioOuter: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    borderWidth: 2,
+    borderColor: "#ccc",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  radioOuterActive: {
+    borderColor: "#1976D2",
+  },
+  radioInner: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: "#1976D2",
+  },
+  storeInfo: {
+    flex: 1,
+  },
+  storeName: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: "#222",
+    marginBottom: 2,
+  },
+  storeDetails: {
+    fontSize: 12,
+    color: "#999",
+  },
+  storeDeleteBtn: {
+    width: 32,
+    height: 32,
+    alignItems: "center",
+    justifyContent: "center",
+    marginLeft: 8,
+  },
+  storeDeleteIcon: {
+    fontSize: 14,
+    color: "#ccc",
+    fontWeight: "600",
+  },
+  storeInput: {
+    alignSelf: "stretch",
+    height: 44,
+    borderWidth: 1.5,
+    borderColor: "#E0E0E0",
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    fontSize: 14,
+    color: "#222",
+    backgroundColor: "#FAFAFA",
+    marginTop: 8,
+  },
+  addStoreBtn: {
+    alignSelf: "flex-start",
+    marginTop: 12,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    borderWidth: 1.5,
+    borderColor: "#1976D2",
+    borderStyle: "dashed",
+  },
+  addStoreBtnText: {
+    fontSize: 14,
+    color: "#1976D2",
+    fontWeight: "600",
   },
   inlineValueRow: {
     flexDirection: "row",
@@ -494,7 +823,7 @@ const styles = StyleSheet.create({
   },
   userMgmtArrow: {
     fontSize: 22,
-    color: '#ccc',
-    fontWeight: '300',
+    color: "#ccc",
+    fontWeight: "300",
   },
 });

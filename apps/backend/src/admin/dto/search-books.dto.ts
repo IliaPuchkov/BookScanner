@@ -1,4 +1,4 @@
-import { IsOptional, IsString, IsUUID, IsEnum } from 'class-validator';
+import { IsOptional, IsString, IsUUID, IsEnum, IsDateString } from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { PaginationDto } from '../../common/dto/pagination.dto';
 import { BookStatus } from '@bookscanner/shared';
@@ -21,12 +21,12 @@ export class SearchBooksDto extends PaginationDto {
 
   @ApiPropertyOptional({ description: 'Дата от (YYYY-MM-DD)' })
   @IsOptional()
-  @IsString()
+  @IsDateString()
   dateFrom?: string;
 
   @ApiPropertyOptional({ description: 'Дата до (YYYY-MM-DD)' })
   @IsOptional()
-  @IsString()
+  @IsDateString()
   dateTo?: string;
 
   @ApiPropertyOptional({ description: 'Фильтр по статусу', enum: BookStatus })
