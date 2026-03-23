@@ -27,6 +27,7 @@ interface Props {
   onRemove?: (index: number) => void;
   onReorder?: (photos: PhotoItem[]) => void;
   onRotate?: (index: number) => void;
+  onPress?: (index: number) => void;
   maxPhotos?: number;
 }
 
@@ -52,6 +53,7 @@ export function PhotoGrid({
   onRemove,
   onReorder,
   onRotate,
+  onPress,
   maxPhotos = 10,
 }: Props) {
   const photosRef = useRef(photos);
@@ -191,11 +193,13 @@ export function PhotoGrid({
             {isFrom && (
               <View style={styles.ghostOverlay} pointerEvents="none" />
             )}
-            {onReorder && (
+            {(onReorder || onPress) && (
               // TouchableWithoutFeedback has no visual pressed feedback,
               // so it won't get "stuck" in a dimmed state when PanResponder takes over
               <TouchableWithoutFeedback
+                onPress={() => !isDragging && onPress?.(index)}
                 onLongPress={(e) =>
+                  onReorder &&
                   startDrag(index, e.nativeEvent.pageX, e.nativeEvent.pageY)
                 }
                 delayLongPress={250}
@@ -281,7 +285,7 @@ const styles = StyleSheet.create({
     width: ITEM_SIZE,
     height: ITEM_SIZE,
     borderRadius: 8,
-    //overflow: 'hidden',
+    //overflow: "hidden",
   },
   itemGhost: {
     opacity: 0.45,
@@ -305,7 +309,7 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.3,
     shadowRadius: 10,
-    // No overflow:'hidden' — causes images to vanish on Android with elevation
+    //overflow: "hidden", //— causes images to vanish on Android with elevation
   },
   floatingImage: {
     width: ITEM_SIZE,

@@ -75,10 +75,12 @@ export class BooksService {
       .leftJoinAndSelect('book.photos', 'photos')
       .leftJoinAndSelect('book.createdBy', 'createdBy');
 
-    if (role !== UserRole.ADMIN) {
+    if (role !== UserRole.ADMIN || workSessionId) {
+      // Operators always see only their own books.
+      // Admins querying a specific session (operator mode) also see only their own books.
       qb.andWhere('book.created_by = :userId', { userId });
     } else {
-      // Admins only see books whose session is completed (or has no session)
+      // Admin browsing all books (no session filter): only completed/sessionless books
       qb.leftJoin('book.workSession', 'workSession')
         .andWhere(
           "(book.work_session_id IS NULL OR workSession.status = 'completed')",

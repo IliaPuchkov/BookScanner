@@ -31,8 +31,6 @@ type Nav = NativeStackNavigationProp<AdminMainStackParamList, "ProductDetail">;
 const SCREEN_WIDTH = Dimensions.get("window").width;
 
 // Ozon defaults (mirrored from @bookscanner/shared ozon.constants)
-const ANNOTATION_PREFIX =
-  "ВНИМАНИЕ! Книга не новая! Состояние - на фото.\n\nПри необходимости мы можем добавить больше фотографий для оценки состояния экземпляра.\n\n";
 const DEFAULT_WIDTH_MM = 100;
 const DEFAULT_LENGTH_MM = 100;
 const DEFAULT_THICKNESS_MM = 35;
@@ -72,7 +70,7 @@ function computeOzonPreview(book: Book): OzonPreview {
     bookType: book.bookType || DEFAULT_BOOK_TYPE,
     direction: book.direction || DEFAULT_DIRECTION,
     condition: book.condition || DEFAULT_CONDITION,
-    annotation: ANNOTATION_PREFIX + (book.annotation || ""),
+    annotation: book.annotation || "",
     hashtags: (book.hashtags || []).join(" "),
     dimWidth,
     dimLength,
@@ -398,6 +396,7 @@ export function ProductDetailScreen() {
                 label="Хэштеги (через пробел)"
                 value={editHashtags}
                 onChangeText={setEditHashtags}
+                multiline
               />
 
               <View style={styles.editActions}>
@@ -528,11 +527,12 @@ export function ProductDetailScreen() {
 }
 
 function InfoRow({ label, value }: { label: string; value?: string }) {
-  if (!value) return null;
   return (
     <View style={styles.row}>
       <Text style={styles.rowLabel}>{label}</Text>
-      <Text style={styles.rowValue}>{value}</Text>
+      <Text style={[styles.rowValue, !value && styles.rowValueEmpty]}>
+        {value || "—"}
+      </Text>
     </View>
   );
 }
@@ -645,6 +645,10 @@ const styles = StyleSheet.create({
     maxWidth: "60%",
     textAlign: "right",
   },
+  rowValueEmpty: {
+    color: "#bbb",
+    fontWeight: "400",
+  },
   annotationBox: {
     backgroundColor: "#FFFDE7",
     borderRadius: 8,
@@ -697,7 +701,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#FAFAFA",
   },
   editInputMultiline: {
-    height: 100,
+    height: "auto",
     textAlignVertical: "top",
     paddingTop: 10,
   },

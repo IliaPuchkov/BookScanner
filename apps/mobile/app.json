@@ -1,17 +1,25 @@
 {
   "expo": {
-    "name": "BookScanner",
+    "name": "Jolly Book",
     "slug": "bookscanner",
-    "version": "0.1.0",
+    "version": "0.1.1",
     "orientation": "portrait",
+    "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.bookscanner.app"
     },
     "android": {
+      "softwareKeyboardLayoutMode": "pan",
       "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
       "package": "com.bookscanner.app",

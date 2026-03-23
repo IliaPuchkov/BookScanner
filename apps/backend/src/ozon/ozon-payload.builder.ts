@@ -21,7 +21,6 @@ import {
   OZON_ATTR_DIMENSIONS,
   OZON_ATTR_WEIGHT,
   OZON_ATTR_HASHTAGS,
-  ANNOTATION_PREFIX,
   DEFAULT_WEIGHT_G,
   DEFAULT_BOOK_TYPE,
   DEFAULT_DIRECTION,
@@ -61,7 +60,7 @@ export function buildOzonImportPayload(
     height: raw.height || DEFAULT_LENGTH_MM, // длина
     depth: raw.depth || DEFAULT_THICKNESS_MM, // толщина
   };
-  const annotation = ANNOTATION_PREFIX + (book.annotation || "");
+  const annotation = book.annotation || "";
 
   const attributes: OzonAttribute[] = [
     // Required

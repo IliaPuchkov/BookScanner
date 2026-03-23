@@ -10,6 +10,10 @@ import { PendingReviewScreen } from "../screens/admin/PendingReview";
 import { ProductDetailScreen } from "../screens/admin/ProductDetail";
 import { SettingsScreen } from "../screens/operator/SettingsScreen";
 import { ProfileScreen } from "../screens/ProfileScreen";
+import { CardsListScreen } from "../screens/operator/CardsList";
+import { CreateCardScreen } from "../screens/operator/CreateCard";
+import { CardDetailScreen } from "../screens/operator/CardDetail";
+import { PhotoUploadScreen } from "../screens/operator/PhotoUpload";
 
 export type AdminMainStackParamList = {
   Dashboard: undefined;
@@ -20,8 +24,17 @@ export type AdminMainStackParamList = {
   ProductDetail: { bookId: string; editable?: boolean };
 };
 
+export type AdminCardCreationParamList = {
+  CardsList: undefined;
+  CreateCard: { boxId?: string; sessionId?: string } | undefined;
+  CardDetail: { bookId: string; editable?: boolean };
+  PhotoUpload: { bookId: string };
+};
+
 const MainStack = createNativeStackNavigator<AdminMainStackParamList>();
 const Tab = createBottomTabNavigator();
+const CardStack = createNativeStackNavigator<AdminCardCreationParamList>();
+const SettingsStack = createNativeStackNavigator();
 
 const stackScreenOptions = ({ navigation }: { navigation: any }) => ({
   headerStyle: { backgroundColor: "#1976D2" } as const,
@@ -79,7 +92,56 @@ function MainStackScreen() {
   );
 }
 
-const SettingsStack = createNativeStackNavigator();
+function CardsStack() {
+  return (
+    <CardStack.Navigator
+      screenOptions={({ navigation }) => ({
+        headerStyle: { backgroundColor: "#1976D2" },
+        headerTintColor: "#fff",
+        headerTitleStyle: { fontWeight: "600" },
+        headerBackVisible: false,
+        headerLeft: ({ canGoBack }) =>
+          canGoBack ? (
+            <Pressable
+              onPress={() => navigation.goBack()}
+              android_ripple={{ color: "transparent", borderless: true }}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              style={{
+                width: 44,
+                height: 44,
+                backgroundColor: "#1976D2",
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              <Text style={{ color: "#fff", fontSize: 32 }}>‹</Text>
+            </Pressable>
+          ) : null,
+      })}
+    >
+      <CardStack.Screen
+        name="CardsList"
+        component={CardsListScreen}
+        options={{ title: "Мои карточки" }}
+      />
+      <CardStack.Screen
+        name="CreateCard"
+        component={CreateCardScreen}
+        options={{ title: "Новая карточка" }}
+      />
+      <CardStack.Screen
+        name="CardDetail"
+        component={CardDetailScreen}
+        options={{ title: "Карточка" }}
+      />
+      <CardStack.Screen
+        name="PhotoUpload"
+        component={PhotoUploadScreen}
+        options={{ title: "Фото" }}
+      />
+    </CardStack.Navigator>
+  );
+}
 
 function SettingsStackScreen() {
   return (
@@ -118,6 +180,14 @@ export function AdminNavigator() {
         options={{
           tabBarLabel: "Главная",
           tabBarIcon: () => <TabIcon label="📊" />,
+        }}
+      />
+      <Tab.Screen
+        name="CardCreationTab"
+        component={CardsStack}
+        options={{
+          tabBarLabel: "Создать",
+          tabBarIcon: () => <TabIcon label="✏️" />,
         }}
       />
       <Tab.Screen

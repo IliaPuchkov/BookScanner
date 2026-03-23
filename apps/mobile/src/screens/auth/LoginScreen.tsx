@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState } from "react";
 import {
   View,
   Text,
@@ -7,27 +7,34 @@ import {
   Platform,
   ScrollView,
   Alert,
-} from 'react-native';
-import { type NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { useNavigation } from '@react-navigation/native';
-import { Input } from '../../components/Input';
-import { Button } from '../../components/Button';
-import { useAuth } from '../../hooks/useAuth';
-import type { AuthStackParamList } from '../../navigation/AuthNavigator';
+  Image,
+  TouchableOpacity,
+} from "react-native";
+import { FontAwesome5 } from "@expo/vector-icons";
+import { type NativeStackNavigationProp } from "@react-navigation/native-stack";
+import { useNavigation } from "@react-navigation/native";
+import { Input } from "../../components/Input";
+import { Button } from "../../components/Button";
+import { useAuth } from "../../hooks/useAuth";
+import type { AuthStackParamList } from "../../navigation/AuthNavigator";
 
-type Nav = NativeStackNavigationProp<AuthStackParamList, 'Login'>;
+type Nav = NativeStackNavigationProp<AuthStackParamList, "Login">;
 
 export function LoginScreen() {
   const navigation = useNavigation<Nav>();
   const { login } = useAuth();
 
-  const [phoneOrEmail, setPhoneOrEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const [phoneOrEmail, setPhoneOrEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+
+  const handlePasswordVisibilityIn = () => setShowPassword(true);
+  const handlePasswordVisibilityOut = () => setShowPassword(false);
 
   const handleLogin = async () => {
     if (!phoneOrEmail.trim() || !password.trim()) {
-      Alert.alert('Ошибка', 'Заполните все поля');
+      Alert.alert("Ошибка", "Заполните все поля");
       return;
     }
 
@@ -36,8 +43,8 @@ export function LoginScreen() {
       await login(phoneOrEmail.trim(), password);
     } catch (err: any) {
       const message =
-        err?.response?.data?.message || 'Неверный логин или пароль';
-      Alert.alert('Ошибка входа', message);
+        err?.response?.data?.message || "Неверный логин или пароль";
+      Alert.alert("Ошибка входа", message);
     } finally {
       setLoading(false);
     }
@@ -46,14 +53,19 @@ export function LoginScreen() {
   return (
     <KeyboardAvoidingView
       style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
     >
       <ScrollView
         contentContainerStyle={styles.scroll}
         keyboardShouldPersistTaps="handled"
       >
         <View style={styles.header}>
-          <Text style={styles.title}>BookScanner</Text>
+          <Image
+            source={require("../../media/images/logos/jolly-book-logo.jpg")}
+            style={styles.logo}
+            resizeMode="contain"
+          />
+          <Text style={styles.title}>Jolly Book</Text>
           <Text style={styles.subtitle}>Вход в систему</Text>
         </View>
 
@@ -66,25 +78,34 @@ export function LoginScreen() {
             autoCapitalize="none"
             keyboardType="email-address"
           />
-
           <Input
             label="Пароль"
             value={password}
             onChangeText={setPassword}
             placeholder="Введите пароль"
-            secureTextEntry
+            secureTextEntry={!showPassword}
+            rightElement={
+              <TouchableOpacity
+                onPressIn={handlePasswordVisibilityIn}
+                onPressOut={handlePasswordVisibilityOut}
+              >
+                <FontAwesome5
+                  name={showPassword ? "eye-slash" : "eye"}
+                  size={18}
+                  color="#999"
+                />
+              </TouchableOpacity>
+            }
           />
-
           <Button
             title="Войти"
             onPress={handleLogin}
             loading={loading}
             style={{ marginTop: 8 }}
           />
-
           <Button
             title="Регистрация"
-            onPress={() => navigation.navigate('Register')}
+            onPress={() => navigation.navigate("Register")}
             variant="secondary"
             style={{ marginTop: 12 }}
           />
@@ -97,28 +118,33 @@ export function LoginScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: "#fff",
   },
   scroll: {
     flexGrow: 1,
-    justifyContent: 'center',
+    justifyContent: "center",
     padding: 24,
   },
   header: {
-    alignItems: 'center',
+    alignItems: "center",
     marginBottom: 40,
   },
   title: {
     fontSize: 32,
-    fontWeight: '800',
-    color: '#1976D2',
+    fontWeight: "800",
+    color: "#1976D2",
   },
   subtitle: {
     fontSize: 16,
-    color: '#666',
+    color: "#666",
     marginTop: 8,
   },
   form: {
-    width: '100%',
+    width: "100%",
+  },
+  logo: {
+    width: 150,
+    height: 150,
+    marginBottom: 8,
   },
 });

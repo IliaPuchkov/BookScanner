@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, Alert, ActivityIndicator } from 'react-native';
+import { View, StyleSheet, Alert, ActivityIndicator, Platform } from 'react-native';
 import { useRoute, type RouteProp } from '@react-navigation/native';
 import * as ImagePicker from 'expo-image-picker';
 import { ImageManipulator, SaveFormat } from 'expo-image-manipulator';
@@ -52,35 +52,107 @@ export function PhotoUploadScreen() {
     init();
   }, [bookId]);
 
-  const handleAdd = async () => {
+  const uploadUris = async (uris: string[]) => {
+    setUploading(true);
+    try {
+      const uploaded = await photosService.uploadPhotos(bookId, uris);
+      setPhotos((prev) => [
+        ...prev,
+        ...uploaded.map((p) => ({ uri: p.fileUrl, id: p.id })),
+      ]);
+    } catch {
+      Alert.alert('Ошибка', 'Не удалось загрузить фото');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const pickFromLibrary = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') {
       Alert.alert('Ошибка', 'Нужно разрешение на доступ к галерее');
       return;
     }
     const remaining = maxPhotos - photos.length;
+    // Android: allowsMultipleSelection uses DocumentPicker (Files) instead of Gallery
+    const isAndroid = Platform.OS === 'android';
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['images'],
-      allowsMultipleSelection: true,
+      allowsMultipleSelection: !isAndroid,
       quality: 0.8,
-      selectionLimit: remaining,
+      selectionLimit: isAndroid ? 1 : remaining,
     });
-
     if (!result.canceled && result.assets.length > 0) {
+      await uploadUris(result.assets.map((a) => a.uri));
+    }
+  };
+
+  const pickFromCamera = async () => {
+    const { status } = await ImagePicker.requestCameraPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Ошибка', 'Нужно разрешение на доступ к камере');
+      return;
+    }
+    const result = await ImagePicker.launchCameraAsync({
+      mediaTypes: ['images'],
+      quality: 0.8,
+    });
+    if (!result.canceled) {
+      await uploadUris([result.assets[0].uri]);
+    }
+  };
+
+  const handleAdd = () => {
+    if (Platform.OS === 'android') {
+      Alert.alert('Добавить фото', '', [
+        { text: 'Камера', onPress: pickFromCamera },
+        { text: 'Галерея', onPress: pickFromLibrary },
+        { text: 'Отмена', style: 'cancel' },
+      ]);
+    } else {
+      pickFromLibrary();
+    }
+  };
+
+  const handleEdit = async (index: number) => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Ошибка', 'Нужно разрешение на доступ к галерее');
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      allowsEditing: true,
+      quality: 0.8,
+    });
+    if (!result.canceled) {
       setUploading(true);
       try {
-        const uris = result.assets.map((a) => a.uri);
-        const uploaded = await photosService.uploadPhotos(bookId, uris);
-        setPhotos((prev) => [
-          ...prev,
-          ...uploaded.map((p) => ({ uri: p.fileUrl, id: p.id })),
-        ]);
+        const photo = photos[index];
+        const newUri = result.assets[0].uri;
+        if (photo.id) {
+          const updated = await photosService.replacePhoto(bookId, photo.id, newUri);
+          setPhotos((prev) =>
+            prev.map((p, i) => (i === index ? { uri: updated.fileUrl, id: updated.id } : p)),
+          );
+        } else {
+          setPhotos((prev) => prev.map((p, i) => (i === index ? { ...p, uri: newUri } : p)));
+        }
       } catch {
-        Alert.alert('Ошибка', 'Не удалось загрузить фото');
+        Alert.alert('Ошибка', 'Не удалось заменить фото');
       } finally {
         setUploading(false);
       }
     }
+  };
+
+  const handlePhotoPress = (index: number) => {
+    Alert.alert('', '', [
+      { text: 'Повернуть', onPress: () => handleRotate(index) },
+      { text: 'Редактировать / Заменить', onPress: () => handleEdit(index) },
+      { text: 'Удалить', style: 'destructive', onPress: () => handleRemove(index) },
+      { text: 'Отмена', style: 'cancel' },
+    ]);
   };
 
   const handleRotate = async (index: number) => {
@@ -158,6 +230,7 @@ export function PhotoUploadScreen() {
           onRemove={handleRemove}
           onReorder={handleReorder}
           onRotate={handleRotate}
+          onPress={handlePhotoPress}
           maxPhotos={maxPhotos}
         />
       </View>
