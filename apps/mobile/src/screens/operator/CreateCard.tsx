@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   ScrollView,
@@ -6,6 +6,7 @@ import {
   Alert,
   Text,
   TouchableOpacity,
+  ActivityIndicator,
 } from "react-native";
 import { useRoute, type RouteProp } from "@react-navigation/native";
 import * as ImagePicker from "expo-image-picker";
@@ -44,6 +45,20 @@ export function CreateCardScreen() {
     route.params?.boxId ?? null,
   );
   const [newBoxNumber, setNewBoxNumber] = useState("");
+  const [boxesLoading, setBoxesLoading] = useState(true);
+
+  useEffect(() => {
+    boxesService.getBoxes(1, 100)
+      .then(({ data }) => {
+        setBoxes((prev) => {
+          const prevIds = new Set(prev.map((b) => b.id));
+          const fresh = data.filter((b) => !prevIds.has(b.id));
+          return [...prev, ...fresh];
+        });
+      })
+      .catch(() => {})
+      .finally(() => setBoxesLoading(false));
+  }, []);
 
   // Photos
   const [photos, setPhotos] = useState<PhotoItem[]>([]);
@@ -171,6 +186,10 @@ export function CreateCardScreen() {
             <Text style={styles.stepTitle}>
               Выберите коробку в которой работаете
             </Text>
+
+            {boxesLoading && (
+              <ActivityIndicator size="small" color="#1976D2" style={{ marginBottom: 12 }} />
+            )}
 
             {boxes.length > 0 && (
               <>
