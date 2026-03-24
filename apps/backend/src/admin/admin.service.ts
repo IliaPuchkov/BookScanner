@@ -1,7 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { UsersService } from '../users/users.service';
 import { BooksService } from '../books/books.service';
-import { StatsService } from '../stats/stats.service';
 import { CreateUserDto } from '../users/dto/create-user.dto';
 import { UpdateUserDto } from '../users/dto/update-user.dto';
 import { PaginationDto } from '../common/dto/pagination.dto';
@@ -13,7 +12,6 @@ export class AdminService {
   constructor(
     private readonly usersService: UsersService,
     private readonly booksService: BooksService,
-    private readonly statsService: StatsService,
   ) {}
 
   async getUsers(pagination: PaginationDto) {
@@ -47,27 +45,22 @@ export class AdminService {
     miniPagination.page = 1;
     miniPagination.limit = 1;
 
-    const [todayStats, periodStats, perUserRaw, usersResult, booksResult, pendingReviewCount] = await Promise.all([
-      this.statsService.getGlobalStats(startOfToday),
-      this.statsService.getGlobalStats(startOfPeriod),
-      this.statsService.getPerUserBookCounts(startOfPeriod),
+    const [cardsToday, cardsPeriod, perUserRaw, usersResult, booksResult, pendingReviewCount] = await Promise.all([
+      this.booksService.countCreatedSince(startOfToday),
+      this.booksService.countCreatedSince(startOfPeriod),
+      this.booksService.getPerUserBookCounts(startOfPeriod),
       this.usersService.findAll(miniPagination),
       this.booksService.findAll('', UserRole.ADMIN, miniPagination),
       this.booksService.countPendingReview(),
     ]);
 
-    const getCount = (
-      stats: Array<{ action: string; count: string }>,
-      action: string,
-    ) => parseInt(stats.find((s) => s.action === action)?.count ?? '0', 10);
-
     return {
       totalCards: booksResult.meta.total,
       totalUsers: usersResult.meta.total,
-      cardsToday: getCount(todayStats, 'card_created'),
-      cardsThisWeek: getCount(periodStats, 'card_created'),
+      cardsToday,
+      cardsThisWeek: cardsPeriod,
       pendingReviewCount,
-      perUser: perUserRaw.map((u: { userId: string; fullName: string; booksCount: string }) => ({
+      perUser: perUserRaw.map((u) => ({
         userId: u.userId,
         fullName: u.fullName,
         cardsCount: parseInt(u.booksCount, 10),

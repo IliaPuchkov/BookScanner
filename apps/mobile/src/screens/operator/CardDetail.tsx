@@ -356,7 +356,7 @@ export function CardDetailScreen() {
                 style={{ marginBottom: 10 }}
               />
               <Button
-                title="Повторное на распознавание"
+                title="Повторное распознавание"
                 onPress={handleExtract}
                 loading={extracting}
                 variant="secondary"

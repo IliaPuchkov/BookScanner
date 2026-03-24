@@ -10,6 +10,7 @@ import {
 } from "react-native";
 import { useRoute, type RouteProp } from "@react-navigation/native";
 import * as ImagePicker from "expo-image-picker";
+import { ImageManipulator, SaveFormat } from "expo-image-manipulator";
 import { Input } from "../../components/Input";
 import { Button } from "../../components/Button";
 import { PhotoGrid } from "../../components/PhotoGrid";
@@ -48,7 +49,8 @@ export function CreateCardScreen() {
   const [boxesLoading, setBoxesLoading] = useState(true);
 
   useEffect(() => {
-    boxesService.getBoxes(1, 100)
+    boxesService
+      .getBoxes(1, 100)
       .then(({ data }) => {
         setBoxes((prev) => {
           const prevIds = new Set(prev.map((b) => b.id));
@@ -129,6 +131,57 @@ export function CreateCardScreen() {
     setPhotos((prev) => prev.filter((_, i) => i !== index));
   };
 
+  const handleRotatePhoto = async (index: number) => {
+    const photo = photos[index];
+    try {
+      const ctx = ImageManipulator.manipulate(photo.uri);
+      ctx.rotate(90);
+      const rendered = await ctx.renderAsync();
+      const saved = await rendered.saveAsync({ compress: 0.8, format: SaveFormat.JPEG });
+      setPhotos((prev) => prev.map((p, i) => (i === index ? { ...p, uri: saved.uri } : p)));
+    } catch {
+      Alert.alert('Ошибка', 'Не удалось повернуть фото');
+    }
+  };
+
+  const handleRetakePhoto = async (index: number) => {
+    const { status } = await ImagePicker.requestCameraPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Ошибка', 'Нужно разрешение на камеру');
+      return;
+    }
+    const result = await ImagePicker.launchCameraAsync({ quality: 0.8 });
+    if (!result.canceled) {
+      setPhotos((prev) => prev.map((p, i) => (i === index ? { uri: result.assets[0].uri } : p)));
+    }
+  };
+
+  const handleCropPhoto = async (index: number) => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Ошибка', 'Нужно разрешение на доступ к галерее');
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      allowsEditing: true,
+      quality: 0.8,
+    });
+    if (!result.canceled) {
+      setPhotos((prev) => prev.map((p, i) => (i === index ? { uri: result.assets[0].uri } : p)));
+    }
+  };
+
+  const handlePhotoPress = (index: number) => {
+    Alert.alert('Действие с фото', undefined, [
+      { text: 'Повернуть', onPress: () => handleRotatePhoto(index) },
+      { text: 'Кадрировать', onPress: () => handleCropPhoto(index) },
+      { text: 'Переснять', onPress: () => handleRetakePhoto(index) },
+      { text: 'Удалить', style: 'destructive', onPress: () => handleRemovePhoto(index) },
+      { text: 'Отмена', style: 'cancel' },
+    ]);
+  };
+
   const handleSubmitForProcessing = async () => {
     if (!selectedBoxId) {
       Alert.alert("Ошибка", "Выберите коробку");
@@ -188,7 +241,11 @@ export function CreateCardScreen() {
             </Text>
 
             {boxesLoading && (
-              <ActivityIndicator size="small" color="#1976D2" style={{ marginBottom: 12 }} />
+              <ActivityIndicator
+                size="small"
+                color="#1976D2"
+                style={{ marginBottom: 12 }}
+              />
             )}
 
             {boxes.length > 0 && (
@@ -201,12 +258,18 @@ export function CreateCardScreen() {
                         styles.boxItem,
                         selectedBoxId === box.id && styles.boxItemSelected,
                       ]}
-                      onPress={() => setSelectedBoxId(box.id)}
+                      onPress={() => {
+                        selectedBoxId === box.id
+                          ? setSelectedBoxId(null)
+                          : setSelectedBoxId(box.id);
+                        setNewBoxNumber("");
+                      }}
                     >
                       <Text
                         style={[
                           styles.boxItemText,
-                          selectedBoxId === box.id && styles.boxItemTextSelected,
+                          selectedBoxId === box.id &&
+                            styles.boxItemTextSelected,
                         ]}
                       >
                         {box.boxNumber}
@@ -214,7 +277,14 @@ export function CreateCardScreen() {
                     </TouchableOpacity>
                   ))}
                 </View>
-                <Text style={styles.orDivider}>или создайте новую</Text>
+                {selectedBoxId && (
+                  <Button
+                    title="Далее"
+                    onPress={() => setStep("photos")}
+                    style={{ marginTop: 16 }}
+                  />
+                )}
+                <Text style={styles.orDivider}>Или создайте новую:</Text>
               </>
             )}
 
@@ -223,15 +293,10 @@ export function CreateCardScreen() {
               value={newBoxNumber}
               onChangeText={setNewBoxNumber}
               placeholder="Например: 123"
+              onKeyPress={() => setSelectedBoxId(null)}
             />
-            <Button title="Создать коробку" onPress={handleCreateBox} />
-
-            {selectedBoxId && (
-              <Button
-                title="Далее"
-                onPress={() => setStep("photos")}
-                style={{ marginTop: 16 }}
-              />
+            {newBoxNumber && (
+              <Button title="Создать коробку" onPress={handleCreateBox} />
             )}
           </View>
         )}
@@ -254,6 +319,8 @@ export function CreateCardScreen() {
               onAdd={handlePickPhotos}
               onRemove={handleRemovePhoto}
               onReorder={setPhotos}
+              onRotate={handleRotatePhoto}
+              onPress={handlePhotoPress}
             />
 
             <View style={styles.photoActions}>
@@ -345,9 +412,12 @@ const styles = StyleSheet.create({
   },
   orDivider: {
     textAlign: "center",
-    color: "#aaa",
-    marginVertical: 12,
-    fontSize: 13,
+    // color: "#aaa",
+    marginVertical: 20,
+    // fontSize: 13,
+    fontSize: 20,
+    fontWeight: "700",
+    color: "#222",
   },
   photoActions: {
     flexDirection: "row",

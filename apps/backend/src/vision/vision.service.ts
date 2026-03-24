@@ -81,9 +81,8 @@ export class VisionService {
       ocrResult.status = "processing";
     }
 
-    ocrResult = await this.ocrResultRepository.save(ocrResult);
-
     try {
+      ocrResult = await this.ocrResultRepository.save(ocrResult);
       const apiKey = this.configService.get<string>("OPENAI_API_KEY");
       if (!apiKey) {
         throw new Error("OPENAI_API_KEY не настроен в переменных окружения");
@@ -166,10 +165,12 @@ export class VisionService {
         photosProcessed: photos.length,
       };
     } catch (error) {
-      ocrResult.status = "failed";
-      ocrResult.errorMessage =
-        error instanceof Error ? error.message : "Неизвестная ошибка";
-      await this.ocrResultRepository.save(ocrResult);
+      if (ocrResult.id) {
+        ocrResult.status = "failed";
+        ocrResult.errorMessage =
+          error instanceof Error ? error.message : "Неизвестная ошибка";
+        await this.ocrResultRepository.save(ocrResult).catch(() => {});
+      }
       throw error;
     }
   }

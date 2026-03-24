@@ -28,6 +28,7 @@ export function CardsListScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
+  const [totalCount, setTotalCount] = useState(0);
   const [starting, setStarting] = useState(false);
 
   const fetchActiveSession = useCallback(async () => {
@@ -56,6 +57,7 @@ export function CardsListScreen() {
           setBooks((prev) => [...prev, ...res.data]);
         }
         setHasMore(p < res.meta.totalPages);
+        setTotalCount(res.meta.total);
         setPage(p);
       } catch {
         // silent
@@ -127,7 +129,7 @@ export function CardsListScreen() {
     if (!session) return;
     Alert.alert(
       "Завершить сессию?",
-      `Создано карточек: ${books.length}. Завершить рабочую сессию?`,
+      `Создано карточек: ${totalCount}. Завершить рабочую сессию?`,
       [
         { text: "Отмена", style: "cancel" },
         {
@@ -193,7 +195,7 @@ export function CardsListScreen() {
       <View style={styles.sessionHeader}>
         <View style={styles.sessionInfo}>
           <Text style={styles.sessionLabel}>Сессия с {sessionStart}</Text>
-          <Text style={styles.sessionCount}>Карточек: {books.length}</Text>
+          <Text style={styles.sessionCount}>Карточек: {totalCount}</Text>
         </View>
         <TouchableOpacity
           style={styles.endButton}

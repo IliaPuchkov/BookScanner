@@ -4,7 +4,6 @@ import {
   Image,
   StyleSheet,
   TouchableOpacity,
-  TouchableWithoutFeedback,
   Text,
   Dimensions,
   PanResponder,
@@ -194,18 +193,16 @@ export function PhotoGrid({
               <View style={styles.ghostOverlay} pointerEvents="none" />
             )}
             {(onReorder || onPress) && (
-              // TouchableWithoutFeedback has no visual pressed feedback,
-              // so it won't get "stuck" in a dimmed state when PanResponder takes over
-              <TouchableWithoutFeedback
+              <TouchableOpacity
+                style={StyleSheet.absoluteFill}
+                activeOpacity={1}
                 onPress={() => !isDragging && onPress?.(index)}
                 onLongPress={(e) =>
                   onReorder &&
                   startDrag(index, e.nativeEvent.pageX, e.nativeEvent.pageY)
                 }
                 delayLongPress={250}
-              >
-                <View style={StyleSheet.absoluteFill} />
-              </TouchableWithoutFeedback>
+              />
             )}
             {index < 2 && (
               <View style={styles.badge} pointerEvents="none">

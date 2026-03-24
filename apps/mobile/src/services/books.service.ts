@@ -34,8 +34,16 @@ export const booksService = {
     await api.delete(`/books/${id}`);
   },
 
-  async publishToOzon(bookId: string): Promise<void> {
-    await api.post('/ozon/publish', { bookId });
+  async publishToOzon(bookId: string, storeId?: string): Promise<void> {
+    await api.post('/ozon/publish', { bookId, storeId });
+  },
+
+  async publishBulkToOzon(
+    bookIds: string[],
+    storeId?: string,
+  ): Promise<{ total: number; succeeded: number; failed: number; failedBooks: { id: string; title?: string; error: string }[] }> {
+    const { data } = await api.post('/ozon/publish/bulk', { bookIds, storeId });
+    return data;
   },
 
   async checkOzonStatus(bookId: string): Promise<{ status: string; message: string }> {

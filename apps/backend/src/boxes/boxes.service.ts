@@ -7,6 +7,7 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Box } from './entities/box.entity';
+import { Book } from '../books/entities/book.entity';
 import { CreateBoxDto } from './dto/create-box.dto';
 import { UpdateBoxDto } from './dto/update-box.dto';
 import { PaginationDto } from '../common/dto/pagination.dto';
@@ -17,6 +18,8 @@ export class BoxesService {
   constructor(
     @InjectRepository(Box)
     private readonly boxesRepository: Repository<Box>,
+    @InjectRepository(Book)
+    private readonly booksRepository: Repository<Book>,
   ) {}
 
   async create(dto: CreateBoxDto, userId: string): Promise<Box> {
@@ -80,6 +83,25 @@ export class BoxesService {
     const box = await this.findOne(id);
     this.checkOwnership(box, userId, role);
     await this.boxesRepository.remove(box);
+  }
+
+  async deleteIfEmpty(boxId: string): Promise<void> {
+    const count = await this.booksRepository.countBy({ boxId });
+    if (count === 0) {
+      await this.boxesRepository.delete(boxId);
+    }
+  }
+
+  async deleteEmptyBoxesForUser(userId: string): Promise<void> {
+    await this.boxesRepository
+      .createQueryBuilder()
+      .delete()
+      .from(Box)
+      .where('created_by = :userId', { userId })
+      .andWhere(
+        'id NOT IN (SELECT DISTINCT box_id FROM books WHERE box_id IS NOT NULL)',
+      )
+      .execute();
   }
 
   private checkOwnership(box: Box, userId: string, role: UserRole) {

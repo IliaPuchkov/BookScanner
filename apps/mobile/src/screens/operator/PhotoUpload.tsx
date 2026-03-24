@@ -114,7 +114,38 @@ export function PhotoUploadScreen() {
     }
   };
 
-  const handleEdit = async (index: number) => {
+  const handleRetakePhoto = async (index: number) => {
+    const { status } = await ImagePicker.requestCameraPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Ошибка', 'Нужно разрешение на камеру');
+      return;
+    }
+    const result = await ImagePicker.launchCameraAsync({
+      mediaTypes: ['images'],
+      quality: 0.8,
+    });
+    if (!result.canceled) {
+      setUploading(true);
+      try {
+        const photo = photos[index];
+        const newUri = result.assets[0].uri;
+        if (photo.id) {
+          const updated = await photosService.replacePhoto(bookId, photo.id, newUri);
+          setPhotos((prev) =>
+            prev.map((p, i) => (i === index ? { uri: updated.fileUrl, id: updated.id } : p)),
+          );
+        } else {
+          setPhotos((prev) => prev.map((p, i) => (i === index ? { ...p, uri: newUri } : p)));
+        }
+      } catch {
+        Alert.alert('Ошибка', 'Не удалось заменить фото');
+      } finally {
+        setUploading(false);
+      }
+    }
+  };
+
+  const handleReplaceFromLibrary = async (index: number, allowsEditing = false) => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') {
       Alert.alert('Ошибка', 'Нужно разрешение на доступ к галерее');
@@ -122,7 +153,7 @@ export function PhotoUploadScreen() {
     }
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['images'],
-      allowsEditing: true,
+      allowsEditing,
       quality: 0.8,
     });
     if (!result.canceled) {
@@ -147,9 +178,11 @@ export function PhotoUploadScreen() {
   };
 
   const handlePhotoPress = (index: number) => {
-    Alert.alert('', '', [
+    Alert.alert('Действие с фото', undefined, [
       { text: 'Повернуть', onPress: () => handleRotate(index) },
-      { text: 'Редактировать / Заменить', onPress: () => handleEdit(index) },
+      { text: 'Кадрировать', onPress: () => handleReplaceFromLibrary(index, true) },
+      { text: 'Переснять', onPress: () => handleRetakePhoto(index) },
+      { text: 'Заменить из галереи', onPress: () => handleReplaceFromLibrary(index, false) },
       { text: 'Удалить', style: 'destructive', onPress: () => handleRemove(index) },
       { text: 'Отмена', style: 'cancel' },
     ]);

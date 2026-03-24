@@ -18,6 +18,12 @@ export interface OzonStore {
   isActive: boolean;
 }
 
+export interface OzonStoreLimits {
+  daily_create: { limit: number; reset_at: string; usage: number };
+  daily_update: { limit: number; reset_at: string; usage: number };
+  total: { limit: number; usage: number };
+}
+
 interface UpsertSettingDto {
   key: string;
   value: string;
@@ -121,5 +127,15 @@ export const adminService = {
 
   async activateOzonStore(id: string): Promise<void> {
     await api.patch(`/ozon/stores/${id}/activate`);
+  },
+
+  async getOzonStoreLimits(id: string): Promise<OzonStoreLimits> {
+    const { data } = await api.get<OzonStoreLimits>(`/ozon/stores/${id}/limits`);
+    return data;
+  },
+
+  async getOzonStoreKeyExpiry(id: string): Promise<string | null> {
+    const { data } = await api.get<{ expiresAt: string | null }>(`/ozon/stores/${id}/key-expiry`);
+    return data.expiresAt;
   },
 };

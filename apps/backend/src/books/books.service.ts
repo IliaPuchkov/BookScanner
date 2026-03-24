@@ -137,6 +137,32 @@ export class BooksService {
     };
   }
 
+  async countCreatedSince(since?: Date): Promise<number> {
+    const qb = this.booksRepository.createQueryBuilder('book');
+    if (since) {
+      qb.where('book.createdAt >= :since', { since });
+    }
+    return qb.getCount();
+  }
+
+  async getPerUserBookCounts(since?: Date): Promise<Array<{ userId: string; fullName: string; booksCount: string }>> {
+    const qb = this.booksRepository
+      .createQueryBuilder('book')
+      .innerJoin('book.createdBy', 'user')
+      .select('user.id', 'userId')
+      .addSelect('user.fullName', 'fullName')
+      .addSelect('COUNT(*)', 'booksCount')
+      .groupBy('user.id')
+      .addGroupBy('user.fullName')
+      .orderBy('"booksCount"', 'DESC');
+
+    if (since) {
+      qb.andWhere('book.createdAt >= :since', { since });
+    }
+
+    return qb.getRawMany();
+  }
+
   async countPendingReview(): Promise<number> {
     return this.booksRepository
       .createQueryBuilder('book')
@@ -167,14 +193,23 @@ export class BooksService {
   }
 
   async updateFromExtraction(id: string, data: Partial<Book>): Promise<void> {
-    await this.booksRepository.update(id, data as any);
+    const clean = Object.fromEntries(
+      Object.entries(data).filter(([, v]) => v !== null && v !== undefined),
+    );
+    if (Object.keys(clean).length > 0) {
+      await this.booksRepository.update(id, clean as any);
+    }
   }
 
   async remove(id: string, userId: string, role: UserRole): Promise<void> {
     const book = await this.findOne(id);
     this.checkOwnership(book, userId, role);
+    const boxId = book.boxId;
     await this.photosService.deleteAllForBook(id);
     await this.booksRepository.remove(book);
+    if (boxId) {
+      await this.boxesService.deleteIfEmpty(boxId);
+    }
   }
 
   private generateSku(boxNumber: string): string {

@@ -15,8 +15,8 @@ import {
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { adminService } from "../../services/admin.service";
+import type { OzonStore, OzonStoreLimits } from "../../services/admin.service";
 import { booksService } from "../../services/books.service";
-import { BookStatus } from "../../types";
 import type { Book } from "../../types";
 import type { AdminMainStackParamList } from "../../navigation/AdminNavigator";
 import { formatDate } from "../../utils/format";
@@ -36,6 +36,14 @@ export function PendingReviewScreen() {
   const [selectMode, setSelectMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkPublishing, setBulkPublishing] = useState(false);
+  const [stores, setStores] = useState<OzonStore[]>([]);
+  const [storeLimits, setStoreLimits] = useState<
+    Record<string, OzonStoreLimits | null | undefined>
+  >({});
+  const [storePickerVisible, setStorePickerVisible] = useState(false);
+  const [pendingPublishAction, setPendingPublishAction] = useState<
+    { type: "single"; book: Book } | { type: "bulk"; ids: string[] } | null
+  >(null);
 
   const exitSelectMode = useCallback(() => {
     setSelectMode(false);
@@ -120,8 +128,76 @@ export function PendingReviewScreen() {
   useFocusEffect(
     useCallback(() => {
       fetchBooks(1, "initial");
+      adminService
+        .getOzonStores()
+        .then(async ({ stores }) => {
+          setStores(stores);
+          // Load limits for each store in parallel; undefined = loading, null = failed
+          const entries = await Promise.all(
+            stores.map(async (store) => {
+              try {
+                const limits = await adminService.getOzonStoreLimits(store.id);
+                return [store.id, limits] as const;
+              } catch {
+                return [store.id, null] as const;
+              }
+            }),
+          );
+          setStoreLimits(Object.fromEntries(entries));
+        })
+        .catch(() => {});
     }, [fetchBooks]),
   );
+
+  const getLimitStatus = (storeId: string, count: number) => {
+    const limits = storeLimits[storeId];
+    if (limits === undefined)
+      return { blocked: false, label: "Загрузка...", warn: false };
+    if (limits === null)
+      return { blocked: false, label: "Лимиты недоступны", warn: false };
+
+    const totalRemaining =
+      limits.total.limit > 0 ? limits.total.limit - limits.total.usage : null;
+    const totalExhausted = totalRemaining !== null && totalRemaining <= 0;
+    const totalLine =
+      totalRemaining !== null
+        ? `Ассортимент: ${totalRemaining} / ${limits.total.limit} товаров`
+        : "Ассортимент: не ограничен";
+
+    if (totalExhausted) {
+      return { blocked: true, label: `${totalLine}`, warn: true };
+    }
+
+    if (limits.daily_create.limit > 0) {
+      const remaining = limits.daily_create.limit - limits.daily_create.usage;
+      const createLine = `Создание: ${remaining} / ${limits.daily_create.limit} сегодня`;
+      if (remaining <= 0) {
+        return {
+          blocked: true,
+          label: `${createLine}\n${totalLine}`,
+          warn: true,
+        };
+      }
+      if (remaining < count) {
+        return {
+          blocked: true,
+          label: `Недостаточно лимита: нужно ${count}, доступно ${remaining}\n${totalLine}`,
+          warn: true,
+        };
+      }
+      return {
+        blocked: false,
+        label: `${createLine}\n${totalLine}`,
+        warn: false,
+      };
+    }
+
+    return {
+      blocked: false,
+      label: `Создание: не ограничено\n${totalLine}`,
+      warn: false,
+    };
+  };
 
   const handleRefresh = () => {
     setRefreshing(true);
@@ -134,29 +210,65 @@ export function PendingReviewScreen() {
     }
   };
 
+  const executePublish = async (
+    action: { type: "single"; book: Book } | { type: "bulk"; ids: string[] },
+    storeId: string,
+  ) => {
+    if (action.type === "single") {
+      setPublishingId(action.book.id);
+      try {
+        await booksService.publishToOzon(action.book.id, storeId);
+        Alert.alert("Готово", "Карточка отправлена на модерацию Ozon");
+        setBooks((prev) => prev.filter((b) => b.id !== action.book.id));
+      } catch {
+        Alert.alert("Ошибка", "Не удалось загрузить в Озон");
+      } finally {
+        setPublishingId(null);
+      }
+    } else {
+      setBulkPublishing(true);
+      try {
+        const result = await booksService.publishBulkToOzon(
+          action.ids,
+          storeId,
+        );
+        setBooks((prev) => prev.filter((b) => !action.ids.includes(b.id)));
+        exitSelectMode();
+        if (result.failed > 0) {
+          Alert.alert(
+            "Готово с ошибками",
+            `Отправлено: ${result.succeeded}, не удалось: ${result.failed}`,
+          );
+        } else {
+          Alert.alert(
+            "Готово",
+            `${result.succeeded} книг отправлено на модерацию Ozon`,
+          );
+        }
+      } catch {
+        Alert.alert("Ошибка", "Не удалось загрузить книги в Озон");
+      } finally {
+        setBulkPublishing(false);
+      }
+    }
+  };
+
+  const initiatePublish = (
+    action: { type: "single"; book: Book } | { type: "bulk"; ids: string[] },
+  ) => {
+    if (stores.length === 0) {
+      Alert.alert(
+        "Нет магазинов",
+        "Добавьте магазин Ozon в настройках администратора.",
+      );
+      return;
+    }
+    setPendingPublishAction(action);
+    setStorePickerVisible(true);
+  };
+
   const handlePublish = (book: Book) => {
-    Alert.alert(
-      "Загрузить в Озон?",
-      `"${book.title}" будет опубликована на Озоне`,
-      [
-        { text: "Отмена", style: "cancel" },
-        {
-          text: "Загрузить",
-          onPress: async () => {
-            setPublishingId(book.id);
-            try {
-              await booksService.publishToOzon(book.id);
-              Alert.alert("Готово", "Карточка отправлена на модерацию Ozon");
-              setBooks((prev) => prev.filter((b) => b.id !== book.id));
-            } catch {
-              Alert.alert("Ошибка", "Не удалось загрузить в Озон");
-            } finally {
-              setPublishingId(null);
-            }
-          },
-        },
-      ],
-    );
+    initiatePublish({ type: "single", book });
   };
 
   type BookSection = {
@@ -203,40 +315,7 @@ export function PendingReviewScreen() {
 
   const handleBulkPublish = () => {
     if (selectedIds.size === 0) return;
-    Alert.alert(
-      "Загрузить в Озон?",
-      `Будет опубликовано ${selectedIds.size} книг`,
-      [
-        { text: "Отмена", style: "cancel" },
-        {
-          text: "Загрузить",
-          onPress: async () => {
-            setBulkPublishing(true);
-            const ids = Array.from(selectedIds);
-            const results = await Promise.allSettled(
-              ids.map((id) => booksService.publishToOzon(id)),
-            );
-            const failed = results.filter(
-              (r) => r.status === "rejected",
-            ).length;
-            setBooks((prev) => prev.filter((b) => !selectedIds.has(b.id)));
-            exitSelectMode();
-            setBulkPublishing(false);
-            if (failed > 0) {
-              Alert.alert(
-                "Готово с ошибками",
-                `Не удалось загрузить: ${failed} книг`,
-              );
-            } else {
-              Alert.alert(
-                "Готово",
-                `${ids.length} книг отправлено на модерацию Ozon`,
-              );
-            }
-          },
-        },
-      ],
-    );
+    initiatePublish({ type: "bulk", ids: Array.from(selectedIds) });
   };
 
   const renderItem = ({ item }: { item: Book }) => {
@@ -320,6 +399,81 @@ export function PendingReviewScreen() {
 
   return (
     <>
+      <Modal
+        visible={storePickerVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setStorePickerVisible(false)}
+      >
+        <TouchableWithoutFeedback onPress={() => setStorePickerVisible(false)}>
+          <View style={styles.menuOverlay}>
+            <TouchableWithoutFeedback>
+              <View style={styles.menuContainer}>
+                <Text style={styles.storePickerTitle}>
+                  Выберите магазин Ozon
+                </Text>
+                {stores.map((store) => {
+                  const count = pendingPublishAction
+                    ? pendingPublishAction.type === "single"
+                      ? 1
+                      : pendingPublishAction.ids.length
+                    : 1;
+                  const { blocked, label, warn } = getLimitStatus(
+                    store.id,
+                    count,
+                  );
+                  return (
+                    <TouchableOpacity
+                      key={store.id}
+                      style={[
+                        styles.menuItem,
+                        blocked && styles.storeItemBlocked,
+                      ]}
+                      activeOpacity={blocked ? 1 : 0.7}
+                      disabled={blocked}
+                      onPress={() => {
+                        setStorePickerVisible(false);
+                        if (pendingPublishAction) {
+                          const action = pendingPublishAction;
+                          setPendingPublishAction(null);
+                          Alert.alert(
+                            "Подтверждение",
+                            `Загрузить ${count} ${count === 1 ? "книгу" : "книг"} в магазин "${store.name}"?`,
+                            [
+                              { text: "Отмена", style: "cancel" },
+                              {
+                                text: "Загрузить",
+                                onPress: () => executePublish(action, store.id),
+                              },
+                            ],
+                          );
+                        }
+                      }}
+                    >
+                      <Text
+                        style={[
+                          styles.menuItemText,
+                          blocked && styles.storeItemBlockedText,
+                        ]}
+                      >
+                        {store.name}
+                      </Text>
+                      <Text
+                        style={[
+                          styles.storeItemClientId,
+                          warn && styles.storeItemLimitWarn,
+                        ]}
+                      >
+                        {label}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </TouchableWithoutFeedback>
+          </View>
+        </TouchableWithoutFeedback>
+      </Modal>
       <Modal
         visible={menuVisible}
         transparent
@@ -682,6 +836,39 @@ const styles = StyleSheet.create({
   bottomBarBtnText: {
     color: "#fff",
     fontSize: 14,
+    fontWeight: "600",
+  },
+  storePickerTitle: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#555",
+    paddingHorizontal: 16,
+    paddingTop: 14,
+    paddingBottom: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: "#F0F0F0",
+  },
+  storeItemActive: {
+    backgroundColor: "#E3F2FD",
+  },
+  storeItemActiveText: {
+    color: "#1976D2",
+    fontWeight: "700",
+  },
+  storeItemClientId: {
+    fontSize: 11,
+    color: "#aaa",
+    marginTop: 2,
+  },
+  storeItemBlocked: {
+    opacity: 0.5,
+    backgroundColor: "#fafafa",
+  },
+  storeItemBlockedText: {
+    color: "#aaa",
+  },
+  storeItemLimitWarn: {
+    color: "#E53935",
     fontWeight: "600",
   },
 });

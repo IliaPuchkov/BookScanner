@@ -7,12 +7,14 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { WorkSession } from './entities/work-session.entity';
+import { BoxesService } from '../boxes/boxes.service';
 
 @Injectable()
 export class WorkSessionsService {
   constructor(
     @InjectRepository(WorkSession)
     private readonly sessionRepository: Repository<WorkSession>,
+    private readonly boxesService: BoxesService,
   ) {}
 
   async startSession(userId: string): Promise<WorkSession> {
@@ -52,6 +54,8 @@ export class WorkSessionsService {
 
     session.status = 'completed';
     session.endedAt = new Date();
-    return this.sessionRepository.save(session);
+    const saved = await this.sessionRepository.save(session);
+    await this.boxesService.deleteEmptyBoxesForUser(session.userId);
+    return saved;
   }
 }

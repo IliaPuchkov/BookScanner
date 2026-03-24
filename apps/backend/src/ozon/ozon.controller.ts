@@ -16,6 +16,7 @@ import { randomUUID } from 'crypto';
 import { OzonService } from './ozon.service';
 import { OzonApiClient } from './ozon-api.client';
 import { PublishDto } from './dto/publish.dto';
+import { BulkPublishDto } from './dto/bulk-publish.dto';
 import { CreateOzonStoreDto, OzonStoreRecord, OzonStoreResponse } from './dto/ozon-store.dto';
 import { SettingsService } from '../settings/settings.service';
 import { EncryptionService } from '../common/encryption.service';
@@ -49,7 +50,14 @@ export class OzonController {
   @Roles(UserRole.ADMIN)
   @ApiOperation({ summary: 'Опубликовать карточку на Ozon' })
   publish(@Body() dto: PublishDto) {
-    return this.ozonService.publish(dto.bookId);
+    return this.ozonService.publish(dto.bookId, dto.storeId);
+  }
+
+  @Post('publish/bulk')
+  @Roles(UserRole.ADMIN)
+  @ApiOperation({ summary: 'Опубликовать несколько карточек на Ozon (батчами по 100)' })
+  publishBulk(@Body() dto: BulkPublishDto) {
+    return this.ozonService.publishBulk(dto.bookIds, dto.storeId);
   }
 
   @Post('check-status')
@@ -115,6 +123,29 @@ export class OzonController {
       apiKeyMasked: maskApiKey(dto.apiKey),
       isActive: newStore.id === activeId,
     };
+  }
+
+  @Get('stores/:id/limits')
+  @Roles(UserRole.ADMIN)
+  @ApiOperation({ summary: 'Лимиты магазина Ozon' })
+  async getStoreLimits(@Param('id') id: string) {
+    const stores = await this.settingsService.getValue<OzonStoreRecord[]>(OZON_STORES_KEY, []);
+    if (!stores.find((s) => s.id === id)) {
+      throw new BadRequestException('Магазин не найден');
+    }
+    return this.ozonApiClient.getProductLimits(id);
+  }
+
+  @Get('stores/:id/key-expiry')
+  @Roles(UserRole.ADMIN)
+  @ApiOperation({ summary: 'Дата истечения ключа API магазина Ozon' })
+  async getStoreKeyExpiry(@Param('id') id: string) {
+    const stores = await this.settingsService.getValue<OzonStoreRecord[]>(OZON_STORES_KEY, []);
+    if (!stores.find((s) => s.id === id)) {
+      throw new BadRequestException('Магазин не найден');
+    }
+    const expiresAt = await this.ozonApiClient.getApiKeyExpiry(id);
+    return { expiresAt };
   }
 
   @Delete('stores/:id')

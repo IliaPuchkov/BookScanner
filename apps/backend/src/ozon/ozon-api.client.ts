@@ -8,6 +8,12 @@ import type { OzonStoreRecord } from './dto/ozon-store.dto';
 const OZON_STORES_KEY = 'ozon_stores';
 const ACTIVE_STORE_KEY = 'active_ozon_store_id';
 
+export interface OzonProductLimits {
+  daily_create: { limit: number; reset_at: string; usage: number };
+  daily_update: { limit: number; reset_at: string; usage: number };
+  total: { limit: number; usage: number };
+}
+
 export interface OzonImportResult {
   task_id: number;
 }
@@ -78,8 +84,29 @@ export class OzonApiClient {
     return null;
   }
 
-  private async post<T>(endpoint: string, body: Record<string, unknown>): Promise<T> {
-    const credentials = await this.getCredentials();
+  async getCredentialsForStore(storeId: string): Promise<{ apiKey: string; clientId: string } | null> {
+    if (this.settingsService && this.encryptionService) {
+      try {
+        const stores = await this.settingsService.getValue<OzonStoreRecord[]>(OZON_STORES_KEY, []);
+        const store = stores.find((s) => s.id === storeId);
+        if (store?.apiKey && store?.clientId) {
+          return { apiKey: this.encryptionService.decrypt(store.apiKey), clientId: store.clientId };
+        }
+      } catch {
+        // fall through
+      }
+    }
+    return null;
+  }
+
+  private async post<T>(
+    endpoint: string,
+    body: Record<string, unknown>,
+    overrideCredentials?: { apiKey: string; clientId: string } | null,
+  ): Promise<T> {
+    const credentials = overrideCredentials !== undefined
+      ? overrideCredentials
+      : await this.getCredentials();
     if (!credentials) {
       throw new OzonApiError('Ozon API не настроен', 0, '');
     }
@@ -110,12 +137,31 @@ export class OzonApiClient {
     return res.json() as Promise<T>;
   }
 
-  async importProduct(payload: Record<string, unknown>): Promise<OzonImportResult> {
+  async importProduct(payload: Record<string, unknown>, storeId?: string): Promise<OzonImportResult> {
+    const credentials = storeId
+      ? await this.getCredentialsForStore(storeId)
+      : await this.getCredentials();
     const response = await this.post<{ result: OzonImportResult }>(
       '/v3/product/import',
       payload,
+      credentials,
     );
     return response.result;
+  }
+
+  async getApiKeyExpiry(storeId?: string): Promise<string | null> {
+    const credentials = storeId
+      ? await this.getCredentialsForStore(storeId)
+      : await this.getCredentials();
+    const response = await this.post<{ expires_at: string }>('/v1/roles', {}, credentials);
+    return response.expires_at ?? null;
+  }
+
+  async getProductLimits(storeId?: string): Promise<OzonProductLimits> {
+    const credentials = storeId
+      ? await this.getCredentialsForStore(storeId)
+      : await this.getCredentials();
+    return this.post<OzonProductLimits>('/v4/product/info/limit', {}, credentials);
   }
 
   async getImportInfo(taskId: number): Promise<OzonImportInfoItem[]> {

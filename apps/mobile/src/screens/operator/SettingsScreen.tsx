@@ -14,7 +14,7 @@ import {
 } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import { useAuth } from "../../hooks/useAuth";
-import { adminService, type OzonStore } from "../../services/admin.service";
+import { adminService, type OzonStore, type OzonStoreLimits } from "../../services/admin.service";
 
 const AI_PROMPT_KEY = "vision_ai_prompt";
 const MAX_PHOTOS_KEY = "max_photo_count";
@@ -39,14 +39,14 @@ export function SettingsScreen() {
 
   // Ozon stores
   const [ozonStores, setOzonStores] = useState<OzonStore[]>([]);
-  const [activeStoreId, setActiveStoreId] = useState("");
+  const [storeLimits, setStoreLimits] = useState<Record<string, OzonStoreLimits | null>>({});
+  const [storeKeyExpiry, setStoreKeyExpiry] = useState<Record<string, string | null>>({});
   const [loadingStores, setLoadingStores] = useState(false);
   const [addingStore, setAddingStore] = useState(false);
   const [savingStore, setSavingStore] = useState(false);
   const [draftStoreName, setDraftStoreName] = useState("");
   const [draftClientId, setDraftClientId] = useState("");
   const [draftApiKey, setDraftApiKey] = useState("");
-  const [activatingId, setActivatingId] = useState<string | null>(null);
 
   const [loadingSettings, setLoadingSettings] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -66,7 +66,30 @@ export function SettingsScreen() {
     try {
       const res = await adminService.getOzonStores();
       setOzonStores(res.stores);
-      setActiveStoreId(res.activeId);
+      const [limitsEntries, expiryEntries] = await Promise.all([
+        Promise.all(
+          res.stores.map(async (store) => {
+            try {
+              const limits = await adminService.getOzonStoreLimits(store.id);
+              return [store.id, limits] as const;
+            } catch {
+              return [store.id, null] as const;
+            }
+          }),
+        ),
+        Promise.all(
+          res.stores.map(async (store) => {
+            try {
+              const expiry = await adminService.getOzonStoreKeyExpiry(store.id);
+              return [store.id, expiry] as const;
+            } catch {
+              return [store.id, null] as const;
+            }
+          }),
+        ),
+      ]);
+      setStoreLimits(Object.fromEntries(limitsEntries));
+      setStoreKeyExpiry(Object.fromEntries(expiryEntries));
     } catch {
       // ignore
     } finally {
@@ -182,22 +205,6 @@ export function SettingsScreen() {
   };
 
   // Ozon store handlers
-  const handleActivateStore = async (id: string) => {
-    if (id === activeStoreId) return;
-    setActivatingId(id);
-    try {
-      await adminService.activateOzonStore(id);
-      setActiveStoreId(id);
-      setOzonStores((prev) =>
-        prev.map((s) => ({ ...s, isActive: s.id === id })),
-      );
-    } catch {
-      Alert.alert("Ошибка", "Не удалось выбрать магазин");
-    } finally {
-      setActivatingId(null);
-    }
-  };
-
   const handleDeleteStore = (store: OzonStore) => {
     Alert.alert(
       "Удалить магазин",
@@ -211,7 +218,6 @@ export function SettingsScreen() {
             try {
               await adminService.removeOzonStore(store.id);
               setOzonStores((prev) => prev.filter((s) => s.id !== store.id));
-              if (activeStoreId === store.id) setActiveStoreId("");
             } catch {
               Alert.alert("Ошибка", "Не удалось удалить магазин");
             }
@@ -311,7 +317,7 @@ export function SettingsScreen() {
                 <View style={{ flex: 1 }}>
                   <Text style={styles.sectionTitle}>Магазины Ozon</Text>
                   <Text style={styles.sectionDesc}>
-                    Выберите магазин, в который будут загружаться товары.
+                    Подключённые магазины. Выбор магазина происходит при загрузке товаров.
                   </Text>
                 </View>
               </View>
@@ -330,36 +336,47 @@ export function SettingsScreen() {
                   )}
 
                   {ozonStores.map((store) => {
-                    const isActive = store.id === activeStoreId;
-                    const isActivating = activatingId === store.id;
+                    const expiryStr = storeKeyExpiry[store.id];
+                    const expiryDate = expiryStr ? new Date(expiryStr) : null;
+                    const isExpired = expiryDate ? expiryDate < new Date() : false;
+                    const limits = storeLimits[store.id];
+                    const createExhausted =
+                      limits &&
+                      limits.daily_create.limit > 0 &&
+                      limits.daily_create.usage >= limits.daily_create.limit;
+                    const totalExhausted =
+                      limits &&
+                      limits.total.limit > 0 &&
+                      limits.total.usage >= limits.total.limit;
                     return (
                       <View key={store.id} style={styles.storeRow}>
-                        <TouchableOpacity
-                          style={styles.storeRadioBtn}
-                          onPress={() => handleActivateStore(store.id)}
-                          disabled={isActivating}
-                        >
-                          {isActivating ? (
-                            <ActivityIndicator size="small" color="#1976D2" />
-                          ) : (
-                            <View
-                              style={[
-                                styles.radioOuter,
-                                isActive && styles.radioOuterActive,
-                              ]}
-                            >
-                              {isActive && (
-                                <View style={styles.radioInner} />
-                              )}
-                            </View>
-                          )}
-                        </TouchableOpacity>
-
                         <View style={styles.storeInfo}>
                           <Text style={styles.storeName}>{store.name}</Text>
                           <Text style={styles.storeDetails}>
                             ID: {store.clientId} · Key: {store.apiKeyMasked}
                           </Text>
+                          {expiryDate !== null && (
+                            <Text style={[styles.storeExpiry, isExpired && styles.storeExpiryExpired]}>
+                              {isExpired
+                                ? "Просрочен"
+                                : `Активен до ${expiryDate.toLocaleDateString("ru-RU", { day: "2-digit", month: "2-digit", year: "numeric" })}`}
+                            </Text>
+                          )}
+                          {limits === undefined ? null : limits === null ? (
+                            <Text style={styles.limitsError}>Лимиты недоступны</Text>
+                          ) : (
+                            <View style={styles.limitsBlock}>
+                              <Text style={[styles.limitsRow, createExhausted && styles.limitsExhausted]}>
+                                Создание: {limits.daily_create.usage}/{limits.daily_create.limit > 0 ? limits.daily_create.limit : "∞"} сегодня
+                              </Text>
+                              <Text style={styles.limitsRow}>
+                                Обновление: {limits.daily_update.usage}/{limits.daily_update.limit > 0 ? limits.daily_update.limit : "∞"} сегодня
+                              </Text>
+                              <Text style={[styles.limitsRow, totalExhausted && styles.limitsExhausted]}>
+                                Ассортимент: {limits.total.usage}/{limits.total.limit > 0 ? limits.total.limit : "∞"}
+                              </Text>
+                            </View>
+                          )}
                         </View>
 
                         <TouchableOpacity
@@ -641,31 +658,6 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: "#F0F0F0",
   },
-  storeRadioBtn: {
-    width: 32,
-    height: 32,
-    alignItems: "center",
-    justifyContent: "center",
-    marginRight: 10,
-  },
-  radioOuter: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    borderWidth: 2,
-    borderColor: "#ccc",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  radioOuterActive: {
-    borderColor: "#1976D2",
-  },
-  radioInner: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: "#1976D2",
-  },
   storeInfo: {
     flex: 1,
   },
@@ -678,6 +670,34 @@ const styles = StyleSheet.create({
   storeDetails: {
     fontSize: 12,
     color: "#999",
+  },
+  storeExpiry: {
+    fontSize: 12,
+    color: "#43A047",
+    marginTop: 2,
+    fontWeight: "500",
+  },
+  storeExpiryExpired: {
+    color: "#E53935",
+    fontWeight: "700",
+  },
+  limitsBlock: {
+    marginTop: 6,
+    gap: 2,
+  },
+  limitsRow: {
+    fontSize: 12,
+    color: "#888",
+  },
+  limitsExhausted: {
+    color: "#E53935",
+    fontWeight: "600",
+  },
+  limitsError: {
+    fontSize: 12,
+    color: "#aaa",
+    marginTop: 4,
+    fontStyle: "italic",
   },
   storeDeleteBtn: {
     width: 32,
