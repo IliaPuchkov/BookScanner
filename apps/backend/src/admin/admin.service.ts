@@ -45,17 +45,17 @@ export class AdminService {
     miniPagination.page = 1;
     miniPagination.limit = 1;
 
-    const [cardsToday, cardsPeriod, perUserRaw, usersResult, booksResult, pendingReviewCount] = await Promise.all([
+    const [cardsToday, cardsPeriod, perUserRaw, usersResult, totalCards, pendingReviewCount] = await Promise.all([
       this.booksService.countCreatedSince(startOfToday),
       this.booksService.countCreatedSince(startOfPeriod),
       this.booksService.getPerUserBookCounts(startOfPeriod),
       this.usersService.findAll(miniPagination),
-      this.booksService.findAll('', UserRole.ADMIN, miniPagination),
+      this.booksService.countCreatedSince(),
       this.booksService.countPendingReview(),
     ]);
 
     return {
-      totalCards: booksResult.meta.total,
+      totalCards,
       totalUsers: usersResult.meta.total,
       cardsToday,
       cardsThisWeek: cardsPeriod,

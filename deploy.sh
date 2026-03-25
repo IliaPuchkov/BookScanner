@@ -28,15 +28,15 @@ ssh "$SSH_USER@$SERVER_IP" bash << EOF
   cd $REMOTE_DIR
 
   # Build and restart
-  docker compose -f docker/docker-compose.prod.yml build --no-cache backend
-  docker compose -f docker/docker-compose.prod.yml up -d
+  docker compose -f docker/docker-compose.prod.yml --env-file apps/backend/.env build --no-cache backend
+  docker compose -f docker/docker-compose.prod.yml --env-file apps/backend/.env up -d
 
   # Run migrations
-  docker compose -f docker/docker-compose.prod.yml exec backend \
+  docker compose -f docker/docker-compose.prod.yml --env-file apps/backend/.env exec backend \
     node dist/main migration:run || true
 
   echo "==> Done. Containers:"
-  docker compose -f docker/docker-compose.prod.yml ps
+  docker compose -f docker/docker-compose.prod.yml --env-file apps/backend/.env ps
 EOF
 
 echo "==> Deployed successfully!"

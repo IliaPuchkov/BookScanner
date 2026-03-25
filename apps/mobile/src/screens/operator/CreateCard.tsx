@@ -11,6 +11,7 @@ import {
 import { useRoute, type RouteProp } from "@react-navigation/native";
 import * as ImagePicker from "expo-image-picker";
 import { ImageManipulator, SaveFormat } from "expo-image-manipulator";
+import ImageCropPicker from "react-native-image-crop-picker";
 import { Input } from "../../components/Input";
 import { Button } from "../../components/Button";
 import { PhotoGrid } from "../../components/PhotoGrid";
@@ -91,33 +92,25 @@ export function CreateCardScreen() {
   };
 
   const handlePickPhotos = async () => {
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== "granted") {
-      Alert.alert("Ошибка", "Нужно разрешение на доступ к галерее");
-      return;
-    }
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ["images"],
-      allowsMultipleSelection: true,
-      quality: 0.8,
-      selectionLimit: 10 - photos.length,
-    });
-
-    if (!result.canceled) {
+    try {
+      const results = await ImageCropPicker.openPicker({
+        multiple: true,
+        maxFiles: 10 - photos.length,
+        mediaType: "photo",
+        compressImageQuality: 0.8,
+      });
       setPhotos((prev) => [
         ...prev,
-        ...result.assets.map((a) => ({ uri: a.uri })),
+        ...results.map((r) => ({ uri: r.path })),
       ]);
+    } catch (err: any) {
+      if (err?.code !== "E_PICKER_CANCELLED") {
+        Alert.alert("Ошибка", "Не удалось выбрать фото");
+      }
     }
   };
 
   const handleTakePhoto = async () => {
-    const { status } = await ImagePicker.requestCameraPermissionsAsync();
-    if (status !== "granted") {
-      Alert.alert("Ошибка", "Нужно разрешение на камеру");
-      return;
-    }
-
     const result = await ImagePicker.launchCameraAsync({
       quality: 0.8,
     });
@@ -135,6 +128,7 @@ export function CreateCardScreen() {
     const photo = photos[index];
     try {
       const ctx = ImageManipulator.manipulate(photo.uri);
+      ctx.resize({ width: 2000 });
       ctx.rotate(90);
       const rendered = await ctx.renderAsync();
       const saved = await rendered.saveAsync({ compress: 0.8, format: SaveFormat.JPEG });
@@ -145,11 +139,6 @@ export function CreateCardScreen() {
   };
 
   const handleRetakePhoto = async (index: number) => {
-    const { status } = await ImagePicker.requestCameraPermissionsAsync();
-    if (status !== 'granted') {
-      Alert.alert('Ошибка', 'Нужно разрешение на камеру');
-      return;
-    }
     const result = await ImagePicker.launchCameraAsync({ quality: 0.8 });
     if (!result.canceled) {
       setPhotos((prev) => prev.map((p, i) => (i === index ? { uri: result.assets[0].uri } : p)));
@@ -157,18 +146,21 @@ export function CreateCardScreen() {
   };
 
   const handleCropPhoto = async (index: number) => {
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== 'granted') {
-      Alert.alert('Ошибка', 'Нужно разрешение на доступ к галерее');
-      return;
-    }
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'],
-      allowsEditing: true,
-      quality: 0.8,
-    });
-    if (!result.canceled) {
-      setPhotos((prev) => prev.map((p, i) => (i === index ? { uri: result.assets[0].uri } : p)));
+    const photo = photos[index];
+    try {
+      const result = await ImageCropPicker.openCropper({
+        path: photo.uri,
+        mediaType: 'photo',
+        freeStyleCropEnabled: true,
+        cropping: true,
+        compressImageQuality: 0.8,
+        cropperToolbarTitle: 'Кадрировать',
+      });
+      setPhotos((prev) => prev.map((p, i) => (i === index ? { uri: result.path } : p)));
+    } catch (err: any) {
+      if (err?.code !== 'E_PICKER_CANCELLED') {
+        Alert.alert('Ошибка', 'Не удалось кадрировать фото');
+      }
     }
   };
 

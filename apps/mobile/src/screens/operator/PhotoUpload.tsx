@@ -3,6 +3,7 @@ import { View, StyleSheet, Alert, ActivityIndicator, Platform } from 'react-nati
 import { useRoute, type RouteProp } from '@react-navigation/native';
 import * as ImagePicker from 'expo-image-picker';
 import { ImageManipulator, SaveFormat } from 'expo-image-manipulator';
+import ImageCropPicker from 'react-native-image-crop-picker';
 import { PhotoGrid } from '../../components/PhotoGrid';
 import { LoadingOverlay } from '../../components/LoadingOverlay';
 import { booksService } from '../../services/books.service';
@@ -68,31 +69,23 @@ export function PhotoUploadScreen() {
   };
 
   const pickFromLibrary = async () => {
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== 'granted') {
-      Alert.alert('Ошибка', 'Нужно разрешение на доступ к галерее');
-      return;
-    }
     const remaining = maxPhotos - photos.length;
-    // Android: allowsMultipleSelection uses DocumentPicker (Files) instead of Gallery
-    const isAndroid = Platform.OS === 'android';
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'],
-      allowsMultipleSelection: !isAndroid,
-      quality: 0.8,
-      selectionLimit: isAndroid ? 1 : remaining,
-    });
-    if (!result.canceled && result.assets.length > 0) {
-      await uploadUris(result.assets.map((a) => a.uri));
+    try {
+      const results = await ImageCropPicker.openPicker({
+        multiple: true,
+        maxFiles: remaining,
+        mediaType: 'photo',
+        compressImageQuality: 0.8,
+      });
+      await uploadUris(results.map((r) => r.path));
+    } catch (err: any) {
+      if (err?.code !== 'E_PICKER_CANCELLED') {
+        Alert.alert('Ошибка', 'Не удалось выбрать фото');
+      }
     }
   };
 
   const pickFromCamera = async () => {
-    const { status } = await ImagePicker.requestCameraPermissionsAsync();
-    if (status !== 'granted') {
-      Alert.alert('Ошибка', 'Нужно разрешение на доступ к камере');
-      return;
-    }
     const result = await ImagePicker.launchCameraAsync({
       mediaTypes: ['images'],
       quality: 0.8,
@@ -115,11 +108,6 @@ export function PhotoUploadScreen() {
   };
 
   const handleRetakePhoto = async (index: number) => {
-    const { status } = await ImagePicker.requestCameraPermissionsAsync();
-    if (status !== 'granted') {
-      Alert.alert('Ошибка', 'Нужно разрешение на камеру');
-      return;
-    }
     const result = await ImagePicker.launchCameraAsync({
       mediaTypes: ['images'],
       quality: 0.8,
@@ -145,15 +133,36 @@ export function PhotoUploadScreen() {
     }
   };
 
-  const handleReplaceFromLibrary = async (index: number, allowsEditing = false) => {
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== 'granted') {
-      Alert.alert('Ошибка', 'Нужно разрешение на доступ к галерее');
-      return;
-    }
+  const handleCropPhoto = async (index: number) => {
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['images'],
-      allowsEditing,
+      allowsEditing: true,
+      quality: 0.8,
+    });
+    if (!result.canceled) {
+      setUploading(true);
+      try {
+        const photo = photos[index];
+        const newUri = result.assets[0].uri;
+        if (photo.id) {
+          const updated = await photosService.replacePhoto(bookId, photo.id, newUri);
+          setPhotos((prev) =>
+            prev.map((p, i) => (i === index ? { uri: updated.fileUrl, id: updated.id } : p)),
+          );
+        } else {
+          setPhotos((prev) => prev.map((p, i) => (i === index ? { ...p, uri: newUri } : p)));
+        }
+      } catch {
+        Alert.alert('Ошибка', 'Не удалось кадрировать фото');
+      } finally {
+        setUploading(false);
+      }
+    }
+  };
+
+  const handleReplaceFromLibrary = async (index: number) => {
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
       quality: 0.8,
     });
     if (!result.canceled) {
@@ -180,9 +189,9 @@ export function PhotoUploadScreen() {
   const handlePhotoPress = (index: number) => {
     Alert.alert('Действие с фото', undefined, [
       { text: 'Повернуть', onPress: () => handleRotate(index) },
-      { text: 'Кадрировать', onPress: () => handleReplaceFromLibrary(index, true) },
+      { text: 'Кадрировать', onPress: () => handleCropPhoto(index) },
       { text: 'Переснять', onPress: () => handleRetakePhoto(index) },
-      { text: 'Заменить из галереи', onPress: () => handleReplaceFromLibrary(index, false) },
+      { text: 'Заменить из галереи', onPress: () => handleReplaceFromLibrary(index) },
       { text: 'Удалить', style: 'destructive', onPress: () => handleRemove(index) },
       { text: 'Отмена', style: 'cancel' },
     ]);
@@ -193,6 +202,7 @@ export function PhotoUploadScreen() {
     setUploading(true);
     try {
       const ctx = ImageManipulator.manipulate(photo.uri);
+      ctx.resize({ width: 2000 });
       ctx.rotate(90);
       const rendered = await ctx.renderAsync();
       const saved = await rendered.saveAsync({ compress: 0.8, format: SaveFormat.JPEG });
