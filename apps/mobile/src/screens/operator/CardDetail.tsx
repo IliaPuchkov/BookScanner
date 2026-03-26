@@ -196,7 +196,7 @@ export function CardDetailScreen() {
                 key={photo.id}
                 source={{ uri: photo.fileUrl }}
                 style={styles.photo}
-                resizeMode="cover"
+                resizeMode="contain"
               />
             ))}
           </ScrollView>
@@ -352,10 +352,9 @@ export function CardDetailScreen() {
               <Button
                 title="Изменить фото"
                 onPress={() => navigation.navigate("PhotoUpload", { bookId })}
-                variant="secondary"
                 style={{ marginBottom: 10 }}
               />
-              <Button
+              {/* <Button
                 title="Повторное распознавание"
                 onPress={handleExtract}
                 loading={extracting}
@@ -366,7 +365,7 @@ export function CardDetailScreen() {
                 title="Редактировать"
                 onPress={() => setEditing(true)}
                 style={{ marginBottom: 10 }}
-              />
+              /> */}
               <Button title="Удалить" onPress={handleDelete} variant="danger" />
             </View>
           )}
@@ -426,11 +425,11 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   photoScroll: {
-    height: 250,
+    height: 450,
   },
   photo: {
     width: SCREEN_WIDTH,
-    height: 350,
+    height: 450,
   },
   content: {
     padding: 16,

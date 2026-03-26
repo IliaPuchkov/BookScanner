@@ -349,7 +349,7 @@ export function ProductDetailScreen() {
                 key={photo.id}
                 source={{ uri: photo.fileUrl }}
                 style={styles.photo}
-                resizeMode="cover"
+                resizeMode="contain"
               />
             ))}
           </ScrollView>
@@ -631,11 +631,11 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   photoScroll: {
-    height: 250,
+    height: 450,
   },
   photo: {
     width: SCREEN_WIDTH,
-    height: 250,
+    height: 450,
   },
   content: {
     padding: 16,
