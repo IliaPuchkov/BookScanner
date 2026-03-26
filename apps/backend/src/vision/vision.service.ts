@@ -144,9 +144,7 @@ export class VisionService {
         paperType: normalizePaperType(extractedData.paperType),
         coverType: normalizeCoverType(extractedData.coverType),
         pageCount: extractedData.pageCount,
-        price: await this.calculatePrice(
-          extractedData.price ? extractedData.price * 9 : undefined,
-        ), // Умножаем на 9, т.к. AI может недооценивать цену
+        price: await this.calculatePrice(extractedData.price ?? undefined),
         annotation: extractedData.annotation
           ? `${ANNOTATION_PREFIX}${extractedData.annotation}`
           : ANNOTATION_PREFIX.trim(),
@@ -173,19 +171,21 @@ export class VisionService {
   private async calculatePrice(
     aiPrice: number | undefined | null,
   ): Promise<number> {
-    const [priceDefault, priceMin, discountThreshold, discountPercent] =
+    const [priceDefault, priceMin, discountThreshold, discountPercent, multiplier] =
       await Promise.all([
         this.settingsService.getValue<number>("price_default", DEFAULT_PRICE),
         this.settingsService.getValue<number>("price_min", DEFAULT_LOWER_PRICE),
         this.settingsService.getValue<number>("price_discount_threshold", 1200),
         this.settingsService.getValue<number>("price_discount_percent", 15),
+        this.settingsService.getValue<number>("price_ai_multiplier", 9),
       ]);
 
     if (!aiPrice || aiPrice <= 0) return priceDefault;
-    if (aiPrice < priceMin) return priceMin;
-    if (aiPrice > discountThreshold)
-      return Math.round(aiPrice * (1 - discountPercent / 100));
-    return Math.round(aiPrice);
+    const adjusted = aiPrice * multiplier;
+    if (adjusted < priceMin) return priceMin;
+    if (adjusted > discountThreshold)
+      return Math.round(adjusted * (1 - discountPercent / 100));
+    return Math.round(adjusted);
   }
 
   async getOcrResult(bookId: string) {

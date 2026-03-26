@@ -24,6 +24,7 @@ const PRICE_DEFAULT_KEY = "price_default";
 const PRICE_MIN_KEY = "price_min";
 const PRICE_DISCOUNT_THRESHOLD_KEY = "price_discount_threshold";
 const PRICE_DISCOUNT_PERCENT_KEY = "price_discount_percent";
+const PRICE_AI_MULTIPLIER_KEY = "price_ai_multiplier";
 
 export function SettingsScreen() {
   const { user } = useAuth();
@@ -47,11 +48,13 @@ export function SettingsScreen() {
   const [priceMin, setPriceMin] = useState("1000");
   const [priceDiscountThreshold, setPriceDiscountThreshold] = useState("1200");
   const [priceDiscountPercent, setPriceDiscountPercent] = useState("15");
+  const [priceAiMultiplier, setPriceAiMultiplier] = useState("9");
   const [editingPrice, setEditingPrice] = useState(false);
   const [draftPriceDefault, setDraftPriceDefault] = useState("");
   const [draftPriceMin, setDraftPriceMin] = useState("");
   const [draftPriceDiscountThreshold, setDraftPriceDiscountThreshold] = useState("");
   const [draftPriceDiscountPercent, setDraftPriceDiscountPercent] = useState("");
+  const [draftPriceAiMultiplier, setDraftPriceAiMultiplier] = useState("");
   const [savingPrice, setSavingPrice] = useState(false);
 
   // Ozon stores
@@ -85,6 +88,8 @@ export function SettingsScreen() {
     if (pdt) setPriceDiscountThreshold(pdt.value);
     const pdp = settings.find((s) => s.key === PRICE_DISCOUNT_PERCENT_KEY);
     if (pdp) setPriceDiscountPercent(pdp.value);
+    const pam = settings.find((s) => s.key === PRICE_AI_MULTIPLIER_KEY);
+    if (pam) setPriceAiMultiplier(pam.value);
   };
 
   const loadStores = useCallback(async () => {
@@ -236,6 +241,7 @@ export function SettingsScreen() {
     setDraftPriceMin(priceMin);
     setDraftPriceDiscountThreshold(priceDiscountThreshold);
     setDraftPriceDiscountPercent(priceDiscountPercent);
+    setDraftPriceAiMultiplier(priceAiMultiplier);
     setEditingPrice(true);
   };
 
@@ -248,10 +254,12 @@ export function SettingsScreen() {
     const pm = parseInt(draftPriceMin, 10);
     const pdt = parseInt(draftPriceDiscountThreshold, 10);
     const pdp = parseInt(draftPriceDiscountPercent, 10);
+    const pam = parseFloat(draftPriceAiMultiplier);
     if (isNaN(pd) || pd <= 0) { Alert.alert("Ошибка", "Некорректная цена по умолчанию"); return; }
     if (isNaN(pm) || pm <= 0) { Alert.alert("Ошибка", "Некорректная минимальная цена"); return; }
     if (isNaN(pdt) || pdt <= 0) { Alert.alert("Ошибка", "Некорректный порог скидки"); return; }
     if (isNaN(pdp) || pdp < 0 || pdp > 100) { Alert.alert("Ошибка", "Процент скидки должен быть от 0 до 100"); return; }
+    if (isNaN(pam) || pam <= 0) { Alert.alert("Ошибка", "Коэффициент ИИ должен быть больше 0"); return; }
     setSavingPrice(true);
     try {
       await Promise.all([
@@ -259,11 +267,13 @@ export function SettingsScreen() {
         adminService.upsertSetting({ key: PRICE_MIN_KEY, value: String(pm), valueType: "number", description: "Минимальная цена книги" }),
         adminService.upsertSetting({ key: PRICE_DISCOUNT_THRESHOLD_KEY, value: String(pdt), valueType: "number", description: "Порог выше которого применяется скидка" }),
         adminService.upsertSetting({ key: PRICE_DISCOUNT_PERCENT_KEY, value: String(pdp), valueType: "number", description: "Процент скидки от цены ИИ" }),
+        adminService.upsertSetting({ key: PRICE_AI_MULTIPLIER_KEY, value: String(pam), valueType: "number", description: "Коэффициент умножения цены от ИИ (компенсация недооценки)" }),
       ]);
       setPriceDefault(String(pd));
       setPriceMin(String(pm));
       setPriceDiscountThreshold(String(pdt));
       setPriceDiscountPercent(String(pdp));
+      setPriceAiMultiplier(String(pam));
       setEditingPrice(false);
       Alert.alert("Готово", "Формула цены сохранена");
     } catch {
@@ -647,6 +657,16 @@ export function SettingsScreen() {
                       editable={!savingPrice}
                     />
                   </View>
+                  <View style={styles.priceRow}>
+                    <Text style={styles.priceLabel}>Коэффициент ИИ ×</Text>
+                    <TextInput
+                      style={styles.priceInput}
+                      value={draftPriceAiMultiplier}
+                      onChangeText={setDraftPriceAiMultiplier}
+                      keyboardType="decimal-pad"
+                      editable={!savingPrice}
+                    />
+                  </View>
                   <View style={styles.editActions}>
                     <TouchableOpacity
                       style={[styles.actionBtn, styles.cancelBtn]}
@@ -682,6 +702,9 @@ export function SettingsScreen() {
                     </Text>
                     <Text style={styles.priceFormulaLine}>
                       Иначе → <Text style={styles.priceFormulaValue}>цена без изменений</Text>
+                    </Text>
+                    <Text style={[styles.priceFormulaLine, { marginTop: 6 }]}>
+                      Коэффициент ИИ → <Text style={styles.priceFormulaValue}>×{priceAiMultiplier}</Text>
                     </Text>
                   </View>
                   <TouchableOpacity style={styles.editBtn} onPress={handleStartEditPrice}>

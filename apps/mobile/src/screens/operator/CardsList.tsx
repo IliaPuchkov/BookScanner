@@ -119,7 +119,13 @@ export function CardsListScreen() {
       if (!grouped[key]) grouped[key] = [];
       grouped[key].push(book);
     }
-    return Object.entries(grouped).map(([title, data]) => ({ title, data }));
+    return Object.entries(grouped)
+      .map(([title, data]) => ({
+        title,
+        data,
+        latestAt: Math.max(...data.map((b) => new Date(b.createdAt).getTime())),
+      }))
+      .sort((a, b) => b.latestAt - a.latestAt);
   }, [books]);
 
   const handleStartSession = async () => {
