@@ -23,7 +23,6 @@ import {
   DEFAULT_LOWER_PRICE,
 } from "@bookscanner/shared";
 
-
 function normalizePaperType(
   value: string | undefined | null,
 ): PaperType | undefined {
@@ -145,7 +144,9 @@ export class VisionService {
         paperType: normalizePaperType(extractedData.paperType),
         coverType: normalizeCoverType(extractedData.coverType),
         pageCount: extractedData.pageCount,
-        price: await this.calculatePrice(extractedData.price),
+        price: await this.calculatePrice(
+          extractedData.price ? extractedData.price * 9 : undefined,
+        ), // Умножаем на 9, т.к. AI может недооценивать цену
         annotation: extractedData.annotation
           ? `${ANNOTATION_PREFIX}${extractedData.annotation}`
           : ANNOTATION_PREFIX.trim(),
@@ -169,13 +170,15 @@ export class VisionService {
     }
   }
 
-  private async calculatePrice(aiPrice: number | undefined | null): Promise<number> {
+  private async calculatePrice(
+    aiPrice: number | undefined | null,
+  ): Promise<number> {
     const [priceDefault, priceMin, discountThreshold, discountPercent] =
       await Promise.all([
-        this.settingsService.getValue<number>('price_default', DEFAULT_PRICE),
-        this.settingsService.getValue<number>('price_min', DEFAULT_LOWER_PRICE),
-        this.settingsService.getValue<number>('price_discount_threshold', 1200),
-        this.settingsService.getValue<number>('price_discount_percent', 15),
+        this.settingsService.getValue<number>("price_default", DEFAULT_PRICE),
+        this.settingsService.getValue<number>("price_min", DEFAULT_LOWER_PRICE),
+        this.settingsService.getValue<number>("price_discount_threshold", 1200),
+        this.settingsService.getValue<number>("price_discount_percent", 15),
       ]);
 
     if (!aiPrice || aiPrice <= 0) return priceDefault;

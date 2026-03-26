@@ -11,8 +11,8 @@ const DEV_MACHINE_IP =
 const getBaseUrl = (): string => {
   if (__DEV__) {
     // Реальное устройство (iOS и Android) — IP компьютера из Expo
-    //return `http://${"192.168.1.185"}:3000/api`;
-    return "https://bookscanner.duckdns.org/api";
+    return `http://${"192.168.1.185"}:3000/api`;
+    //return "https://bookscanner.duckdns.org/api";
   }
 
   // Production URL — заменить на реальный адрес сервера
