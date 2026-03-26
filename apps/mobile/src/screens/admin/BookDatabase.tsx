@@ -9,7 +9,11 @@ import {
   ScrollView,
   ActivityIndicator,
 } from "react-native";
-import { useFocusEffect, useNavigation, useRoute } from "@react-navigation/native";
+import {
+  useFocusEffect,
+  useNavigation,
+  useRoute,
+} from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import type { RouteProp } from "@react-navigation/native";
 import { Input } from "../../components/Input";
@@ -240,7 +244,8 @@ export function BookDatabaseScreen() {
             <TouchableOpacity
               style={[
                 styles.chip,
-                filters.status === BookStatus.PENDING_REVIEW && styles.chipActive,
+                filters.status === BookStatus.PENDING_REVIEW &&
+                  styles.chipActive,
               ]}
               onPress={() =>
                 setFilters((f) => ({ ...f, status: BookStatus.PENDING_REVIEW }))
@@ -412,6 +417,7 @@ export function BookDatabaseScreen() {
               onPress={() =>
                 navigation.navigate("ProductDetail", { bookId: item.id })
               }
+              access="admin"
             />
           )}
           contentContainerStyle={styles.list}

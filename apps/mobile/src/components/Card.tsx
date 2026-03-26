@@ -1,33 +1,38 @@
-import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native';
-import { BookStatus } from '../types';
-import type { Book } from '../types';
+import React from "react";
+import { View, Text, StyleSheet, TouchableOpacity, Image } from "react-native";
+import { BookStatus } from "../types";
+import type { Book } from "../types";
 
 function formatDate(iso: string): string {
   const d = new Date(iso);
-  return d.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' });
+  return d.toLocaleDateString("ru-RU", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  });
 }
 
 interface Props {
   book: Book;
   onPress: () => void;
+  access?: string;
 }
 
 function getStatusConfig(status: BookStatus): { color: string; label: string } {
   switch (status) {
     case BookStatus.PUBLISHED:
-      return { color: '#43A047', label: 'Опубликовано' };
+      return { color: "#43A047", label: "Опубликовано" };
     case BookStatus.PENDING_PUBLICATION:
-      return { color: '#1976D2', label: 'Ожидает публикации' };
+      return { color: "#1976D2", label: "Ожидает публикации" };
     case BookStatus.PUBLICATION_FAILED:
-      return { color: '#E53935', label: 'Ошибка публикации' };
+      return { color: "#E53935", label: "Ошибка публикации" };
     case BookStatus.PENDING_REVIEW:
     default:
-      return { color: '#FB8C00', label: 'Ожидает подтверждения' };
+      return { color: "#FB8C00", label: "Ожидает подтверждения" };
   }
 }
 
-export function BookCard({ book, onPress }: Props) {
+export function BookCard({ book, onPress, access }: Props) {
   const coverPhoto = book.photos?.find((p) => p.sortOrder === 0);
   const statusConfig = getStatusConfig(book.status);
 
@@ -50,33 +55,32 @@ export function BookCard({ book, onPress }: Props) {
           </Text>
         ) : null}
         <Text style={styles.sku}>{book.sku}</Text>
-        {book.price != null && Number(book.price) > 0 && (
+        {book.price != null && Number(book.price) > 0 && access === "admin" && (
           <Text style={styles.price}>{Number(book.price).toFixed(0)} ₽</Text>
         )}
-        <View style={styles.statusBadge}>
-          <View
-            style={[
-              styles.statusDot,
-              { backgroundColor: statusConfig.color },
-            ]}
-          />
-          <Text
-            style={[
-              styles.statusText,
-              { color: statusConfig.color },
-            ]}
-          >
-            {statusConfig.label}
-          </Text>
-        </View>
-        <View style={styles.meta}>
-          {book.createdBy?.fullName ? (
-            <Text style={styles.metaText} numberOfLines={1}>
-              {book.createdBy.fullName}
+        {access === "admin" && (
+          <View style={styles.statusBadge}>
+            <View
+              style={[
+                styles.statusDot,
+                { backgroundColor: statusConfig.color },
+              ]}
+            />
+            <Text style={[styles.statusText, { color: statusConfig.color }]}>
+              {statusConfig.label}
             </Text>
-          ) : null}
-          <Text style={styles.metaText}>{formatDate(book.createdAt)}</Text>
-        </View>
+          </View>
+        )}
+        {access === "admin" && (
+          <View style={styles.meta}>
+            {book.createdBy?.fullName ? (
+              <Text style={styles.metaText} numberOfLines={1}>
+                {book.createdBy.fullName}
+              </Text>
+            ) : null}
+            <Text style={styles.metaText}>{formatDate(book.createdAt)}</Text>
+          </View>
+        )}
       </View>
     </TouchableOpacity>
   );
@@ -84,12 +88,12 @@ export function BookCard({ book, onPress }: Props) {
 
 const styles = StyleSheet.create({
   card: {
-    flexDirection: 'row',
-    backgroundColor: '#fff',
+    flexDirection: "row",
+    backgroundColor: "#fff",
     borderRadius: 12,
     marginBottom: 12,
     padding: 12,
-    shadowColor: '#000',
+    shadowColor: "#000",
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.08,
     shadowRadius: 4,
@@ -99,56 +103,57 @@ const styles = StyleSheet.create({
     width: 70,
     height: 100,
     borderRadius: 8,
-    backgroundColor: '#f0f0f0',
+    backgroundColor: "#f0f0f0",
   },
   placeholder: {
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
   },
   placeholderText: {
     fontSize: 10,
-    color: '#999',
+    color: "#999",
   },
   info: {
     flex: 1,
     marginLeft: 12,
-    justifyContent: 'center',
+    justifyContent: "center",
+    alignSelf: "flex-start",
   },
   title: {
     fontSize: 15,
-    fontWeight: '600',
-    color: '#222',
+    fontWeight: "600",
+    color: "#222",
     marginBottom: 2,
   },
   author: {
     fontSize: 13,
-    color: '#666',
+    color: "#666",
     marginBottom: 4,
   },
   sku: {
     fontSize: 12,
-    color: '#999',
+    color: "#999",
   },
   price: {
     fontSize: 14,
-    fontWeight: '700',
-    color: '#1976D2',
+    fontWeight: "700",
+    color: "#1976D2",
     marginTop: 4,
   },
   meta: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    justifyContent: "space-between",
     marginTop: 6,
     gap: 4,
   },
   metaText: {
     fontSize: 11,
-    color: '#aaa',
+    color: "#aaa",
     flexShrink: 1,
   },
   statusBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     marginTop: 4,
   },
   statusDot: {
