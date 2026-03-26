@@ -216,7 +216,7 @@ export function CardDetailScreen() {
           </View>
 
           {/* Editable fields */}
-          <View style={styles.fieldsBlock}>
+          {/* <View style={styles.fieldsBlock}>
             <Field
               label="Название"
               value={editing ? editTitle : book.title}
@@ -260,53 +260,54 @@ export function CardDetailScreen() {
               onChangeText={setEditPages}
               keyboardType="numeric"
               placeholder="Например: 320"
-            />
-            {/* Dimensions — split into 3 inputs when editing */}
-            {editing ? (
-              <View>
-                <Text style={styles.fieldLabel}>Размеры (мм)</Text>
-                <Text style={styles.fieldLabelDimNames}>
-                  Длина х Ширина х Высота
-                </Text>
-                <View style={styles.dimRow}>
-                  <TextInput
-                    style={[styles.input, { flex: 1 }]}
-                    value={editHeight}
-                    onChangeText={setEditHeight}
-                    keyboardType="numeric"
-                    placeholder="В"
-                    placeholderTextColor="#bbb"
-                  />
-                  <Text style={styles.dimSep}>×</Text>
-                  <TextInput
-                    style={[styles.input, { flex: 1 }]}
-                    value={editWidth}
-                    onChangeText={setEditWidth}
-                    keyboardType="numeric"
-                    placeholder="Ш"
-                    placeholderTextColor="#bbb"
-                  />
-                  <Text style={styles.dimSep}>×</Text>
+            /> */}
+          {/* Dimensions — split into 3 inputs when editing */}
+          {editing ? (
+            <View>
+              <Text style={styles.fieldLabel}>Размеры (мм)</Text>
+              <Text style={styles.fieldLabelDimNames}>
+                Длина х Ширина х Высота
+              </Text>
+              <View style={styles.dimRow}>
+                <TextInput
+                  style={[styles.input, { flex: 1 }]}
+                  value={editHeight}
+                  onChangeText={setEditHeight}
+                  keyboardType="numeric"
+                  placeholder="В"
+                  placeholderTextColor="#bbb"
+                />
+                <Text style={styles.dimSep}>×</Text>
+                <TextInput
+                  style={[styles.input, { flex: 1 }]}
+                  value={editWidth}
+                  onChangeText={setEditWidth}
+                  keyboardType="numeric"
+                  placeholder="Ш"
+                  placeholderTextColor="#bbb"
+                />
+                <Text style={styles.dimSep}>×</Text>
 
-                  <TextInput
-                    style={[styles.input, { flex: 1 }]}
-                    value={editDepth}
-                    onChangeText={setEditDepth}
-                    keyboardType="numeric"
-                    placeholder="Г"
-                    placeholderTextColor="#bbb"
-                  />
-                </View>
+                <TextInput
+                  style={[styles.input, { flex: 1 }]}
+                  value={editDepth}
+                  onChangeText={setEditDepth}
+                  keyboardType="numeric"
+                  placeholder="Г"
+                  placeholderTextColor="#bbb"
+                />
               </View>
-            ) : (
-              <Field
-                label="Размеры (Д×Ш×Г)"
-                value={dimValue}
-                editing={false}
-                onChangeText={() => {}}
-              />
-            )}
-            <Field
+            </View>
+          ) : (
+            <></>
+            // <Field
+            //   label="Размеры (Д×Ш×Г)"
+            //   value={dimValue}
+            //   editing={false}
+            //   onChangeText={() => {}}
+            // />
+          )}
+          {/* <Field
               label="Вес"
               value={
                 editing
@@ -329,7 +330,7 @@ export function CardDetailScreen() {
               placeholder="Например: русский"
               last
             />
-          </View>
+          </View> */}
 
           {/* Action buttons */}
           {editing ? (
@@ -366,7 +367,11 @@ export function CardDetailScreen() {
                 onPress={() => setEditing(true)}
                 style={{ marginBottom: 10 }}
               /> */}
-              <Button title="Удалить" onPress={handleDelete} variant="danger" />
+              <Button
+                title="Удалить карточку"
+                onPress={handleDelete}
+                variant="danger"
+              />
             </View>
           )}
         </View>
@@ -426,6 +431,7 @@ const styles = StyleSheet.create({
   },
   photoScroll: {
     height: 450,
+    backgroundColor: "#f5f5f5",
   },
   photo: {
     width: SCREEN_WIDTH,

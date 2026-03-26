@@ -632,6 +632,7 @@ const styles = StyleSheet.create({
   },
   photoScroll: {
     height: 450,
+    backgroundColor: "#f5f5f5",
   },
   photo: {
     width: SCREEN_WIDTH,
