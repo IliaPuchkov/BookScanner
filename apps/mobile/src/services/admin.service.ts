@@ -104,9 +104,21 @@ export const adminService = {
     return data;
   },
 
-  async getPendingReviewBooks(page = 1, limit = 10): Promise<PaginatedResponse<Book>> {
+  async getPendingReviewBooks(page = 1, limit = 20, boxId?: string): Promise<PaginatedResponse<Book>> {
     const { data } = await api.get<PaginatedResponse<Book>>('/admin/books/pending-review', {
-      params: { page, limit },
+      params: { page, limit, ...(boxId ? { boxId } : {}) },
+    });
+    return data;
+  },
+
+  async getPendingReviewCountsByBox(): Promise<Array<{ boxId: string; boxNumber: string; count: number }>> {
+    const { data } = await api.get('/admin/books/pending-review/counts-by-box');
+    return data;
+  },
+
+  async getPendingReviewIds(boxId: string): Promise<string[]> {
+    const { data } = await api.get<string[]>('/admin/books/pending-review/ids', {
+      params: { boxId },
     });
     return data;
   },

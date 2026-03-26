@@ -1,4 +1,4 @@
-import { Controller, Post, Body, UseGuards } from '@nestjs/common';
+import { Controller, Post, Get, Param, Body, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { VisionService } from './vision.service';
 import { ExtractDto } from './dto/extract.dto';
@@ -16,6 +16,12 @@ export class VisionController {
   @ApiOperation({ summary: 'Извлечь данные из фотографий книги' })
   extract(@Body() dto: ExtractDto) {
     return this.visionService.extractBookData(dto.bookId);
+  }
+
+  @Get('result/:bookId')
+  @ApiOperation({ summary: 'Получить OCR результат для книги' })
+  getResult(@Param('bookId') bookId: string) {
+    return this.visionService.getOcrResult(bookId);
   }
 
   @Post('isbn-lookup')

@@ -98,6 +98,10 @@ export function StatisticsScreen() {
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Пользователи</Text>
         <View style={styles.statsRow}>
+          <StatCell label="Админов" value={stats?.totalAdmins ?? 0} color="#43A047" />
+          <View style={styles.cellDivider} />
+          <StatCell label="Фотографов" value={stats?.totalOperators ?? 0} color="#43A047" />
+          <View style={styles.cellDivider} />
           <StatCell label="Всего" value={stats?.totalUsers ?? 0} color="#43A047" />
         </View>
       </View>

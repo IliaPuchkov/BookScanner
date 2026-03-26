@@ -61,7 +61,7 @@ export function LoginScreen() {
       >
         <View style={styles.header}>
           <Image
-            source={require("../../media/images/logos/jolly-book-logo.jpg")}
+            source={require("../../media/images/logos/jolly-book-logo.png")}
             style={styles.logo}
             resizeMode="contain"
           />

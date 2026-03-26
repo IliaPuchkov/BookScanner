@@ -144,6 +144,20 @@ export function DashboardScreen() {
         <View style={styles.statsRow}>
           <View style={styles.statItem}>
             <Text style={[styles.statValue, { color: "#43A047" }]}>
+              {stats?.totalAdmins?.toString() ?? "—"}
+            </Text>
+            <Text style={styles.statLabel}>Админов</Text>
+          </View>
+          <View style={styles.statDivider} />
+          <View style={styles.statItem}>
+            <Text style={[styles.statValue, { color: "#43A047" }]}>
+              {stats?.totalOperators?.toString() ?? "—"}
+            </Text>
+            <Text style={styles.statLabel}>Фотографов</Text>
+          </View>
+          <View style={styles.statDivider} />
+          <View style={styles.statItem}>
+            <Text style={[styles.statValue, { color: "#43A047" }]}>
               {stats?.totalUsers?.toString() ?? "—"}
             </Text>
             <Text style={styles.statLabel}>Всего</Text>

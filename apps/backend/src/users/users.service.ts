@@ -10,7 +10,7 @@ import { User } from './entities/user.entity';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { PaginationDto } from '../common/dto/pagination.dto';
-import { BCRYPT_ROUNDS } from '@bookscanner/shared';
+import { BCRYPT_ROUNDS, UserRole } from '@bookscanner/shared';
 
 @Injectable()
 export class UsersService {
@@ -90,6 +90,10 @@ export class UsersService {
   async remove(id: string): Promise<void> {
     const user = await this.findById(id);
     await this.usersRepository.remove(user);
+  }
+
+  async countByRole(role: UserRole): Promise<number> {
+    return this.usersRepository.count({ where: { role } });
   }
 
   async updateRefreshToken(id: string, hashedToken: string | null): Promise<void> {

@@ -2,7 +2,7 @@ import Constants from "expo-constants";
 
 // IP компьютера в локальной сети.
 // Expo автоматически подставляет адрес девсервера через hostUri.
-// Если не работает — замени на статический IP вручную (например "192.168.1.100").
+// Если не работает — заменить на статический IP вручную (например "192.168.1.100").
 const DEV_MACHINE_IP =
   Constants.expoConfig?.hostUri?.split(":")[0] ??
   Constants.manifest2?.extra?.expoGo?.debuggerHost?.split(":")[0] ??

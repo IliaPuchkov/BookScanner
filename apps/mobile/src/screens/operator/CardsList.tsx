@@ -30,6 +30,7 @@ export function CardsListScreen() {
   const [hasMore, setHasMore] = useState(true);
   const [totalCount, setTotalCount] = useState(0);
   const [starting, setStarting] = useState(false);
+  const [boxCounts, setBoxCounts] = useState<Record<string, number>>({});
 
   const fetchActiveSession = useCallback(async () => {
     try {
@@ -40,6 +41,17 @@ export function CardsListScreen() {
     } catch {
       setSession(null);
       return null;
+    }
+  }, []);
+
+  const fetchBoxCounts = useCallback(async (sessionId: string) => {
+    try {
+      const counts = await booksService.getBookCountsByBox(sessionId);
+      const map: Record<string, number> = {};
+      counts.forEach((c) => { map[c.boxId] = c.count; });
+      setBoxCounts(map);
+    } catch {
+      // silent
     }
   }, []);
 
@@ -72,12 +84,13 @@ export function CardsListScreen() {
       fetchActiveSession().then((active) => {
         if (active) {
           fetchBooks(active.id, 1, true).finally(() => setLoading(false));
+          fetchBoxCounts(active.id);
         } else {
           setBooks([]);
           setLoading(false);
         }
       });
-    }, [fetchActiveSession, fetchBooks]),
+    }, [fetchActiveSession, fetchBooks, fetchBoxCounts]),
   );
 
   const onRefresh = async () => {
@@ -85,6 +98,7 @@ export function CardsListScreen() {
     const active = await fetchActiveSession();
     if (active) {
       await fetchBooks(active.id, 1, true);
+      fetchBoxCounts(active.id);
     } else {
       setBooks([]);
     }
@@ -217,16 +231,20 @@ export function CardsListScreen() {
             }
           />
         )}
-        renderSectionHeader={({ section }) => (
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionHeaderText}>
-              📦 Коробка {section.title}
-            </Text>
-            <Text style={styles.sectionHeaderCount}>
-              {section.data.length} шт.
-            </Text>
-          </View>
-        )}
+        renderSectionHeader={({ section }) => {
+          const boxId = section.data[0]?.boxId;
+          const count = boxId ? (boxCounts[boxId] ?? section.data.length) : section.data.length;
+          return (
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionHeaderText}>
+                📦 Коробка {section.title}
+              </Text>
+              <Text style={styles.sectionHeaderCount}>
+                {count} шт.
+              </Text>
+            </View>
+          );
+        }}
         contentContainerStyle={styles.list}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />

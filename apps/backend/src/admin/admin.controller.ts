@@ -66,10 +66,24 @@ export class AdminController {
   }
 
   // Pending review
+  @Get('books/pending-review/counts-by-box')
+  @ApiOperation({ summary: 'Количество карточек в ожидании проверки по коробкам' })
+  getPendingReviewCountsByBox() {
+    return this.adminService.getPendingReviewCountsByBox();
+  }
+
+  @Get('books/pending-review/ids')
+  @ApiOperation({ summary: 'ID всех карточек в ожидании проверки (опционально по коробке)' })
+  @ApiQuery({ name: 'boxId', required: false })
+  getPendingReviewIds(@Query('boxId') boxId?: string) {
+    return this.adminService.getPendingReviewIds(boxId);
+  }
+
   @Get('books/pending-review')
   @ApiOperation({ summary: 'Карточки ожидающие проверки' })
-  getPendingReviewBooks(@Query() pagination: PaginationDto) {
-    return this.adminService.getPendingReviewBooks(pagination);
+  @ApiQuery({ name: 'boxId', required: false })
+  getPendingReviewBooks(@Query() pagination: PaginationDto, @Query('boxId') boxId?: string) {
+    return this.adminService.getPendingReviewBooks(pagination, boxId);
   }
 
   // Book database

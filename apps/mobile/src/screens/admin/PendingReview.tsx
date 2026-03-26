@@ -40,6 +40,10 @@ export function PendingReviewScreen() {
   const [storeLimits, setStoreLimits] = useState<
     Record<string, OzonStoreLimits | null | undefined>
   >({});
+  // boxId -> actual total count of pending review books
+  const [boxCounts, setBoxCounts] = useState<Record<string, number>>({});
+  // boxId -> all book IDs (fetched when user clicks "Выбрать всё" for a box with unloaded books)
+  const [boxAllIds, setBoxAllIds] = useState<Record<string, string[]>>({});
   const [storePickerVisible, setStorePickerVisible] = useState(false);
   const [pendingPublishAction, setPendingPublishAction] = useState<
     { type: "single"; book: Book } | { type: "bulk"; ids: string[] } | null
@@ -129,6 +133,16 @@ export function PendingReviewScreen() {
     useCallback(() => {
       fetchBooks(1, "initial");
       adminService
+        .getPendingReviewCountsByBox()
+        .then((counts) => {
+          const map: Record<string, number> = {};
+          counts.forEach((c) => {
+            map[c.boxId] = c.count;
+          });
+          setBoxCounts(map);
+        })
+        .catch(() => {});
+      adminService
         .getOzonStores()
         .then(async ({ stores }) => {
           setStores(stores);
@@ -161,7 +175,7 @@ export function PendingReviewScreen() {
     const totalExhausted = totalRemaining !== null && totalRemaining <= 0;
     const totalLine =
       totalRemaining !== null
-        ? `Ассортимент: ${totalRemaining} / ${limits.total.limit} товаров`
+        ? `Ассортимент: ${totalRemaining} / ${limits.total.limit} осталось мест`
         : "Ассортимент: не ограничен";
 
     if (totalExhausted) {
@@ -201,7 +215,18 @@ export function PendingReviewScreen() {
 
   const handleRefresh = () => {
     setRefreshing(true);
+    setBoxAllIds({});
     fetchBooks(1, "refresh");
+    adminService
+      .getPendingReviewCountsByBox()
+      .then((counts) => {
+        const map: Record<string, number> = {};
+        counts.forEach((c) => {
+          map[c.boxId] = c.count;
+        });
+        setBoxCounts(map);
+      })
+      .catch(() => {});
   };
 
   const handleLoadMore = () => {
@@ -302,16 +327,55 @@ export function PendingReviewScreen() {
     });
   }, []);
 
-  const toggleSelectBox = useCallback((sectionBooks: Book[]) => {
-    const ids = sectionBooks.map((b) => b.id);
-    setSelectedIds((prev) => {
-      const allSelected = ids.every((id) => prev.has(id));
-      const next = new Set(prev);
-      if (allSelected) ids.forEach((id) => next.delete(id));
-      else ids.forEach((id) => next.add(id));
-      return next;
-    });
-  }, []);
+  const toggleSelectBox = useCallback(
+    async (sectionBooks: Book[]) => {
+      const boxId = sectionBooks[0]?.boxId;
+      const loadedIds = sectionBooks.map((b) => b.id);
+      const cachedIds = boxId ? boxAllIds[boxId] : undefined;
+      const idsToCheck = cachedIds ?? loadedIds;
+      const allSelected =
+        idsToCheck.length > 0 && idsToCheck.every((id) => selectedIds.has(id));
+
+      if (allSelected) {
+        setSelectedIds((prev) => {
+          const next = new Set(prev);
+          idsToCheck.forEach((id) => next.delete(id));
+          return next;
+        });
+        return;
+      }
+
+      const actualCount = boxId
+        ? (boxCounts[boxId] ?? loadedIds.length)
+        : loadedIds.length;
+
+      if (!boxId || loadedIds.length >= actualCount || cachedIds) {
+        const toAdd = cachedIds ?? loadedIds;
+        setSelectedIds((prev) => {
+          const next = new Set(prev);
+          toAdd.forEach((id) => next.add(id));
+          return next;
+        });
+      } else {
+        try {
+          const allIds = await adminService.getPendingReviewIds(boxId);
+          setBoxAllIds((prev) => ({ ...prev, [boxId]: allIds }));
+          setSelectedIds((prev) => {
+            const next = new Set(prev);
+            allIds.forEach((id) => next.add(id));
+            return next;
+          });
+        } catch {
+          setSelectedIds((prev) => {
+            const next = new Set(prev);
+            loadedIds.forEach((id) => next.add(id));
+            return next;
+          });
+        }
+      }
+    },
+    [selectedIds, boxCounts, boxAllIds],
+  );
 
   const handleBulkPublish = () => {
     if (selectedIds.size === 0) return;
@@ -506,7 +570,15 @@ export function PendingReviewScreen() {
         renderItem={renderItem}
         renderSectionHeader={({ section }) => {
           const s = section as BookSection;
-          const allSelected = s.data.every((b) => selectedIds.has(b.id));
+          const firstBoxId = s.data[0]?.boxId;
+          const cachedIds = firstBoxId ? boxAllIds[firstBoxId] : undefined;
+          const idsToCheck = cachedIds ?? s.data.map((b) => b.id);
+          const allSelected =
+            idsToCheck.length > 0 &&
+            idsToCheck.every((id) => selectedIds.has(id));
+          const sectionCount = firstBoxId
+            ? (boxCounts[firstBoxId] ?? s.data.length)
+            : s.data.length;
           return (
             <View style={styles.sectionHeader}>
               <View style={styles.sectionHeaderLeft}>
@@ -547,7 +619,7 @@ export function PendingReviewScreen() {
                 </TouchableOpacity>
               ) : (
                 <Text style={styles.sectionHeaderCount}>
-                  {s.data.length} шт.
+                  {sectionCount} шт.
                 </Text>
               )}
             </View>
@@ -559,7 +631,7 @@ export function PendingReviewScreen() {
         }
         onEndReached={handleLoadMore}
         onEndReachedThreshold={0.3}
-        stickySectionHeadersEnabled={false}
+        stickySectionHeadersEnabled={true}
         ListEmptyComponent={
           <Text style={styles.empty}>Нет карточек ожидающих проверки</Text>
         }
@@ -698,6 +770,7 @@ const styles = StyleSheet.create({
     fontSize: 15,
   },
   sectionHeader: {
+    backgroundColor: "#F5F5F5",
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",

@@ -20,6 +20,11 @@ const AI_PROMPT_KEY = "vision_ai_prompt";
 const MAX_PHOTOS_KEY = "max_photo_count";
 const DEFAULT_MAX_PHOTOS = 10;
 
+const PRICE_DEFAULT_KEY = "price_default";
+const PRICE_MIN_KEY = "price_min";
+const PRICE_DISCOUNT_THRESHOLD_KEY = "price_discount_threshold";
+const PRICE_DISCOUNT_PERCENT_KEY = "price_discount_percent";
+
 export function SettingsScreen() {
   const { user } = useAuth();
   const navigation = useNavigation<any>();
@@ -36,6 +41,18 @@ export function SettingsScreen() {
   const [editingMaxPhotos, setEditingMaxPhotos] = useState(false);
   const [draftMaxPhotos, setDraftMaxPhotos] = useState("");
   const [savingMaxPhotos, setSavingMaxPhotos] = useState(false);
+
+  // Price formula
+  const [priceDefault, setPriceDefault] = useState("20000");
+  const [priceMin, setPriceMin] = useState("1000");
+  const [priceDiscountThreshold, setPriceDiscountThreshold] = useState("1200");
+  const [priceDiscountPercent, setPriceDiscountPercent] = useState("15");
+  const [editingPrice, setEditingPrice] = useState(false);
+  const [draftPriceDefault, setDraftPriceDefault] = useState("");
+  const [draftPriceMin, setDraftPriceMin] = useState("");
+  const [draftPriceDiscountThreshold, setDraftPriceDiscountThreshold] = useState("");
+  const [draftPriceDiscountPercent, setDraftPriceDiscountPercent] = useState("");
+  const [savingPrice, setSavingPrice] = useState(false);
 
   // Ozon stores
   const [ozonStores, setOzonStores] = useState<OzonStore[]>([]);
@@ -59,6 +76,15 @@ export function SettingsScreen() {
 
     const maxP = settings.find((s) => s.key === MAX_PHOTOS_KEY);
     if (maxP) setMaxPhotos(parseInt(maxP.value, 10) || DEFAULT_MAX_PHOTOS);
+
+    const pd = settings.find((s) => s.key === PRICE_DEFAULT_KEY);
+    if (pd) setPriceDefault(pd.value);
+    const pm = settings.find((s) => s.key === PRICE_MIN_KEY);
+    if (pm) setPriceMin(pm.value);
+    const pdt = settings.find((s) => s.key === PRICE_DISCOUNT_THRESHOLD_KEY);
+    if (pdt) setPriceDiscountThreshold(pdt.value);
+    const pdp = settings.find((s) => s.key === PRICE_DISCOUNT_PERCENT_KEY);
+    if (pdp) setPriceDiscountPercent(pdp.value);
   };
 
   const loadStores = useCallback(async () => {
@@ -201,6 +227,49 @@ export function SettingsScreen() {
       Alert.alert("Ошибка", "Не удалось сохранить настройку");
     } finally {
       setSavingMaxPhotos(false);
+    }
+  };
+
+  // Price formula handlers
+  const handleStartEditPrice = () => {
+    setDraftPriceDefault(priceDefault);
+    setDraftPriceMin(priceMin);
+    setDraftPriceDiscountThreshold(priceDiscountThreshold);
+    setDraftPriceDiscountPercent(priceDiscountPercent);
+    setEditingPrice(true);
+  };
+
+  const handleCancelPrice = () => {
+    setEditingPrice(false);
+  };
+
+  const handleSavePrice = async () => {
+    const pd = parseInt(draftPriceDefault, 10);
+    const pm = parseInt(draftPriceMin, 10);
+    const pdt = parseInt(draftPriceDiscountThreshold, 10);
+    const pdp = parseInt(draftPriceDiscountPercent, 10);
+    if (isNaN(pd) || pd <= 0) { Alert.alert("Ошибка", "Некорректная цена по умолчанию"); return; }
+    if (isNaN(pm) || pm <= 0) { Alert.alert("Ошибка", "Некорректная минимальная цена"); return; }
+    if (isNaN(pdt) || pdt <= 0) { Alert.alert("Ошибка", "Некорректный порог скидки"); return; }
+    if (isNaN(pdp) || pdp < 0 || pdp > 100) { Alert.alert("Ошибка", "Процент скидки должен быть от 0 до 100"); return; }
+    setSavingPrice(true);
+    try {
+      await Promise.all([
+        adminService.upsertSetting({ key: PRICE_DEFAULT_KEY, value: String(pd), valueType: "number", description: "Цена книги если ИИ не смог определить цену" }),
+        adminService.upsertSetting({ key: PRICE_MIN_KEY, value: String(pm), valueType: "number", description: "Минимальная цена книги" }),
+        adminService.upsertSetting({ key: PRICE_DISCOUNT_THRESHOLD_KEY, value: String(pdt), valueType: "number", description: "Порог выше которого применяется скидка" }),
+        adminService.upsertSetting({ key: PRICE_DISCOUNT_PERCENT_KEY, value: String(pdp), valueType: "number", description: "Процент скидки от цены ИИ" }),
+      ]);
+      setPriceDefault(String(pd));
+      setPriceMin(String(pm));
+      setPriceDiscountThreshold(String(pdt));
+      setPriceDiscountPercent(String(pdp));
+      setEditingPrice(false);
+      Alert.alert("Готово", "Формула цены сохранена");
+    } catch {
+      Alert.alert("Ошибка", "Не удалось сохранить настройки цены");
+    } finally {
+      setSavingPrice(false);
     }
   };
 
@@ -525,6 +594,103 @@ export function SettingsScreen() {
               )}
             </View>
 
+            {/* Price formula setting */}
+            <View style={styles.card}>
+              <View style={styles.sectionHeader}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.sectionTitle}>Формула расчёта цены</Text>
+                  <Text style={styles.sectionDesc}>
+                    Параметры по которым рассчитывается итоговая цена на основе данных от ИИ.
+                  </Text>
+                </View>
+              </View>
+
+              {editingPrice ? (
+                <>
+                  <View style={styles.priceRow}>
+                    <Text style={styles.priceLabel}>Цена не найдена (₽)</Text>
+                    <TextInput
+                      style={styles.priceInput}
+                      value={draftPriceDefault}
+                      onChangeText={setDraftPriceDefault}
+                      keyboardType="number-pad"
+                      editable={!savingPrice}
+                    />
+                  </View>
+                  <View style={styles.priceRow}>
+                    <Text style={styles.priceLabel}>Минимальная цена (₽)</Text>
+                    <TextInput
+                      style={styles.priceInput}
+                      value={draftPriceMin}
+                      onChangeText={setDraftPriceMin}
+                      keyboardType="number-pad"
+                      editable={!savingPrice}
+                    />
+                  </View>
+                  <View style={styles.priceRow}>
+                    <Text style={styles.priceLabel}>Порог скидки (₽)</Text>
+                    <TextInput
+                      style={styles.priceInput}
+                      value={draftPriceDiscountThreshold}
+                      onChangeText={setDraftPriceDiscountThreshold}
+                      keyboardType="number-pad"
+                      editable={!savingPrice}
+                    />
+                  </View>
+                  <View style={styles.priceRow}>
+                    <Text style={styles.priceLabel}>Скидка выше порога (%)</Text>
+                    <TextInput
+                      style={styles.priceInput}
+                      value={draftPriceDiscountPercent}
+                      onChangeText={setDraftPriceDiscountPercent}
+                      keyboardType="number-pad"
+                      editable={!savingPrice}
+                    />
+                  </View>
+                  <View style={styles.editActions}>
+                    <TouchableOpacity
+                      style={[styles.actionBtn, styles.cancelBtn]}
+                      onPress={handleCancelPrice}
+                      disabled={savingPrice}
+                    >
+                      <Text style={styles.cancelBtnText}>Отмена</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.actionBtn, styles.saveBtn, savingPrice && styles.disabledBtn]}
+                      onPress={handleSavePrice}
+                      disabled={savingPrice}
+                    >
+                      {savingPrice ? (
+                        <ActivityIndicator size="small" color="#fff" />
+                      ) : (
+                        <Text style={styles.saveBtnText}>Сохранить</Text>
+                      )}
+                    </TouchableOpacity>
+                  </View>
+                </>
+              ) : (
+                <>
+                  <View style={styles.priceFormulaBox}>
+                    <Text style={styles.priceFormulaLine}>
+                      Цена не найдена → <Text style={styles.priceFormulaValue}>{priceDefault} ₽</Text>
+                    </Text>
+                    <Text style={styles.priceFormulaLine}>
+                      Цена &lt; {priceMin} ₽ → <Text style={styles.priceFormulaValue}>{priceMin} ₽</Text>
+                    </Text>
+                    <Text style={styles.priceFormulaLine}>
+                      Цена &gt; {priceDiscountThreshold} ₽ → <Text style={styles.priceFormulaValue}>цена − {priceDiscountPercent}%</Text>
+                    </Text>
+                    <Text style={styles.priceFormulaLine}>
+                      Иначе → <Text style={styles.priceFormulaValue}>цена без изменений</Text>
+                    </Text>
+                  </View>
+                  <TouchableOpacity style={styles.editBtn} onPress={handleStartEditPrice}>
+                    <Text style={styles.editBtnText}>Изменить</Text>
+                  </TouchableOpacity>
+                </>
+              )}
+            </View>
+
             {/* AI prompt setting */}
             <View style={styles.card}>
               <View style={styles.sectionHeader}>
@@ -845,5 +1011,47 @@ const styles = StyleSheet.create({
     fontSize: 22,
     color: "#ccc",
     fontWeight: "300",
+  },
+  priceFormulaBox: {
+    alignSelf: "stretch",
+    backgroundColor: "#F5F7FA",
+    borderRadius: 10,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: "#E8ECF0",
+    gap: 6,
+  },
+  priceFormulaLine: {
+    fontSize: 14,
+    color: "#555",
+  },
+  priceFormulaValue: {
+    fontWeight: "700",
+    color: "#1976D2",
+  },
+  priceRow: {
+    flexDirection: "row",
+    alignSelf: "stretch",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 10,
+  },
+  priceLabel: {
+    fontSize: 14,
+    color: "#555",
+    flex: 1,
+  },
+  priceInput: {
+    width: 100,
+    height: 40,
+    borderWidth: 1.5,
+    borderColor: "#1976D2",
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    fontSize: 15,
+    fontWeight: "600",
+    color: "#222",
+    backgroundColor: "#FAFAFA",
+    textAlign: "center",
   },
 });

@@ -18,7 +18,6 @@ import { PhotoGrid } from "../../components/PhotoGrid";
 import { LoadingOverlay } from "../../components/LoadingOverlay";
 import { booksService } from "../../services/books.service";
 import { boxesService } from "../../services/boxes.service";
-import { photosService } from "../../services/photos.service";
 import { visionService } from "../../services/vision.service";
 import { sessionStore } from "../../utils/sessionStore";
 import type { Box } from "../../types";
@@ -188,17 +187,10 @@ export function CreateCardScreen() {
     }
 
     setLoading(true);
-    setLoadingMessage("Создание карточки...");
+    setLoadingMessage("Создание карточки и загрузка фотографий...");
     try {
-      const book = await booksService.createBook({
-        title: "Новая книга",
-        boxId: selectedBoxId,
-        workSessionId: sessionId,
-      });
-
-      setLoadingMessage("Загрузка фотографий...");
-      await photosService.uploadPhotos(
-        book.id,
+      const book = await booksService.createBookWithPhotos(
+        { title: "Новая книга", boxId: selectedBoxId, workSessionId: sessionId },
         photos.map((p) => p.uri),
       );
 

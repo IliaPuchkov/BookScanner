@@ -7,15 +7,17 @@ import {
   ManyToOne,
   OneToMany,
   JoinColumn,
+  Unique,
 } from 'typeorm';
 import { User } from '../../users/entities/user.entity';
 
 @Entity('boxes')
+@Unique(['boxNumber', 'createdById'])
 export class Box {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Column({ unique: true })
+  @Column()
   boxNumber: string;
 
   @Column({ nullable: true })

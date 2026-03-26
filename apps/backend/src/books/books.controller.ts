@@ -8,9 +8,13 @@ import {
   Param,
   Query,
   UseGuards,
+  UseInterceptors,
+  UploadedFiles,
   ParseUUIDPipe,
 } from '@nestjs/common';
-import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
+import { FilesInterceptor } from '@nestjs/platform-express';
+import { MAX_PHOTOS_PER_BOOK, MAX_FILE_SIZE_BYTES } from '@bookscanner/shared';
+import { ApiTags, ApiBearerAuth, ApiOperation, ApiConsumes } from '@nestjs/swagger';
 import { BooksService } from './books.service';
 import { CreateBookDto } from './dto/create-book.dto';
 import { UpdateBookDto } from './dto/update-book.dto';
@@ -32,6 +36,26 @@ export class BooksController {
     return this.booksService.create(dto, user.id);
   }
 
+  @Post('create-with-photos')
+  @ApiOperation({ summary: 'Создать карточку книги вместе с фотографиями (атомарно)' })
+  @ApiConsumes('multipart/form-data')
+  @UseInterceptors(
+    FilesInterceptor('files', MAX_PHOTOS_PER_BOOK, {
+      limits: { fileSize: MAX_FILE_SIZE_BYTES },
+    }),
+  )
+  createWithPhotos(
+    @Body() body: { title: string; boxId: string; workSessionId?: string },
+    @UploadedFiles() files: Express.Multer.File[],
+    @CurrentUser() user: User,
+  ) {
+    return this.booksService.createWithPhotos(
+      { title: body.title, boxId: body.boxId, workSessionId: body.workSessionId },
+      files,
+      user.id,
+    );
+  }
+
   @Get()
   @ApiOperation({ summary: 'Список книг' })
   findAll(
@@ -42,6 +66,15 @@ export class BooksController {
       user.id, user.role, query, query.boxId, query.search,
       undefined, undefined, undefined, query.workSessionId, query.status,
     );
+  }
+
+  @Get('counts-by-box')
+  @ApiOperation({ summary: 'Количество книг по коробкам' })
+  countByBox(
+    @Query('workSessionId') workSessionId: string,
+    @CurrentUser() user: User,
+  ) {
+    return this.booksService.countByBox(user.id, user.role, workSessionId);
   }
 
   @Get(':id')

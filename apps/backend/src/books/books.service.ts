@@ -2,6 +2,7 @@ import {
   Injectable,
   NotFoundException,
   ForbiddenException,
+  BadRequestException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -174,6 +175,60 @@ export class BooksService {
       .getCount();
   }
 
+  async countPendingReviewByBox(): Promise<Array<{ boxId: string; boxNumber: string; count: number }>> {
+    const raw = await this.booksRepository
+      .createQueryBuilder('book')
+      .innerJoin('book.box', 'box')
+      .leftJoin('book.workSession', 'workSession')
+      .select('box.id', 'boxId')
+      .addSelect('box.boxNumber', 'boxNumber')
+      .addSelect('COUNT(*)', 'count')
+      .where('book.status = :status', { status: BookStatus.PENDING_REVIEW })
+      .andWhere("(book.work_session_id IS NULL OR workSession.status = 'completed')")
+      .groupBy('box.id')
+      .addGroupBy('box.boxNumber')
+      .getRawMany();
+    return raw.map((r) => ({ boxId: r.boxId, boxNumber: r.boxNumber, count: parseInt(r.count, 10) }));
+  }
+
+  async getPendingReviewIds(boxId?: string): Promise<string[]> {
+    const qb = this.booksRepository
+      .createQueryBuilder('book')
+      .leftJoin('book.workSession', 'workSession')
+      .select('book.id')
+      .where('book.status = :status', { status: BookStatus.PENDING_REVIEW })
+      .andWhere("(book.work_session_id IS NULL OR workSession.status = 'completed')");
+
+    if (boxId) {
+      qb.andWhere('book.box_id = :boxId', { boxId });
+    }
+
+    const books = await qb.getMany();
+    return books.map((b) => b.id);
+  }
+
+  async countByBox(userId: string, role: UserRole, workSessionId?: string): Promise<Array<{ boxId: string; boxNumber: string; count: number }>> {
+    const qb = this.booksRepository
+      .createQueryBuilder('book')
+      .innerJoin('book.box', 'box')
+      .select('box.id', 'boxId')
+      .addSelect('box.boxNumber', 'boxNumber')
+      .addSelect('COUNT(*)', 'count')
+      .groupBy('box.id')
+      .addGroupBy('box.boxNumber');
+
+    if (role !== UserRole.ADMIN) {
+      qb.where('book.created_by = :userId', { userId });
+    }
+
+    if (workSessionId) {
+      qb.andWhere('book.work_session_id = :workSessionId', { workSessionId });
+    }
+
+    const raw = await qb.getRawMany();
+    return raw.map((r) => ({ boxId: r.boxId, boxNumber: r.boxNumber, count: parseInt(r.count, 10) }));
+  }
+
   async findOne(id: string): Promise<Book> {
     const book = await this.booksRepository.findOne({
       where: { id },
@@ -199,6 +254,30 @@ export class BooksService {
     if (Object.keys(clean).length > 0) {
       await this.booksRepository.update(id, clean as any);
     }
+  }
+
+  async createWithPhotos(
+    dto: CreateBookDto,
+    files: Express.Multer.File[],
+    userId: string,
+  ): Promise<Book> {
+    if (!files || files.length < 2) {
+      throw new BadRequestException(
+        'Необходимо минимум 2 фотографии (обложка и страница с информацией)',
+      );
+    }
+
+    const book = await this.create(dto, userId);
+
+    try {
+      await this.photosService.upload(book.id, files);
+    } catch (err) {
+      await this.photosService.deleteAllForBook(book.id).catch(() => {});
+      await this.booksRepository.remove(book);
+      throw err;
+    }
+
+    return this.findOne(book.id);
   }
 
   async remove(id: string, userId: string, role: UserRole): Promise<void> {

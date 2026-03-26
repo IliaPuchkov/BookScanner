@@ -110,6 +110,8 @@ export interface PaginatedResponse<T> {
 export interface StatsSummary {
   totalCards: number;
   totalUsers: number;
+  totalAdmins: number;
+  totalOperators: number;
   cardsToday: number;
   cardsThisWeek: number;
   pendingReviewCount: number;

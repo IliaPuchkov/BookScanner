@@ -24,7 +24,7 @@ export class BoxesService {
 
   async create(dto: CreateBoxDto, userId: string): Promise<Box> {
     const existing = await this.boxesRepository.findOne({
-      where: { boxNumber: dto.boxNumber },
+      where: { boxNumber: dto.boxNumber, createdById: userId },
     });
     if (existing) {
       throw new ConflictException('Коробка с таким номером уже существует');

@@ -20,6 +20,7 @@ import {
 import { type NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { Button } from "../../components/Button";
 import { booksService } from "../../services/books.service";
+import { visionService } from "../../services/vision.service";
 import type { Book, UpdateBookDto } from "../../types";
 import { BookStatus } from "../../types";
 import type { AdminMainStackParamList } from "../../navigation/AdminNavigator";
@@ -115,11 +116,13 @@ export function ProductDetailScreen() {
   const editable = (route.params as { editable?: boolean }).editable ?? false;
 
   const [book, setBook] = useState<Book | null>(null);
+  const [aiPrice, setAiPrice] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [publishing, setPublishing] = useState(false);
   const [checkingStatus, setCheckingStatus] = useState(false);
+  const [reExtracting, setReExtracting] = useState(false);
 
   // Edit fields
   const [editTitle, setEditTitle] = useState("");
@@ -137,11 +140,15 @@ export function ProductDetailScreen() {
   const [editHashtags, setEditHashtags] = useState("");
 
   useEffect(() => {
-    booksService
-      .getBook(bookId)
-      .then((b) => {
+    Promise.all([
+      booksService.getBook(bookId),
+      visionService.getResult(bookId).catch(() => null),
+    ])
+      .then(([b, ocr]) => {
         setBook(b);
         populateEditFields(b);
+        const raw = ocr?.extractedData?.price;
+        setAiPrice(typeof raw === "number" ? raw : null);
       })
       .catch(() => Alert.alert("Ошибка", "Не удалось загрузить карточку"))
       .finally(() => setLoading(false));
@@ -245,6 +252,39 @@ export function ProductDetailScreen() {
     } finally {
       setCheckingStatus(false);
     }
+  };
+
+  const handleReExtract = async () => {
+    if (!book) return;
+    Alert.alert(
+      "Повторное распознавание?",
+      "ИИ заново обработает фотографии и перезапишет данные карточки",
+      [
+        { text: "Отмена", style: "cancel" },
+        {
+          text: "Распознать",
+          onPress: async () => {
+            setReExtracting(true);
+            try {
+              await visionService.extract(book.id);
+              const [updated, freshOcr] = await Promise.all([
+                booksService.getBook(bookId),
+                visionService.getResult(bookId).catch(() => null),
+              ]);
+              setBook(updated);
+              populateEditFields(updated);
+              const raw = freshOcr?.extractedData?.price;
+              setAiPrice(typeof raw === "number" ? raw : null);
+              Alert.alert("Готово", "Данные обновлены из фотографий");
+            } catch {
+              Alert.alert("Ошибка", "Не удалось выполнить распознавание");
+            } finally {
+              setReExtracting(false);
+            }
+          },
+        },
+      ],
+    );
   };
 
   const handleDelete = () => {
@@ -446,6 +486,10 @@ export function ProductDetailScreen() {
                 <InfoRow label="Размеры (ДxШxВ)" value={ozon.dimString} />
                 <InfoRow label="Вес" value={`${ozon.weight} г`} />
                 <InfoRow
+                  label="Рекомендованная цена от ИИ"
+                  value={aiPrice != null ? formatPrice(aiPrice) : undefined}
+                />
+                <InfoRow
                   label="Цена"
                   value={ozon.price > 0 ? formatPrice(ozon.price) : undefined}
                 />
@@ -493,6 +537,12 @@ export function ProductDetailScreen() {
                     style={{ marginBottom: 8 }}
                   />
                 )}
+                <Button
+                  title="Распознать заново"
+                  onPress={handleReExtract}
+                  loading={reExtracting}
+                  style={{ marginBottom: 8 }}
+                />
                 {(book.status === BookStatus.PENDING_REVIEW ||
                   book.status === BookStatus.PUBLICATION_FAILED) && (
                   <Button

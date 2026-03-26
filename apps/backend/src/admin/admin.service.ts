@@ -45,18 +45,22 @@ export class AdminService {
     miniPagination.page = 1;
     miniPagination.limit = 1;
 
-    const [cardsToday, cardsPeriod, perUserRaw, usersResult, totalCards, pendingReviewCount] = await Promise.all([
+    const [cardsToday, cardsPeriod, perUserRaw, usersResult, totalCards, pendingReviewCount, totalAdmins, totalOperators] = await Promise.all([
       this.booksService.countCreatedSince(startOfToday),
       this.booksService.countCreatedSince(startOfPeriod),
       this.booksService.getPerUserBookCounts(startOfPeriod),
       this.usersService.findAll(miniPagination),
       this.booksService.countCreatedSince(),
       this.booksService.countPendingReview(),
+      this.usersService.countByRole(UserRole.ADMIN),
+      this.usersService.countByRole(UserRole.OPERATOR),
     ]);
 
     return {
       totalCards,
       totalUsers: usersResult.meta.total,
+      totalAdmins,
+      totalOperators,
       cardsToday,
       cardsThisWeek: cardsPeriod,
       pendingReviewCount,
@@ -74,7 +78,15 @@ export class AdminService {
     return this.booksService.findAll('', UserRole.ADMIN, pagination as PaginationDto, boxId, search, createdById, dateFrom, dateTo, undefined, status);
   }
 
-  async getPendingReviewBooks(pagination: PaginationDto) {
-    return this.booksService.findAll('', UserRole.ADMIN, pagination, undefined, undefined, undefined, undefined, undefined, undefined, BookStatus.PENDING_REVIEW);
+  async getPendingReviewBooks(pagination: PaginationDto, boxId?: string) {
+    return this.booksService.findAll('', UserRole.ADMIN, pagination, boxId, undefined, undefined, undefined, undefined, undefined, BookStatus.PENDING_REVIEW);
+  }
+
+  async getPendingReviewCountsByBox() {
+    return this.booksService.countPendingReviewByBox();
+  }
+
+  async getPendingReviewIds(boxId?: string) {
+    return this.booksService.getPendingReviewIds(boxId);
   }
 }

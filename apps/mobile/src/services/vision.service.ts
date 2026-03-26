@@ -7,6 +7,11 @@ export const visionService = {
     return data;
   },
 
+  async getResult(bookId: string): Promise<OcrResult | null> {
+    const { data } = await api.get<OcrResult | null>(`/vision/result/${bookId}`);
+    return data;
+  },
+
   async isbnLookup(isbn: string) {
     const { data } = await api.post('/vision/isbn-lookup', { isbn });
     return data;

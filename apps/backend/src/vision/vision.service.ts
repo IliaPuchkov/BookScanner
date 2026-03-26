@@ -23,12 +23,6 @@ import {
   DEFAULT_LOWER_PRICE,
 } from "@bookscanner/shared";
 
-function calculatePrice(aiPrice: number | undefined | null): number {
-  if (!aiPrice || aiPrice <= 0) return DEFAULT_PRICE;
-  if (aiPrice < DEFAULT_LOWER_PRICE) return DEFAULT_LOWER_PRICE;
-  if (aiPrice > 1200) return Math.round(aiPrice * 0.85);
-  return Math.round(aiPrice);
-}
 
 function normalizePaperType(
   value: string | undefined | null,
@@ -89,7 +83,7 @@ export class VisionService {
       }
 
       const prompt = await this.settingsService.getValue<string>(
-        "ocr_prompt",
+        "vision_ai_prompt",
         this.getDefaultPrompt(),
       );
 
@@ -151,7 +145,7 @@ export class VisionService {
         paperType: normalizePaperType(extractedData.paperType),
         coverType: normalizeCoverType(extractedData.coverType),
         pageCount: extractedData.pageCount,
-        price: calculatePrice(extractedData.price),
+        price: await this.calculatePrice(extractedData.price),
         annotation: extractedData.annotation
           ? `${ANNOTATION_PREFIX}${extractedData.annotation}`
           : ANNOTATION_PREFIX.trim(),
@@ -173,6 +167,26 @@ export class VisionService {
       }
       throw error;
     }
+  }
+
+  private async calculatePrice(aiPrice: number | undefined | null): Promise<number> {
+    const [priceDefault, priceMin, discountThreshold, discountPercent] =
+      await Promise.all([
+        this.settingsService.getValue<number>('price_default', DEFAULT_PRICE),
+        this.settingsService.getValue<number>('price_min', DEFAULT_LOWER_PRICE),
+        this.settingsService.getValue<number>('price_discount_threshold', 1200),
+        this.settingsService.getValue<number>('price_discount_percent', 15),
+      ]);
+
+    if (!aiPrice || aiPrice <= 0) return priceDefault;
+    if (aiPrice < priceMin) return priceMin;
+    if (aiPrice > discountThreshold)
+      return Math.round(aiPrice * (1 - discountPercent / 100));
+    return Math.round(aiPrice);
+  }
+
+  async getOcrResult(bookId: string) {
+    return this.ocrResultRepository.findOne({ where: { bookId } });
   }
 
   async isbnLookup(isbn: string) {
