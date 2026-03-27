@@ -417,7 +417,7 @@ export function BookDatabaseScreen() {
               onPress={() =>
                 navigation.navigate("ProductDetail", { bookId: item.id })
               }
-              access="admin"
+              userRole="admin"
             />
           )}
           contentContainerStyle={styles.list}

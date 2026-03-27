@@ -22,6 +22,7 @@ export type AdminMainStackParamList = {
   BookDatabase: { filterStatus?: string } | undefined;
   PendingReview: undefined;
   ProductDetail: { bookId: string; editable?: boolean };
+  PhotoUpload: { bookId: string };
 };
 
 export type AdminCardCreationParamList = {
@@ -87,6 +88,11 @@ function MainStackScreen() {
         name="ProductDetail"
         component={ProductDetailScreen}
         options={{ title: "Товар" }}
+      />
+      <MainStack.Screen
+        name="PhotoUpload"
+        component={PhotoUploadScreen}
+        options={{ title: "Фото" }}
       />
     </MainStack.Navigator>
   );

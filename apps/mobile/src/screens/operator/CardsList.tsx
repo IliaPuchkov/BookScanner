@@ -17,6 +17,7 @@ import { sessionsService } from "../../services/sessions.service";
 import { sessionStore } from "../../utils/sessionStore";
 import type { Book, WorkSession, PaginatedResponse } from "../../types";
 import type { OperatorStackParamList } from "../../navigation/OperatorNavigator";
+import { useAuth } from "../../hooks/useAuth";
 
 type Nav = NativeStackNavigationProp<OperatorStackParamList, "CardsList">;
 
@@ -31,6 +32,7 @@ export function CardsListScreen() {
   const [totalCount, setTotalCount] = useState(0);
   const [starting, setStarting] = useState(false);
   const [boxCounts, setBoxCounts] = useState<Record<string, number>>({});
+  const { user } = useAuth();
 
   const fetchActiveSession = useCallback(async () => {
     try {
@@ -48,7 +50,9 @@ export function CardsListScreen() {
     try {
       const counts = await booksService.getBookCountsByBox(sessionId);
       const map: Record<string, number> = {};
-      counts.forEach((c) => { map[c.boxId] = c.count; });
+      counts.forEach((c) => {
+        map[c.boxId] = c.count;
+      });
       setBoxCounts(map);
     } catch {
       // silent
@@ -235,19 +239,20 @@ export function CardsListScreen() {
             onPress={() =>
               navigation.navigate("CardDetail", { bookId: item.id })
             }
+            userRole={user?.role}
           />
         )}
         renderSectionHeader={({ section }) => {
           const boxId = section.data[0]?.boxId;
-          const count = boxId ? (boxCounts[boxId] ?? section.data.length) : section.data.length;
+          const count = boxId
+            ? (boxCounts[boxId] ?? section.data.length)
+            : section.data.length;
           return (
             <View style={styles.sectionHeader}>
               <Text style={styles.sectionHeaderText}>
                 📦 Коробка {section.title}
               </Text>
-              <Text style={styles.sectionHeaderCount}>
-                {count} шт.
-              </Text>
+              <Text style={styles.sectionHeaderCount}>{count} шт.</Text>
             </View>
           );
         }}

@@ -17,6 +17,7 @@ import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { adminService } from "../../services/admin.service";
 import type { OzonStore, OzonStoreLimits } from "../../services/admin.service";
 import { booksService } from "../../services/books.service";
+import { visionService } from "../../services/vision.service";
 import type { Book } from "../../types";
 import type { AdminMainStackParamList } from "../../navigation/AdminNavigator";
 import { formatDate } from "../../utils/format";
@@ -36,6 +37,9 @@ export function PendingReviewScreen() {
   const [selectMode, setSelectMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkPublishing, setBulkPublishing] = useState(false);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
+  const [bulkReExtracting, setBulkReExtracting] = useState(false);
+  const [bulkActionsVisible, setBulkActionsVisible] = useState(false);
   const [stores, setStores] = useState<OzonStore[]>([]);
   const [storeLimits, setStoreLimits] = useState<
     Record<string, OzonStoreLimits | null | undefined>
@@ -382,6 +386,86 @@ export function PendingReviewScreen() {
     initiatePublish({ type: "bulk", ids: Array.from(selectedIds) });
   };
 
+  const handleBulkDelete = () => {
+    if (selectedIds.size === 0) return;
+    const ids = Array.from(selectedIds);
+    const n = ids.length;
+    Alert.alert(
+      "Удалить карточки?",
+      `Будет безвозвратно удалено ${n} ${n === 1 ? "карточка" : n < 5 ? "карточки" : "карточек"}. Это действие необратимо.`,
+      [
+        { text: "Отмена", style: "cancel" },
+        {
+          text: "Удалить",
+          style: "destructive",
+          onPress: async () => {
+            setBulkDeleting(true);
+            try {
+              const results = await Promise.allSettled(
+                ids.map((id) => booksService.deleteBook(id)),
+              );
+              const failed = results.filter((r) => r.status === "rejected").length;
+              const succeeded = results.length - failed;
+              setBooks((prev) => prev.filter((b) => !ids.includes(b.id)));
+              exitSelectMode();
+              if (failed > 0) {
+                Alert.alert(
+                  "Готово с ошибками",
+                  `Удалено: ${succeeded}, не удалось: ${failed}`,
+                );
+              } else {
+                Alert.alert("Готово", `Удалено ${succeeded} карточек`);
+              }
+            } catch {
+              Alert.alert("Ошибка", "Не удалось выполнить удаление");
+            } finally {
+              setBulkDeleting(false);
+            }
+          },
+        },
+      ],
+    );
+  };
+
+  const handleBulkReExtract = () => {
+    if (selectedIds.size === 0) return;
+    const ids = Array.from(selectedIds);
+    const n = ids.length;
+    Alert.alert(
+      "Повторное распознавание?",
+      `ИИ заново обработает фотографии ${n} ${n === 1 ? "карточки" : n < 5 ? "карточек" : "карточек"} и перезапишет данные.`,
+      [
+        { text: "Отмена", style: "cancel" },
+        {
+          text: "Распознать",
+          onPress: async () => {
+            setBulkReExtracting(true);
+            try {
+              const results = await Promise.allSettled(
+                ids.map((id) => visionService.extract(id)),
+              );
+              const failed = results.filter((r) => r.status === "rejected").length;
+              const succeeded = results.length - failed;
+              exitSelectMode();
+              if (failed > 0) {
+                Alert.alert(
+                  "Готово с ошибками",
+                  `Распознано: ${succeeded}, не удалось: ${failed}`,
+                );
+              } else {
+                Alert.alert("Готово", `Распознано ${succeeded} карточек`);
+              }
+            } catch {
+              Alert.alert("Ошибка", "Не удалось выполнить распознавание");
+            } finally {
+              setBulkReExtracting(false);
+            }
+          },
+        },
+      ],
+    );
+  };
+
   const renderItem = ({ item }: { item: Book }) => {
     const coverPhoto = item.photos?.find((p) => p.sortOrder === 0);
     const isPublishing = publishingId === item.id;
@@ -645,23 +729,96 @@ export function PendingReviewScreen() {
           ) : null
         }
       />
+      <Modal
+        visible={bulkActionsVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setBulkActionsVisible(false)}
+      >
+        <TouchableWithoutFeedback onPress={() => setBulkActionsVisible(false)}>
+          <View style={styles.bulkActionsOverlay}>
+            <TouchableWithoutFeedback>
+              <View style={styles.bulkActionsSheet}>
+                <View style={styles.bulkActionsHandle} />
+                <Text style={styles.bulkActionsTitle}>
+                  Выбрано: {selectedIds.size}
+                </Text>
+                <TouchableOpacity
+                  style={styles.bulkActionItem}
+                  activeOpacity={0.7}
+                  onPress={() => {
+                    setBulkActionsVisible(false);
+                    handleBulkPublish();
+                  }}
+                >
+                  {bulkPublishing ? (
+                    <ActivityIndicator size="small" color="#43A047" style={styles.bulkActionIcon} />
+                  ) : (
+                    <Text style={styles.bulkActionIcon}>📤</Text>
+                  )}
+                  <View>
+                    <Text style={styles.bulkActionLabel}>Загрузить в Озон</Text>
+                    <Text style={styles.bulkActionDesc}>Отправить выбранные карточки на публикацию</Text>
+                  </View>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.bulkActionItem}
+                  activeOpacity={0.7}
+                  onPress={() => {
+                    setBulkActionsVisible(false);
+                    handleBulkReExtract();
+                  }}
+                >
+                  {bulkReExtracting ? (
+                    <ActivityIndicator size="small" color="#1976D2" style={styles.bulkActionIcon} />
+                  ) : (
+                    <Text style={styles.bulkActionIcon}>🔍</Text>
+                  )}
+                  <View>
+                    <Text style={styles.bulkActionLabel}>Распознать заново</Text>
+                    <Text style={styles.bulkActionDesc}>ИИ перезапишет данные из фотографий</Text>
+                  </View>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.bulkActionItem, styles.bulkActionItemDanger]}
+                  activeOpacity={0.7}
+                  onPress={() => {
+                    setBulkActionsVisible(false);
+                    handleBulkDelete();
+                  }}
+                >
+                  {bulkDeleting ? (
+                    <ActivityIndicator size="small" color="#E53935" style={styles.bulkActionIcon} />
+                  ) : (
+                    <Text style={styles.bulkActionIcon}>🗑️</Text>
+                  )}
+                  <View>
+                    <Text style={[styles.bulkActionLabel, styles.bulkActionLabelDanger]}>Удалить</Text>
+                    <Text style={styles.bulkActionDesc}>Безвозвратно удалить выбранные карточки</Text>
+                  </View>
+                </TouchableOpacity>
+              </View>
+            </TouchableWithoutFeedback>
+          </View>
+        </TouchableWithoutFeedback>
+      </Modal>
       {selectMode && (
         <View style={styles.bottomBar}>
           <Text style={styles.bottomBarCount}>Выбрано: {selectedIds.size}</Text>
           <TouchableOpacity
             style={[
               styles.bottomBarBtn,
-              (selectedIds.size === 0 || bulkPublishing) &&
+              (selectedIds.size === 0 || bulkPublishing || bulkDeleting || bulkReExtracting) &&
                 styles.bottomBarBtnDisabled,
             ]}
-            onPress={handleBulkPublish}
-            disabled={selectedIds.size === 0 || bulkPublishing}
+            onPress={() => setBulkActionsVisible(true)}
+            disabled={selectedIds.size === 0 || bulkPublishing || bulkDeleting || bulkReExtracting}
             activeOpacity={0.8}
           >
-            {bulkPublishing ? (
+            {bulkPublishing || bulkDeleting || bulkReExtracting ? (
               <ActivityIndicator size="small" color="#fff" />
             ) : (
-              <Text style={styles.bottomBarBtnText}>Загрузить в Озон</Text>
+              <Text style={styles.bottomBarBtnText}>Действия</Text>
             )}
           </TouchableOpacity>
         </View>
@@ -896,12 +1053,12 @@ const styles = StyleSheet.create({
     color: "#333",
   },
   bottomBarBtn: {
-    backgroundColor: "#43A047",
+    backgroundColor: "#1976D2",
     borderRadius: 8,
-    paddingHorizontal: 20,
+    paddingHorizontal: 24,
     paddingVertical: 10,
-    minWidth: 150,
     alignItems: "center",
+    minWidth: 120,
   },
   bottomBarBtnDisabled: {
     opacity: 0.4,
@@ -910,6 +1067,67 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 14,
     fontWeight: "600",
+  },
+  // Bulk actions sheet
+  bulkActionsOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.35)",
+    justifyContent: "flex-end",
+  },
+  bulkActionsSheet: {
+    backgroundColor: "#fff",
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    paddingBottom: 32,
+    paddingTop: 12,
+  },
+  bulkActionsHandle: {
+    width: 36,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: "#DDD",
+    alignSelf: "center",
+    marginBottom: 12,
+  },
+  bulkActionsTitle: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#999",
+    paddingHorizontal: 20,
+    paddingBottom: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: "#F0F0F0",
+    marginBottom: 4,
+  },
+  bulkActionItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 20,
+    paddingVertical: 14,
+    gap: 14,
+  },
+  bulkActionItemDanger: {
+    marginTop: 4,
+    borderTopWidth: 1,
+    borderTopColor: "#F0F0F0",
+  },
+  bulkActionIcon: {
+    fontSize: 22,
+    width: 28,
+    textAlign: "center",
+  },
+  bulkActionLabel: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#222",
+  },
+  bulkActionLabelDanger: {
+    color: "#E53935",
+  },
+  bulkActionDesc: {
+    fontSize: 13,
+    color: "#999",
+    marginTop: 2,
   },
   storePickerTitle: {
     fontSize: 14,

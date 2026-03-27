@@ -1,6 +1,6 @@
 import React from "react";
 import { View, Text, StyleSheet, TouchableOpacity, Image } from "react-native";
-import { BookStatus } from "../types";
+import { BookStatus, UserRole } from "../types";
 import type { Book } from "../types";
 
 function formatDate(iso: string): string {
@@ -15,7 +15,7 @@ function formatDate(iso: string): string {
 interface Props {
   book: Book;
   onPress: () => void;
-  access?: string;
+  userRole?: string;
 }
 
 function getStatusConfig(status: BookStatus): { color: string; label: string } {
@@ -32,7 +32,7 @@ function getStatusConfig(status: BookStatus): { color: string; label: string } {
   }
 }
 
-export function BookCard({ book, onPress, access }: Props) {
+export function BookCard({ book, onPress, userRole }: Props) {
   const coverPhoto = book.photos?.find((p) => p.sortOrder === 0);
   const statusConfig = getStatusConfig(book.status);
 
@@ -55,10 +55,12 @@ export function BookCard({ book, onPress, access }: Props) {
           </Text>
         ) : null}
         <Text style={styles.sku}>{book.sku}</Text>
-        {book.price != null && Number(book.price) > 0 && access === "admin" && (
-          <Text style={styles.price}>{Number(book.price).toFixed(0)} ₽</Text>
-        )}
-        {access === "admin" && (
+        {book.price != null &&
+          Number(book.price) > 0 &&
+          userRole === UserRole.ADMIN && (
+            <Text style={styles.price}>{Number(book.price).toFixed(0)} ₽</Text>
+          )}
+        {userRole === UserRole.ADMIN && (
           <View style={styles.statusBadge}>
             <View
               style={[
@@ -71,7 +73,7 @@ export function BookCard({ book, onPress, access }: Props) {
             </Text>
           </View>
         )}
-        {access === "admin" && (
+        {userRole === "admin" && (
           <View style={styles.meta}>
             {book.createdBy?.fullName ? (
               <Text style={styles.metaText} numberOfLines={1}>

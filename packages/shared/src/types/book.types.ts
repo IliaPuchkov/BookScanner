@@ -1,21 +1,21 @@
 export enum PaperType {
-  OFFSET = 'офсетная',
-  GLOSSY = 'глянцевая',
-  MATTE = 'матовая',
+  OFFSET = "офсетная",
+  GLOSSY = "глянцевая",
+  MATTE = "матовая",
 }
 
 export enum CoverType {
-  HARDCOVER = 'твердый переплет',
-  SOFTCOVER = 'мягкий переплет',
+  HARDCOVER = "твердый переплет",
+  SOFTCOVER = "мягкий переплет",
 }
 
 export enum BookCondition {
-  GOOD = 'Хорошая',
+  GOOD = "Хорошая",
 }
 
 export enum Language {
-  RUSSIAN = 'русский',
-  ENGLISH = 'английский',
+  RUSSIAN = "русский",
+  ENGLISH = "английский",
 }
 
 export interface IBookDimensions {
@@ -25,10 +25,10 @@ export interface IBookDimensions {
 }
 
 export enum BookStatus {
-  PENDING_REVIEW = 'pending_review',
-  PENDING_PUBLICATION = 'pending_publication',
-  PUBLISHED = 'published',
-  PUBLICATION_FAILED = 'publication_failed',
+  PENDING_REVIEW = "pending_review",
+  PENDING_PUBLICATION = "pending_publication",
+  PUBLISHED = "published",
+  PUBLICATION_FAILED = "publication_failed",
 }
 
 export interface IBookCard {

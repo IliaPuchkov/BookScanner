@@ -11,6 +11,7 @@ import {
   TextInput,
   KeyboardAvoidingView,
   Platform,
+  TouchableOpacity,
 } from "react-native";
 import {
   useRoute,
@@ -22,9 +23,10 @@ import { Button } from "../../components/Button";
 import { booksService } from "../../services/books.service";
 import { visionService } from "../../services/vision.service";
 import type { Book, UpdateBookDto } from "../../types";
-import { BookStatus } from "../../types";
+import { BookStatus, PaperType, CoverType } from "../../types";
 import type { AdminMainStackParamList } from "../../navigation/AdminNavigator";
 import { formatPrice, formatDate } from "../../utils/format";
+import { OperatorStackParamList } from "../../navigation/OperatorNavigator";
 
 type Route = RouteProp<AdminMainStackParamList, "ProductDetail">;
 type Nav = NativeStackNavigationProp<AdminMainStackParamList, "ProductDetail">;
@@ -138,6 +140,12 @@ export function ProductDetailScreen() {
   const [editDepth, setEditDepth] = useState("");
   const [editAnnotation, setEditAnnotation] = useState("");
   const [editHashtags, setEditHashtags] = useState("");
+  const [editCoverType, setEditCoverType] = useState<CoverType | undefined>(
+    undefined,
+  );
+  const [editPaperType, setEditPaperType] = useState<PaperType | undefined>(
+    undefined,
+  );
 
   useEffect(() => {
     Promise.all([
@@ -168,6 +176,8 @@ export function ProductDetailScreen() {
     setEditDepth(b.dimensions?.depth?.toString() ?? "");
     setEditAnnotation(b.annotation ?? "");
     setEditHashtags((b.hashtags || []).join(" "));
+    setEditCoverType(b.coverType as CoverType | undefined);
+    setEditPaperType(b.paperType as PaperType | undefined);
   };
 
   const handleSave = async () => {
@@ -194,6 +204,8 @@ export function ProductDetailScreen() {
             : undefined,
         annotation: editAnnotation || undefined,
         hashtags: hashtags.length > 0 ? hashtags : undefined,
+        coverType: editCoverType,
+        paperType: editPaperType,
       };
       const updated = await booksService.updateBook(book.id, dto);
       setBook(updated);
@@ -405,6 +417,13 @@ export function ProductDetailScreen() {
               <Text style={styles.sectionTitle}>Размеры (мм)</Text>
               <View style={styles.dimRow}>
                 <EditField
+                  label="Д"
+                  value={editHeight}
+                  onChangeText={setEditHeight}
+                  keyboardType="numeric"
+                  style={{ flex: 1 }}
+                />
+                <EditField
                   label="Ш"
                   value={editWidth}
                   onChangeText={setEditWidth}
@@ -413,19 +432,24 @@ export function ProductDetailScreen() {
                 />
                 <EditField
                   label="В"
-                  value={editHeight}
-                  onChangeText={setEditHeight}
-                  keyboardType="numeric"
-                  style={{ flex: 1 }}
-                />
-                <EditField
-                  label="Г"
                   value={editDepth}
                   onChangeText={setEditDepth}
                   keyboardType="numeric"
                   style={{ flex: 1 }}
                 />
               </View>
+              <SegmentPicker
+                label="Тип переплета"
+                options={Object.values(CoverType)}
+                value={editCoverType}
+                onChange={(v) => setEditCoverType(v as CoverType)}
+              />
+              <SegmentPicker
+                label="Тип бумаги"
+                options={Object.values(PaperType)}
+                value={editPaperType}
+                onChange={(v) => setEditPaperType(v as PaperType)}
+              />
               <EditField
                 label="Аннотация"
                 value={editAnnotation}
@@ -538,6 +562,11 @@ export function ProductDetailScreen() {
                   />
                 )}
                 <Button
+                  title="Изменить фото"
+                  onPress={() => navigation.navigate("PhotoUpload", { bookId })}
+                  style={{ marginBottom: 10 }}
+                />
+                <Button
                   title="Распознать заново"
                   onPress={handleReExtract}
                   loading={reExtracting}
@@ -583,6 +612,45 @@ function InfoRow({ label, value }: { label: string; value?: string }) {
       <Text style={[styles.rowValue, !value && styles.rowValueEmpty]}>
         {value || "—"}
       </Text>
+    </View>
+  );
+}
+
+function SegmentPicker({
+  label,
+  options,
+  value,
+  onChange,
+}: {
+  label: string;
+  options: string[];
+  value: string | undefined;
+  onChange: (v: string) => void;
+}) {
+  return (
+    <View style={styles.editField}>
+      <Text style={styles.editLabel}>{label}</Text>
+      <View style={styles.segmentRow}>
+        {options.map((opt) => (
+          <TouchableOpacity
+            key={opt}
+            style={[
+              styles.segmentOption,
+              value === opt && styles.segmentOptionActive,
+            ]}
+            onPress={() => onChange(opt)}
+          >
+            <Text
+              style={[
+                styles.segmentText,
+                value === opt && styles.segmentTextActive,
+              ]}
+            >
+              {opt}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </View>
     </View>
   );
 }
@@ -759,5 +827,30 @@ const styles = StyleSheet.create({
   dimRow: {
     flexDirection: "row",
     gap: 8,
+  },
+  segmentRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  segmentOption: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#ddd",
+    backgroundColor: "#FAFAFA",
+  },
+  segmentOptionActive: {
+    borderColor: "#1976D2",
+    backgroundColor: "#E3F2FD",
+  },
+  segmentText: {
+    fontSize: 14,
+    color: "#555",
+  },
+  segmentTextActive: {
+    color: "#1976D2",
+    fontWeight: "600",
   },
 });
