@@ -11,7 +11,7 @@ import {
   STORAGE_PROVIDER,
 } from "../photos/storage/storage.interface";
 import {
-  OpenAIVisionExtractor,
+  YandexVisionExtractor,
   mergeExtractionResults,
   applyDefaults,
 } from "@bookscanner/ocr-processor";
@@ -76,9 +76,10 @@ export class VisionService {
 
     try {
       ocrResult = await this.ocrResultRepository.save(ocrResult);
-      const apiKey = this.configService.get<string>("OPENAI_API_KEY");
-      if (!apiKey) {
-        throw new Error("OPENAI_API_KEY не настроен в переменных окружения");
+      const apiKey = this.configService.get<string>("YANDEX_AI_API_KEY");
+      const folderId = this.configService.get<string>("YANDEX_FOLDER_ID");
+      if (!apiKey || !folderId) {
+        throw new Error("YANDEX_AI_API_KEY и YANDEX_FOLDER_ID должны быть настроены в переменных окружения");
       }
 
       const prompt = await this.settingsService.getValue<string>(
@@ -86,7 +87,7 @@ export class VisionService {
         this.getDefaultPrompt(),
       );
 
-      const extractor = new OpenAIVisionExtractor(apiKey);
+      const extractor = new YandexVisionExtractor(apiKey, folderId);
 
       const photo01 = photos[0];
       const photo02 = photos[1];
