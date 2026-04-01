@@ -21,15 +21,18 @@ export type AdminMainStackParamList = {
   Statistics: undefined;
   BookDatabase: { filterStatus?: string } | undefined;
   PendingReview: undefined;
-  ProductDetail: { bookId: string; editable?: boolean };
   PhotoUpload: { bookId: string };
+  CreateCard: { boxId?: string; sessionId?: string } | undefined;
+  ProductDetail: { bookId: string; editable?: boolean };
 };
 
 export type AdminCardCreationParamList = {
+  PendingReview: undefined;
   CardsList: undefined;
   CreateCard: { boxId?: string; sessionId?: string } | undefined;
   CardDetail: { bookId: string; editable?: boolean };
   PhotoUpload: { bookId: string };
+  ProductDetail: { bookId: string; editable?: boolean };
 };
 
 const MainStack = createNativeStackNavigator<AdminMainStackParamList>();
@@ -84,15 +87,16 @@ function MainStackScreen() {
         component={PendingReviewScreen}
         options={{ title: "Ожидают проверки" }}
       />
-      <MainStack.Screen
-        name="ProductDetail"
-        component={ProductDetailScreen}
-        options={{ title: "Товар" }}
-      />
+
       <MainStack.Screen
         name="PhotoUpload"
         component={PhotoUploadScreen}
         options={{ title: "Фото" }}
+      />
+      <MainStack.Screen
+        name="ProductDetail"
+        component={ProductDetailScreen}
+        options={{ title: "Товар" }}
       />
     </MainStack.Navigator>
   );
@@ -125,6 +129,16 @@ function CardsStack() {
           ) : null,
       })}
     >
+      <CardStack.Screen
+        name="PendingReview"
+        component={PendingReviewScreen}
+        options={{ title: "Ожидают проверки" }}
+      />
+      <CardStack.Screen
+        name="ProductDetail"
+        component={ProductDetailScreen}
+        options={{ title: "Товар" }}
+      />
       <CardStack.Screen
         name="CardsList"
         component={CardsListScreen}
@@ -192,8 +206,9 @@ export function AdminNavigator() {
         name="CardCreationTab"
         component={CardsStack}
         options={{
-          tabBarLabel: "Создать",
+          tabBarLabel: "Карточки",
           tabBarIcon: () => <TabIcon label="✏️" />,
+          headerShown: false,
         }}
       />
       <Tab.Screen

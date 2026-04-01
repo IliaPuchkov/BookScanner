@@ -19,10 +19,13 @@ import type { OzonStore, OzonStoreLimits } from "../../services/admin.service";
 import { booksService } from "../../services/books.service";
 import { visionService } from "../../services/vision.service";
 import type { Book } from "../../types";
-import type { AdminMainStackParamList } from "../../navigation/AdminNavigator";
+import type {
+  AdminCardCreationParamList,
+  AdminMainStackParamList,
+} from "../../navigation/AdminNavigator";
 import { formatDate } from "../../utils/format";
 
-type Nav = NativeStackNavigationProp<AdminMainStackParamList>;
+type Nav = NativeStackNavigationProp<AdminCardCreationParamList>;
 
 export function PendingReviewScreen() {
   const navigation = useNavigation<Nav>();
@@ -404,7 +407,9 @@ export function PendingReviewScreen() {
               const results = await Promise.allSettled(
                 ids.map((id) => booksService.deleteBook(id)),
               );
-              const failed = results.filter((r) => r.status === "rejected").length;
+              const failed = results.filter(
+                (r) => r.status === "rejected",
+              ).length;
               const succeeded = results.length - failed;
               setBooks((prev) => prev.filter((b) => !ids.includes(b.id)));
               exitSelectMode();
@@ -444,7 +449,9 @@ export function PendingReviewScreen() {
               const results = await Promise.allSettled(
                 ids.map((id) => visionService.extract(id)),
               );
-              const failed = results.filter((r) => r.status === "rejected").length;
+              const failed = results.filter(
+                (r) => r.status === "rejected",
+              ).length;
               const succeeded = results.length - failed;
               exitSelectMode();
               if (failed > 0) {
@@ -729,6 +736,13 @@ export function PendingReviewScreen() {
           ) : null
         }
       />
+      <TouchableOpacity
+        style={styles.fab}
+        onPress={() => navigation.navigate("CreateCard")}
+        activeOpacity={0.8}
+      >
+        <Text style={styles.fabText}>+</Text>
+      </TouchableOpacity>
       <Modal
         visible={bulkActionsVisible}
         transparent
@@ -752,13 +766,19 @@ export function PendingReviewScreen() {
                   }}
                 >
                   {bulkPublishing ? (
-                    <ActivityIndicator size="small" color="#43A047" style={styles.bulkActionIcon} />
+                    <ActivityIndicator
+                      size="small"
+                      color="#43A047"
+                      style={styles.bulkActionIcon}
+                    />
                   ) : (
                     <Text style={styles.bulkActionIcon}>📤</Text>
                   )}
                   <View>
                     <Text style={styles.bulkActionLabel}>Загрузить в Озон</Text>
-                    <Text style={styles.bulkActionDesc}>Отправить выбранные карточки на публикацию</Text>
+                    <Text style={styles.bulkActionDesc}>
+                      Отправить выбранные карточки на публикацию
+                    </Text>
                   </View>
                 </TouchableOpacity>
                 <TouchableOpacity
@@ -770,13 +790,21 @@ export function PendingReviewScreen() {
                   }}
                 >
                   {bulkReExtracting ? (
-                    <ActivityIndicator size="small" color="#1976D2" style={styles.bulkActionIcon} />
+                    <ActivityIndicator
+                      size="small"
+                      color="#1976D2"
+                      style={styles.bulkActionIcon}
+                    />
                   ) : (
                     <Text style={styles.bulkActionIcon}>🔍</Text>
                   )}
                   <View>
-                    <Text style={styles.bulkActionLabel}>Распознать заново</Text>
-                    <Text style={styles.bulkActionDesc}>ИИ перезапишет данные из фотографий</Text>
+                    <Text style={styles.bulkActionLabel}>
+                      Распознать заново
+                    </Text>
+                    <Text style={styles.bulkActionDesc}>
+                      ИИ перезапишет данные из фотографий
+                    </Text>
                   </View>
                 </TouchableOpacity>
                 <TouchableOpacity
@@ -788,13 +816,26 @@ export function PendingReviewScreen() {
                   }}
                 >
                   {bulkDeleting ? (
-                    <ActivityIndicator size="small" color="#E53935" style={styles.bulkActionIcon} />
+                    <ActivityIndicator
+                      size="small"
+                      color="#E53935"
+                      style={styles.bulkActionIcon}
+                    />
                   ) : (
                     <Text style={styles.bulkActionIcon}>🗑️</Text>
                   )}
                   <View>
-                    <Text style={[styles.bulkActionLabel, styles.bulkActionLabelDanger]}>Удалить</Text>
-                    <Text style={styles.bulkActionDesc}>Безвозвратно удалить выбранные карточки</Text>
+                    <Text
+                      style={[
+                        styles.bulkActionLabel,
+                        styles.bulkActionLabelDanger,
+                      ]}
+                    >
+                      Удалить
+                    </Text>
+                    <Text style={styles.bulkActionDesc}>
+                      Безвозвратно удалить выбранные карточки
+                    </Text>
                   </View>
                 </TouchableOpacity>
               </View>
@@ -808,11 +849,19 @@ export function PendingReviewScreen() {
           <TouchableOpacity
             style={[
               styles.bottomBarBtn,
-              (selectedIds.size === 0 || bulkPublishing || bulkDeleting || bulkReExtracting) &&
+              (selectedIds.size === 0 ||
+                bulkPublishing ||
+                bulkDeleting ||
+                bulkReExtracting) &&
                 styles.bottomBarBtnDisabled,
             ]}
             onPress={() => setBulkActionsVisible(true)}
-            disabled={selectedIds.size === 0 || bulkPublishing || bulkDeleting || bulkReExtracting}
+            disabled={
+              selectedIds.size === 0 ||
+              bulkPublishing ||
+              bulkDeleting ||
+              bulkReExtracting
+            }
             activeOpacity={0.8}
           >
             {bulkPublishing || bulkDeleting || bulkReExtracting ? (
@@ -839,6 +888,28 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
+  },
+  fabText: {
+    fontSize: 28,
+    color: "#fff",
+    fontWeight: "300",
+    marginTop: -2,
+  },
+  fab: {
+    position: "absolute",
+    bottom: 24,
+    right: 24,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: "#1976D2",
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#1976D2",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 6,
   },
   card: {
     flexDirection: "row",

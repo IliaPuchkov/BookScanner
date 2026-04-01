@@ -20,6 +20,7 @@ import { Button } from '../../components/Button';
 import { adminService } from '../../services/admin.service';
 import { useAuth } from '../../hooks/useAuth';
 import type { User } from '../../types';
+import { UserRole } from '../../types';
 
 export function UserManagementScreen() {
   const { user: currentUser } = useAuth();
@@ -76,7 +77,7 @@ export function UserManagementScreen() {
             try {
               await adminService.updateUser(user.id, { role: 'admin' });
               setUsers((prev) =>
-                prev.map((u) => (u.id === user.id ? { ...u, role: 'admin' } : u)),
+                prev.map((u) => (u.id === user.id ? { ...u, role: UserRole.ADMIN } : u)),
               );
             } catch {
               Alert.alert('Ошибка', 'Не удалось изменить роль');

@@ -151,39 +151,48 @@ export function PhotoUploadScreen() {
   };
 
   const handleCropPhoto = async (index: number) => {
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ["images"],
-      allowsEditing: true,
-      quality: 0.8,
-    });
-    if (!result.canceled) {
-      setUploading(true);
-      try {
-        const photo = photos[index];
-        const newUri = result.assets[0].uri;
-        if (photo.id) {
-          const updated = await photosService.replacePhoto(
-            bookId,
-            photo.id,
-            newUri,
-          );
-          setPhotos((prev) =>
-            prev.map((p, i) =>
-              i === index
-                ? { uri: `${updated.fileUrl}?v=${Date.now()}`, id: updated.id }
-                : p,
-            ),
-          );
-        } else {
-          setPhotos((prev) =>
-            prev.map((p, i) => (i === index ? { ...p, uri: newUri } : p)),
-          );
-        }
-      } catch {
-        Alert.alert("Ошибка", "Не удалось кадрировать фото");
-      } finally {
-        setUploading(false);
+    const photo = photos[index];
+    setUploading(true);
+    try {
+      let localUri = photo.uri;
+      if (photo.uri.startsWith("http")) {
+        const dest = `${FileSystem.cacheDirectory}crop_${Date.now()}.jpg`;
+        const dl = await FileSystem.downloadAsync(photo.uri, dest);
+        localUri = dl.uri;
       }
+
+      const cropped = await ImageCropPicker.openCropper({
+        path: localUri,
+        mediaType: "photo",
+        compressImageQuality: 0.8,
+      });
+
+      if (photo.id) {
+        const updated = await photosService.replacePhoto(
+          bookId,
+          photo.id,
+          cropped.path,
+        );
+        setPhotos((prev) =>
+          prev.map((p, i) =>
+            i === index
+              ? { uri: `${updated.fileUrl}?v=${Date.now()}`, id: updated.id }
+              : p,
+          ),
+        );
+      } else {
+        setPhotos((prev) =>
+          prev.map((p, i) =>
+            i === index ? { ...p, uri: cropped.path } : p,
+          ),
+        );
+      }
+    } catch (err: any) {
+      if (err?.code !== "E_PICKER_CANCELLED") {
+        Alert.alert("Ошибка", "Не удалось кадрировать фото");
+      }
+    } finally {
+      setUploading(false);
     }
   };
 

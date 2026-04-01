@@ -12,11 +12,14 @@ import { type NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { adminService } from "../../services/admin.service";
 import type { StatsSummary, Book } from "../../types";
 import type { AdminMainStackParamList } from "../../navigation/AdminNavigator";
+import { NativeBottomTabBarProps } from "@react-navigation/bottom-tabs/unstable";
 
 type Nav = NativeStackNavigationProp<AdminMainStackParamList, "Dashboard">;
+type TabsNav = NativeBottomTabBarProps;
 
 export function DashboardScreen() {
   const navigation = useNavigation<Nav>();
+  const tabsNavigation = useNavigation<TabsNav["navigation"]>();
   const [stats, setStats] = useState<StatsSummary | null>(null);
   const [recentBooks, setRecentBooks] = useState<Book[]>([]);
   const [pendingBooks, setPendingBooks] = useState<Book[]>([]);
@@ -65,7 +68,7 @@ export function DashboardScreen() {
         <TouchableOpacity
           style={[styles.wideCard, styles.cardRed]}
           activeOpacity={0.75}
-          onPress={() => navigation.navigate("PendingReview")}
+          onPress={() => tabsNavigation.navigate("CardCreationTab")}
         >
           <View style={styles.wideCardHeader}>
             <Text style={styles.wideCardTitle}>

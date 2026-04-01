@@ -24,12 +24,11 @@ import { booksService } from "../../services/books.service";
 import { visionService } from "../../services/vision.service";
 import type { Book, UpdateBookDto } from "../../types";
 import { BookStatus, PaperType, CoverType } from "../../types";
-import type { AdminMainStackParamList } from "../../navigation/AdminNavigator";
+import type { AdminCardCreationParamList } from "../../navigation/AdminNavigator";
 import { formatPrice, formatDate } from "../../utils/format";
-import { OperatorStackParamList } from "../../navigation/OperatorNavigator";
 
-type Route = RouteProp<AdminMainStackParamList, "ProductDetail">;
-type Nav = NativeStackNavigationProp<AdminMainStackParamList, "ProductDetail">;
+type Route = RouteProp<AdminCardCreationParamList, "ProductDetail">;
+type Nav = NativeStackNavigationProp<AdminCardCreationParamList, "ProductDetail">;
 
 const SCREEN_WIDTH = Dimensions.get("window").width;
 
