@@ -12,7 +12,7 @@ import { OzonApiClient, OzonApiError } from './ozon-api.client';
 import { buildOzonImportPayload } from './ozon-payload.builder';
 import { BookStatus, OZON_ATTR_BRAND, OZON_ATTR_AUTHOR } from '@bookscanner/shared';
 
-const IMPORTABLE_STATUSES = ['importing', 'moderation_pending'];
+const IMPORTABLE_STATUSES = ['importing'];
 
 @Injectable()
 export class OzonService {
@@ -157,9 +157,16 @@ export class OzonService {
 
         if (item.status === 'imported') {
           ozonProduct.ozonProductId = String(item.product_id);
-          ozonProduct.status = 'moderation_pending';
+          ozonProduct.status = 'published';
           await this.ozonProductRepository.save(ozonProduct);
-          this.logger.log(`Book ${bookId}: imported, product_id=${item.product_id}`);
+
+          await this.booksService.updateFromExtraction(bookId, {
+            status: BookStatus.PUBLISHED,
+            publishedToOzon: new Date(),
+          });
+
+          this.logger.log(`Book ${bookId}: successfully imported to Ozon, product_id=${item.product_id}`);
+          return { status: 'published', message: 'Загружено в Ozon' };
         } else if (item.status === 'failed') {
           const errorMsg = item.errors?.map((e) => e.message).join('; ') || 'Import failed';
           ozonProduct.status = 'failed';
@@ -178,50 +185,6 @@ export class OzonService {
       } catch (error) {
         this.logger.error(`Error checking import for book ${bookId}`, error);
         return { status: ozonProduct.status, message: 'Ошибка проверки статуса импорта' };
-      }
-    }
-
-    // Phase 2: Check moderation status
-    if (ozonProduct.status === 'moderation_pending' && ozonProduct.ozonProductId) {
-      try {
-        const productInfo = await this.ozonApiClient.getProductInfo(
-          Number(ozonProduct.ozonProductId),
-        );
-
-        const moderateStatus = productInfo.status?.moderate_status;
-        const state = productInfo.status?.state;
-
-        if (moderateStatus === 'approved' || state === 'processed') {
-          ozonProduct.status = 'published';
-          await this.ozonProductRepository.save(ozonProduct);
-
-          await this.booksService.updateFromExtraction(bookId, {
-            status: BookStatus.PUBLISHED,
-            publishedToOzon: new Date(),
-          });
-
-          this.logger.log(`Book ${bookId}: published on Ozon`);
-          return { status: 'published', message: 'Опубликовано на Ozon' };
-        }
-
-        if (moderateStatus === 'declined' || productInfo.status?.is_failed) {
-          const reason = productInfo.status?.state_description || 'Модерация отклонена';
-          ozonProduct.status = 'failed';
-          ozonProduct.errorMessage = reason;
-          await this.ozonProductRepository.save(ozonProduct);
-
-          await this.booksService.updateFromExtraction(bookId, {
-            status: BookStatus.PUBLICATION_FAILED,
-          });
-
-          this.logger.warn(`Book ${bookId}: moderation declined — ${reason}`);
-          return { status: 'failed', message: reason };
-        }
-
-        return { status: 'moderation_pending', message: 'На модерации Ozon' };
-      } catch (error) {
-        this.logger.error(`Error checking moderation for book ${bookId}`, error);
-        return { status: ozonProduct.status, message: 'Ошибка проверки статуса модерации' };
       }
     }
 
@@ -401,9 +364,8 @@ export class OzonService {
   private getStatusMessage(status: string): string {
     const messages: Record<string, string> = {
       draft: 'Черновик',
-      importing: 'Импортируется на Ozon',
-      moderation_pending: 'На модерации Ozon',
-      published: 'Опубликовано на Ozon',
+      importing: 'Загружается в Ozon',
+      published: 'Загружено в Ozon',
       failed: 'Ошибка публикации',
     };
     return messages[status] || status;

@@ -258,7 +258,7 @@ export function BookDatabaseScreen() {
                     styles.chipTextActive,
                 ]}
               >
-                Ожидает проверки
+                Ожидает проверки администратора
               </Text>
             </TouchableOpacity>
             <TouchableOpacity
@@ -277,7 +277,7 @@ export function BookDatabaseScreen() {
                     styles.chipTextActive,
                 ]}
               >
-                Опубликовано
+                Загружено в Ozon
               </Text>
             </TouchableOpacity>
           </ScrollView>

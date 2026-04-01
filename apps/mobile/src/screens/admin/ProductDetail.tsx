@@ -89,17 +89,17 @@ const STATUS_CONFIG: Record<
   { label: string; color: string; bg: string }
 > = {
   [BookStatus.PENDING_REVIEW]: {
-    label: "Ожидает проверки",
+    label: "Ожидает проверки администратора",
     color: "#F57C00",
     bg: "#FFF3E0",
   },
   [BookStatus.PENDING_PUBLICATION]: {
-    label: "Ожидает публикации",
+    label: "Загружается в Ozon",
     color: "#1976D2",
     bg: "#E3F2FD",
   },
   [BookStatus.PUBLISHED]: {
-    label: "Опубликовано",
+    label: "Загружено в Ozon",
     color: "#388E3C",
     bg: "#E8F5E9",
   },

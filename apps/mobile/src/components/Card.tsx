@@ -21,14 +21,14 @@ interface Props {
 function getStatusConfig(status: BookStatus): { color: string; label: string } {
   switch (status) {
     case BookStatus.PUBLISHED:
-      return { color: "#43A047", label: "Опубликовано" };
+      return { color: "#43A047", label: "Загружено в Ozon" };
     case BookStatus.PENDING_PUBLICATION:
-      return { color: "#1976D2", label: "Ожидает публикации" };
+      return { color: "#1976D2", label: "Загружается в Ozon" };
     case BookStatus.PUBLICATION_FAILED:
       return { color: "#E53935", label: "Ошибка публикации" };
     case BookStatus.PENDING_REVIEW:
     default:
-      return { color: "#FB8C00", label: "Ожидает подтверждения" };
+      return { color: "#FB8C00", label: "Ожидает проверки администратора" };
   }
 }
 

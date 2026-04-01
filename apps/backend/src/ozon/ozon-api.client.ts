@@ -172,10 +172,13 @@ export class OzonApiClient {
     return response.result.items;
   }
 
-  async getProductInfo(productId: number): Promise<OzonProductInfo> {
+  async getProductInfo(productId: number, offerId?: string): Promise<OzonProductInfo> {
+    const body: Record<string, unknown> = offerId
+      ? { offer_id: offerId }
+      : { product_id: productId };
     const response = await this.post<{ result: OzonProductInfo }>(
       '/v2/product/info',
-      { product_id: productId },
+      body,
     );
     return response.result;
   }
