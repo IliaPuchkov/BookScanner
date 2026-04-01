@@ -39,6 +39,7 @@ const MainStack = createNativeStackNavigator<AdminMainStackParamList>();
 const Tab = createBottomTabNavigator();
 const CardStack = createNativeStackNavigator<AdminCardCreationParamList>();
 const SettingsStack = createNativeStackNavigator();
+const ProfileStack = createNativeStackNavigator();
 
 const stackScreenOptions = ({ navigation }: { navigation: any }) => ({
   headerStyle: { backgroundColor: "#1976D2" } as const,
@@ -163,6 +164,18 @@ function CardsStack() {
   );
 }
 
+function ProfileStackScreen() {
+  return (
+    <ProfileStack.Navigator screenOptions={stackScreenOptions}>
+      <ProfileStack.Screen
+        name="Profile"
+        component={ProfileScreen}
+        options={{ title: "Профиль" }}
+      />
+    </ProfileStack.Navigator>
+  );
+}
+
 function SettingsStackScreen() {
   return (
     <SettingsStack.Navigator screenOptions={stackScreenOptions}>
@@ -221,15 +234,11 @@ export function AdminNavigator() {
       />
       <Tab.Screen
         name="ProfileTab"
-        component={ProfileScreen}
+        component={ProfileStackScreen}
         options={{
           tabBarLabel: "Профиль",
           tabBarIcon: () => <TabIcon label="👤" />,
-          headerShown: true,
-          headerTitle: "Профиль",
-          headerStyle: { backgroundColor: "#1976D2" },
-          headerTintColor: "#fff",
-          headerTitleStyle: { fontWeight: "600" },
+          headerShown: false,
         }}
       />
     </Tab.Navigator>
