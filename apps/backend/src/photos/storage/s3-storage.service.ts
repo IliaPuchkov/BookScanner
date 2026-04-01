@@ -19,12 +19,15 @@ export class S3StorageService implements IStorageProvider {
     this.region = this.configService.get<string>('AWS_REGION', 'us-east-1');
     this.bucket = this.configService.get<string>('AWS_S3_BUCKET', '');
 
+    const endpoint = this.configService.get<string>('AWS_ENDPOINT');
+
     this.s3 = new S3Client({
       region: this.region,
       credentials: {
         accessKeyId: this.configService.get<string>('AWS_ACCESS_KEY_ID', ''),
         secretAccessKey: this.configService.get<string>('AWS_SECRET_ACCESS_KEY', ''),
       },
+      ...(endpoint && { endpoint, forcePathStyle: true }),
     });
   }
 
@@ -41,7 +44,10 @@ export class S3StorageService implements IStorageProvider {
       }),
     );
 
-    const url = `https://${this.bucket}.s3.${this.region}.amazonaws.com/${key}`;
+    const endpoint = this.configService.get<string>('AWS_ENDPOINT');
+    const url = endpoint
+      ? `${endpoint}/${this.bucket}/${key}`
+      : `https://${this.bucket}.s3.${this.region}.amazonaws.com/${key}`;
 
     return { url, key };
   }
