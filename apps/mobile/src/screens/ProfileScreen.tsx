@@ -6,6 +6,7 @@ import {
   Alert,
   ScrollView,
 } from "react-native";
+import Constants from "expo-constants";
 import { useAuth } from "../hooks/useAuth";
 import { Button } from "../components/Button";
 
@@ -52,6 +53,10 @@ export function ProfileScreen() {
         variant="danger"
         style={{ marginTop: 8 }}
       />
+
+      <Text style={styles.version}>
+        Версия {Constants.expoConfig?.version ?? "—"}
+      </Text>
     </ScrollView>
   );
 }
@@ -129,5 +134,11 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#222",
     fontWeight: "500",
+  },
+  version: {
+    fontSize: 12,
+    color: "#bbb",
+    textAlign: "center",
+    marginTop: 8,
   },
 });
