@@ -60,7 +60,6 @@ export class YandexVisionExtractor {
   ): Promise<IExtractionResult> {
     const base64 = imageBuffer.toString('base64');
 
-    console.log('[YandexVisionExtractor] using model URI:', this.modelUri);
     const response = await this.client.chat.completions.create({
       model: this.modelUri,
       messages: [
@@ -81,8 +80,42 @@ export class YandexVisionExtractor {
     });
 
     const raw = response.choices[0]?.message?.content ?? '{}';
+    const cleaned = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim();
+    return JSON.parse(cleaned) as IExtractionResult;
+  }
+}
 
-    // Yandex может вернуть JSON в markdown-блоке ```json ... ```
+export class GeminiVisionExtractor {
+  private readonly client: OpenAI;
+
+  constructor(apiKey: string) {
+    this.client = new OpenAI({
+      apiKey,
+      baseURL: 'https://polza.ai/api/v1',
+    });
+  }
+
+  async extractBookData(
+    images: Array<{ buffer: Buffer; mimeType: 'image/jpeg' | 'image/png' }>,
+    prompt: string,
+  ): Promise<IExtractionResult> {
+    const imageContents = images.map(({ buffer, mimeType }) => ({
+      type: 'image_url' as const,
+      image_url: { url: `data:${mimeType};base64,${buffer.toString('base64')}` },
+    }));
+
+    const response = await this.client.chat.completions.create({
+      model: 'google/gemini-2.0-flash-001',
+      messages: [
+        {
+          role: 'user',
+          content: [{ type: 'text', text: prompt }, ...imageContents],
+        },
+      ],
+      max_tokens: 1500,
+    });
+
+    const raw = response.choices[0]?.message?.content ?? '{}';
     const cleaned = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim();
     return JSON.parse(cleaned) as IExtractionResult;
   }

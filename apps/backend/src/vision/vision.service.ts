@@ -11,8 +11,7 @@ import {
   STORAGE_PROVIDER,
 } from "../photos/storage/storage.interface";
 import {
-  YandexVisionExtractor,
-  mergeExtractionResults,
+  GeminiVisionExtractor,
   applyDefaults,
 } from "@bookscanner/ocr-processor";
 import {
@@ -76,10 +75,9 @@ export class VisionService {
 
     try {
       ocrResult = await this.ocrResultRepository.save(ocrResult);
-      const apiKey = this.configService.get<string>("YANDEX_AI_API_KEY");
-      const folderId = this.configService.get<string>("YANDEX_FOLDER_ID");
-      if (!apiKey || !folderId) {
-        throw new Error("YANDEX_AI_API_KEY и YANDEX_FOLDER_ID должны быть настроены в переменных окружения");
+      const apiKey = this.configService.get<string>("POLZA_AI_API_KEY");
+      if (!apiKey) {
+        throw new Error("POLZA_AI_API_KEY не настроен в переменных окружения");
       }
 
       const prompt = await this.settingsService.getValue<string>(
@@ -87,39 +85,21 @@ export class VisionService {
         this.getDefaultPrompt(),
       );
 
-      const extractor = new YandexVisionExtractor(apiKey, folderId);
+      const extractor = new GeminiVisionExtractor(apiKey);
 
-      const photo01 = photos[0];
-      const photo02 = photos[1];
+      const availablePhotos = photos.slice(0, 2).filter(Boolean);
+      const imageBuffers = await Promise.all(
+        availablePhotos.map(async (p) => ({
+          buffer: await this.storage.download(p.fileKey),
+          mimeType: p.mimeType as "image/jpeg" | "image/png",
+        })),
+      );
 
-      const [result01, result02] = await Promise.all([
-        photo01
-          ? extractor.extractBookData(
-              await this.storage.download(photo01.fileKey),
-              prompt,
-              photo01.mimeType as "image/jpeg" | "image/png",
-            )
-          : null,
-        photo02
-          ? extractor.extractBookData(
-              await this.storage.download(photo02.fileKey),
-              prompt,
-              photo02.mimeType as "image/jpeg" | "image/png",
-            )
-          : null,
-      ]);
+      const result = await extractor.extractBookData(imageBuffers, prompt);
+      const extractedData = applyDefaults(result);
 
-      const merged = mergeExtractionResults(result01, result02);
-      const extractedData = applyDefaults(merged);
-
-      ocrResult.photo01Extraction = result01 as unknown as Record<
-        string,
-        unknown
-      >;
-      ocrResult.photo02Extraction = result02 as unknown as Record<
-        string,
-        unknown
-      >;
+      ocrResult.photo01Extraction = (availablePhotos[0] ? result : null) as unknown as Record<string, unknown>;
+      ocrResult.photo02Extraction = null as unknown as Record<string, unknown>;
       ocrResult.extractedData = extractedData as unknown as Record<
         string,
         unknown

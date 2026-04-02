@@ -981,7 +981,7 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     paddingHorizontal: 14,
     alignItems: "center",
-    alignSelf: "flex-start",
+    alignSelf: "flex-end",
   },
   publishBtnDisabled: {
     opacity: 0.6,
