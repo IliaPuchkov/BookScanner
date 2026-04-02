@@ -1,4 +1,7 @@
 import { Injectable, Logger, Inject } from "@nestjs/common";
+import { InjectQueue } from "@nestjs/bullmq";
+import { Queue } from "bullmq";
+import { VISION_QUEUE, VISION_JOBS } from "./vision.constants";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
 import { ConfigService } from "@nestjs/config";
@@ -54,7 +57,28 @@ export class VisionService {
     private readonly configService: ConfigService,
     @Inject(STORAGE_PROVIDER)
     private readonly storage: IStorageProvider,
+    @InjectQueue(VISION_QUEUE)
+    private readonly extractionQueue: Queue,
   ) {}
+
+  async queueBulkExtraction(bookIds: string[]): Promise<{ queued: number }> {
+    const jobs = bookIds.map((bookId) => ({
+      name: VISION_JOBS.EXTRACT_BOOK,
+      data: { bookId },
+      opts: { removeOnComplete: 100, removeOnFail: 200 },
+    }));
+
+    // Сбрасываем статус всех книг в 'pending' перед постановкой в очередь
+    await this.ocrResultRepository
+      .createQueryBuilder()
+      .update()
+      .set({ status: 'pending', errorMessage: null as any })
+      .where('book_id IN (:...bookIds)', { bookIds })
+      .execute();
+
+    await this.extractionQueue.addBulk(jobs);
+    return { queued: bookIds.length };
+  }
 
   async extractBookData(bookId: string) {
     const book = await this.booksService.findOne(bookId);

@@ -2,6 +2,7 @@ import { Controller, Post, Get, Param, Body, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { VisionService } from './vision.service';
 import { ExtractDto } from './dto/extract.dto';
+import { ExtractBulkDto } from './dto/extract-bulk.dto';
 import { IsbnLookupDto } from './dto/isbn-lookup.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
@@ -22,6 +23,12 @@ export class VisionController {
   @ApiOperation({ summary: 'Получить OCR результат для книги' })
   getResult(@Param('bookId') bookId: string) {
     return this.visionService.getOcrResult(bookId);
+  }
+
+  @Post('extract-bulk')
+  @ApiOperation({ summary: 'Поставить несколько книг в очередь распознавания' })
+  extractBulk(@Body() dto: ExtractBulkDto) {
+    return this.visionService.queueBulkExtraction(dto.bookIds);
   }
 
   @Post('isbn-lookup')

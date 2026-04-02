@@ -121,9 +121,16 @@ export class BooksService {
       );
     }
 
-    qb.orderBy('book.createdAt', pagination.order)
-      .skip(pagination.skip)
-      .take(pagination.limit);
+    // For admin queries (no session filter), sort by box first so all books
+    // of the same box appear consecutively across pages.
+    if (role === UserRole.ADMIN && !workSessionId) {
+      qb.orderBy('box.boxNumber', 'ASC', 'NULLS LAST')
+        .addOrderBy('book.createdAt', pagination.order);
+    } else {
+      qb.orderBy('book.createdAt', pagination.order);
+    }
+
+    qb.skip(pagination.skip).take(pagination.limit);
 
     const [data, total] = await qb.getManyAndCount();
 

@@ -97,9 +97,10 @@ echo "[2/3] Backing up SSL certificates..."
 CERT_ARCHIVE="$TMP_DIR/certs_${TIMESTAMP}.tar.gz"
 
 # Copy certbot volume data via temporary container
-if docker volume inspect bookscanner_certbot-conf &>/dev/null; then
+CERTBOT_VOLUME="${CERTBOT_VOLUME:-docker_certbot-conf}"
+if docker volume inspect "$CERTBOT_VOLUME" &>/dev/null; then
   docker run --rm \
-    -v bookscanner_certbot-conf:/certs:ro \
+    -v "$CERTBOT_VOLUME":/certs:ro \
     -v "$TMP_DIR":/backup \
     alpine \
     tar czf "/backup/certs_${TIMESTAMP}.tar.gz" -C /certs .

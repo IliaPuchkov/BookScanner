@@ -21,6 +21,18 @@ services:
     networks:
       - internal
 
+  redis:
+    image: redis:7-alpine
+    container_name: bookscanner-redis
+    restart: unless-stopped
+    networks:
+      - internal
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   backend:
     build:
       context: ..
@@ -31,8 +43,11 @@ services:
       - ../apps/backend/.env
     environment:
       DB_HOST: postgres
+      REDIS_HOST: redis
     depends_on:
       postgres:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     networks:
       - internal

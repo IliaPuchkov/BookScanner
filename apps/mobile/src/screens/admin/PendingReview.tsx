@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo, useLayoutEffect } from "react";
+import React, { useState, useCallback, useMemo, useLayoutEffect, useEffect, useRef } from "react";
 import {
   View,
   SectionList,
@@ -55,6 +55,53 @@ export function PendingReviewScreen() {
   const [pendingPublishAction, setPendingPublishAction] = useState<
     { type: "single"; book: Book } | { type: "bulk"; ids: string[] } | null
   >(null);
+  const [polling, setPolling] = useState<{
+    total: number;
+    completed: number;
+    failed: number;
+    ids: string[];
+  } | null>(null);
+  const pollingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => {
+    if (!polling) return;
+
+    const checkProgress = async () => {
+      const results = await Promise.allSettled(
+        polling.ids.map((id) => visionService.getResult(id)),
+      );
+      let completed = 0;
+      let failed = 0;
+      for (const r of results) {
+        if (r.status === "fulfilled" && r.value) {
+          if (r.value.status === "completed") completed++;
+          else if (r.value.status === "failed") failed++;
+        }
+      }
+      const done = completed + failed;
+      if (done >= polling.total) {
+        if (pollingIntervalRef.current) clearInterval(pollingIntervalRef.current);
+        setPolling(null);
+        exitSelectMode();
+        if (failed > 0) {
+          Alert.alert(
+            "Готово с ошибками",
+            `Распознано: ${completed}, не удалось: ${failed}`,
+          );
+        } else {
+          Alert.alert("Готово", `Распознано ${completed} карточек`);
+        }
+        fetchBooks(1, "refresh");
+      } else {
+        setPolling((prev) => prev ? { ...prev, completed, failed } : null);
+      }
+    };
+
+    pollingIntervalRef.current = setInterval(checkProgress, 3000);
+    return () => {
+      if (pollingIntervalRef.current) clearInterval(pollingIntervalRef.current);
+    };
+  }, [polling?.ids]);
 
   const exitSelectMode = useCallback(() => {
     setSelectMode(false);
@@ -446,24 +493,10 @@ export function PendingReviewScreen() {
           onPress: async () => {
             setBulkReExtracting(true);
             try {
-              const results = await Promise.allSettled(
-                ids.map((id) => visionService.extract(id)),
-              );
-              const failed = results.filter(
-                (r) => r.status === "rejected",
-              ).length;
-              const succeeded = results.length - failed;
-              exitSelectMode();
-              if (failed > 0) {
-                Alert.alert(
-                  "Готово с ошибками",
-                  `Распознано: ${succeeded}, не удалось: ${failed}`,
-                );
-              } else {
-                Alert.alert("Готово", `Распознано ${succeeded} карточек`);
-              }
+              await visionService.extractBulk(ids);
+              setPolling({ total: n, completed: 0, failed: 0, ids });
             } catch {
-              Alert.alert("Ошибка", "Не удалось выполнить распознавание");
+              Alert.alert("Ошибка", "Не удалось поставить книги в очередь");
             } finally {
               setBulkReExtracting(false);
             }
@@ -843,7 +876,16 @@ export function PendingReviewScreen() {
           </View>
         </TouchableWithoutFeedback>
       </Modal>
-      {selectMode && (
+      {polling && (
+        <View style={styles.bottomBar}>
+          <ActivityIndicator size="small" color="#1976D2" style={{ marginRight: 10 }} />
+          <Text style={styles.bottomBarCount}>
+            Распознавание: {polling.completed + polling.failed}/{polling.total}
+            {polling.failed > 0 ? `  (ошибок: ${polling.failed})` : ""}
+          </Text>
+        </View>
+      )}
+      {selectMode && !polling && (
         <View style={styles.bottomBar}>
           <Text style={styles.bottomBarCount}>Выбрано: {selectedIds.size}</Text>
           <TouchableOpacity

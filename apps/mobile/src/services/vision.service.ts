@@ -7,6 +7,11 @@ export const visionService = {
     return data;
   },
 
+  async extractBulk(bookIds: string[]): Promise<{ queued: number }> {
+    const { data } = await api.post<{ queued: number }>('/vision/extract-bulk', { bookIds });
+    return data;
+  },
+
   async getResult(bookId: string): Promise<OcrResult | null> {
     const { data } = await api.get<OcrResult | null>(`/vision/result/${bookId}`);
     return data;

@@ -104,7 +104,7 @@ export const adminService = {
     return data;
   },
 
-  async getPendingReviewBooks(page = 1, limit = 20, boxId?: string): Promise<PaginatedResponse<Book>> {
+  async getPendingReviewBooks(page = 1, limit = 100, boxId?: string): Promise<PaginatedResponse<Book>> {
     const { data } = await api.get<PaginatedResponse<Book>>('/admin/books/pending-review', {
       params: { page, limit, ...(boxId ? { boxId } : {}) },
     });
