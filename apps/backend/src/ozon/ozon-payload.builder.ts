@@ -45,6 +45,17 @@ function attr(
   return { complex_id: 0, id, values: [val] };
 }
 
+const COVER_TYPE_MAP: Record<string, string> = {
+  "мягкий переплет": "Мягкая обложка",
+  "твердый переплет": "Твердая обложка",
+};
+
+const PAPER_TYPE_MAP: Record<string, string> = {
+  "офсетная": "Офсетная",
+  "глянцевая": "Мелованная глянцевая",
+  "матовая": "Мелованная матовая",
+};
+
 // Defaults when AI returns 0: длина=100, ширина=100, толщина=35
 const DEFAULT_WIDTH_MM = 100; // ширина
 const DEFAULT_LENGTH_MM = 100; // длина (= height в модели книги)
@@ -88,10 +99,10 @@ export function buildOzonImportPayload(
     attributes.push(attr(OZON_ATTR_YEAR, book.yearPublished));
   }
   if (book.coverType) {
-    attributes.push(attr(OZON_ATTR_COVER_TYPE, book.coverType));
+    attributes.push(attr(OZON_ATTR_COVER_TYPE, COVER_TYPE_MAP[book.coverType] ?? book.coverType));
   }
   if (book.paperType) {
-    attributes.push(attr(OZON_ATTR_PAPER_TYPE, book.paperType));
+    attributes.push(attr(OZON_ATTR_PAPER_TYPE, PAPER_TYPE_MAP[book.paperType] ?? book.paperType));
   }
   if (book.pageCount) {
     attributes.push(attr(OZON_ATTR_PAGE_COUNT, book.pageCount));
