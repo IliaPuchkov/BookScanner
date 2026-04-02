@@ -89,4 +89,8 @@ export class AdminService {
   async getPendingReviewIds(boxId?: string) {
     return this.booksService.getPendingReviewIds(boxId);
   }
+
+  async getFailedPublicationBooks(pagination: PaginationDto) {
+    return this.booksService.getFailedPublicationBooks(pagination);
+  }
 }

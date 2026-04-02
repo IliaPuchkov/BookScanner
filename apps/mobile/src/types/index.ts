@@ -84,6 +84,7 @@ export interface Book {
   photos: BookPhoto[];
   status: BookStatus;
   publishedToOzon?: string;
+  ozonProduct?: { errorMessage?: string; status?: string };
   createdAt: string;
   updatedAt: string;
 }

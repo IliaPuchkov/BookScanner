@@ -2,6 +2,7 @@ import React, { useState, useCallback, useMemo, useLayoutEffect, useEffect, useR
 import {
   View,
   SectionList,
+  FlatList,
   StyleSheet,
   RefreshControl,
   Text,
@@ -55,6 +56,23 @@ export function PendingReviewScreen() {
   const [pendingPublishAction, setPendingPublishAction] = useState<
     { type: "single"; book: Book } | { type: "bulk"; ids: string[] } | null
   >(null);
+  const [activeTab, setActiveTab] = useState<"pending" | "failed">("pending");
+  const [failedBooks, setFailedBooks] = useState<Book[]>([]);
+  const [loadingFailed, setLoadingFailed] = useState(false);
+  const [retryingId, setRetryingId] = useState<string | null>(null);
+
+  const fetchFailedBooks = useCallback(async () => {
+    setLoadingFailed(true);
+    try {
+      const res = await adminService.getFailedPublicationBooks(1, 100);
+      setFailedBooks(res.data);
+    } catch {
+      console.error("Failed books fetch error");
+    } finally {
+      setLoadingFailed(false);
+    }
+  }, []);
+
   const [polling, setPolling] = useState<{
     total: number;
     completed: number;
@@ -186,6 +204,7 @@ export function PendingReviewScreen() {
   useFocusEffect(
     useCallback(() => {
       fetchBooks(1, "initial");
+      fetchFailedBooks();
       adminService
         .getPendingReviewCountsByBox()
         .then((counts) => {
@@ -271,6 +290,7 @@ export function PendingReviewScreen() {
     setRefreshing(true);
     setBoxAllIds({});
     fetchBooks(1, "refresh");
+    fetchFailedBooks();
     adminService
       .getPendingReviewCountsByBox()
       .then((counts) => {
@@ -506,6 +526,58 @@ export function PendingReviewScreen() {
     );
   };
 
+  const handleRetry = async (book: Book) => {
+    if (stores.length === 0) {
+      Alert.alert("Нет магазинов", "Добавьте магазин Ozon в настройках.");
+      return;
+    }
+    setPendingPublishAction({ type: "single", book });
+    setStorePickerVisible(true);
+  };
+
+  const renderFailedItem = ({ item }: { item: Book }) => {
+    const coverPhoto = item.photos?.find((p) => p.sortOrder === 0);
+    const isRetrying = retryingId === item.id;
+    return (
+      <TouchableOpacity
+        style={styles.card}
+        activeOpacity={0.7}
+        onPress={() => navigation.navigate("ProductDetail", { bookId: item.id, editable: true })}
+      >
+        <View style={styles.imageWrapper}>
+          {coverPhoto ? (
+            <Image source={{ uri: coverPhoto.fileUrl }} style={styles.image} />
+          ) : (
+            <View style={[styles.image, styles.placeholder]}>
+              <Text style={styles.placeholderText}>Нет фото</Text>
+            </View>
+          )}
+        </View>
+        <View style={styles.info}>
+          <Text style={styles.title} numberOfLines={2}>{item.title}</Text>
+          <Text style={styles.sku}>{item.sku}</Text>
+          {item.ozonProduct?.errorMessage ? (
+            <Text style={styles.errorText} numberOfLines={2}>
+              {item.ozonProduct.errorMessage}
+            </Text>
+          ) : null}
+          <TouchableOpacity
+            style={[styles.publishBtn, isRetrying && styles.publishBtnDisabled]}
+            onPress={() => handleRetry(item)}
+            disabled={isRetrying}
+            activeOpacity={0.7}
+          >
+            {isRetrying ? (
+              <ActivityIndicator size="small" color="#fff" />
+            ) : (
+              <Text style={styles.publishBtnText}>Повторить</Text>
+            )}
+          </TouchableOpacity>
+        </View>
+      </TouchableOpacity>
+    );
+  };
+
   const renderItem = ({ item }: { item: Book }) => {
     const coverPhoto = item.photos?.find((p) => p.sortOrder === 0);
     const isPublishing = publishingId === item.id;
@@ -687,88 +759,129 @@ export function PendingReviewScreen() {
           </View>
         </TouchableWithoutFeedback>
       </Modal>
-      <SectionList
-        style={styles.container}
-        sections={sections}
-        keyExtractor={(item) => item.id}
-        renderItem={renderItem}
-        renderSectionHeader={({ section }) => {
-          const s = section as BookSection;
-          const firstBoxId = s.data[0]?.boxId;
-          const cachedIds = firstBoxId ? boxAllIds[firstBoxId] : undefined;
-          const idsToCheck = cachedIds ?? s.data.map((b) => b.id);
-          const allSelected =
-            idsToCheck.length > 0 &&
-            idsToCheck.every((id) => selectedIds.has(id));
-          const sectionCount = firstBoxId
-            ? (boxCounts[firstBoxId] ?? s.data.length)
-            : s.data.length;
-          return (
-            <View style={styles.sectionHeader}>
-              <View style={styles.sectionHeaderLeft}>
-                <Text style={styles.sectionHeaderText}>
-                  📦 Коробка {s.title}
-                </Text>
-                <View style={styles.sectionHeaderMeta}>
-                  {s.operatorName ? (
-                    <Text style={styles.sectionHeaderMetaText}>
-                      {s.operatorName}
-                    </Text>
-                  ) : null}
-                  {s.sectionDate ? (
-                    <Text style={styles.sectionHeaderMetaText}>
-                      {s.operatorName ? "  ·  " : ""}
-                      {formatDate(s.sectionDate)}
-                    </Text>
-                  ) : null}
-                </View>
-              </View>
-              {selectMode ? (
-                <TouchableOpacity
-                  onPress={() => toggleSelectBox(s.data)}
-                  style={[
-                    styles.selectBoxBtn,
-                    allSelected && styles.selectBoxBtnActive,
-                  ]}
-                  activeOpacity={0.7}
-                >
-                  <Text
-                    style={[
-                      styles.selectBoxBtnText,
-                      allSelected && styles.selectBoxBtnTextActive,
-                    ]}
-                  >
-                    {allSelected ? "Снять все" : "Выбрать всё"}
+      <View style={styles.tabBar}>
+        <TouchableOpacity
+          style={[styles.tab, activeTab === "pending" && styles.tabActive]}
+          onPress={() => setActiveTab("pending")}
+          activeOpacity={0.7}
+        >
+          <Text style={[styles.tabText, activeTab === "pending" && styles.tabTextActive]}>
+            На проверке
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.tab, activeTab === "failed" && styles.tabActive]}
+          onPress={() => setActiveTab("failed")}
+          activeOpacity={0.7}
+        >
+          <Text style={[styles.tabText, activeTab === "failed" && styles.tabTextActive]}>
+            Ошибки{failedBooks.length > 0 ? ` (${failedBooks.length})` : ""}
+          </Text>
+        </TouchableOpacity>
+      </View>
+
+      {activeTab === "pending" ? (
+        <SectionList
+          style={styles.container}
+          sections={sections}
+          keyExtractor={(item) => item.id}
+          renderItem={renderItem}
+          renderSectionHeader={({ section }) => {
+            const s = section as BookSection;
+            const firstBoxId = s.data[0]?.boxId;
+            const cachedIds = firstBoxId ? boxAllIds[firstBoxId] : undefined;
+            const idsToCheck = cachedIds ?? s.data.map((b) => b.id);
+            const allSelected =
+              idsToCheck.length > 0 &&
+              idsToCheck.every((id) => selectedIds.has(id));
+            const sectionCount = firstBoxId
+              ? (boxCounts[firstBoxId] ?? s.data.length)
+              : s.data.length;
+            return (
+              <View style={styles.sectionHeader}>
+                <View style={styles.sectionHeaderLeft}>
+                  <Text style={styles.sectionHeaderText}>
+                    📦 Коробка {s.title}
                   </Text>
-                </TouchableOpacity>
-              ) : (
-                <Text style={styles.sectionHeaderCount}>
-                  {sectionCount} шт.
-                </Text>
-              )}
-            </View>
-          );
-        }}
-        contentContainerStyle={styles.list}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
-        }
-        onEndReached={handleLoadMore}
-        onEndReachedThreshold={0.3}
-        stickySectionHeadersEnabled={true}
-        ListEmptyComponent={
-          <Text style={styles.empty}>Нет карточек ожидающих проверки</Text>
-        }
-        ListFooterComponent={
-          loadingMore ? (
-            <ActivityIndicator
-              size="small"
-              color="#1976D2"
-              style={{ marginVertical: 16 }}
-            />
-          ) : null
-        }
-      />
+                  <View style={styles.sectionHeaderMeta}>
+                    {s.operatorName ? (
+                      <Text style={styles.sectionHeaderMetaText}>
+                        {s.operatorName}
+                      </Text>
+                    ) : null}
+                    {s.sectionDate ? (
+                      <Text style={styles.sectionHeaderMetaText}>
+                        {s.operatorName ? "  ·  " : ""}
+                        {formatDate(s.sectionDate)}
+                      </Text>
+                    ) : null}
+                  </View>
+                </View>
+                {selectMode ? (
+                  <TouchableOpacity
+                    onPress={() => toggleSelectBox(s.data)}
+                    style={[
+                      styles.selectBoxBtn,
+                      allSelected && styles.selectBoxBtnActive,
+                    ]}
+                    activeOpacity={0.7}
+                  >
+                    <Text
+                      style={[
+                        styles.selectBoxBtnText,
+                        allSelected && styles.selectBoxBtnTextActive,
+                      ]}
+                    >
+                      {allSelected ? "Снять все" : "Выбрать всё"}
+                    </Text>
+                  </TouchableOpacity>
+                ) : (
+                  <Text style={styles.sectionHeaderCount}>
+                    {sectionCount} шт.
+                  </Text>
+                )}
+              </View>
+            );
+          }}
+          contentContainerStyle={styles.list}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
+          }
+          onEndReached={handleLoadMore}
+          onEndReachedThreshold={0.3}
+          stickySectionHeadersEnabled={true}
+          ListEmptyComponent={
+            <Text style={styles.empty}>Нет карточек ожидающих проверки</Text>
+          }
+          ListFooterComponent={
+            loadingMore ? (
+              <ActivityIndicator
+                size="small"
+                color="#1976D2"
+                style={{ marginVertical: 16 }}
+              />
+            ) : null
+          }
+        />
+      ) : loadingFailed ? (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#1976D2" />
+        </View>
+      ) : (
+        <FlatList
+          style={styles.failedList}
+          data={failedBooks}
+          keyExtractor={(item) => item.id}
+          renderItem={({ item }: { item: Book }) => renderFailedItem({ item })}
+          contentContainerStyle={styles.failedListContent}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
+          }
+          ListEmptyComponent={
+            <Text style={styles.empty}>Нет карточек с ошибками публикации</Text>
+          }
+        />
+      )}
       <TouchableOpacity
         style={styles.fab}
         onPress={() => navigation.navigate("CreateCard")}
@@ -1274,5 +1387,42 @@ const styles = StyleSheet.create({
   storeItemLimitWarn: {
     color: "#E53935",
     fontWeight: "600",
+  },
+  tabBar: {
+    flexDirection: "row",
+    backgroundColor: "#fff",
+    borderBottomWidth: 1,
+    borderBottomColor: "#e0e0e0",
+  },
+  tab: {
+    flex: 1,
+    paddingVertical: 12,
+    alignItems: "center",
+  },
+  tabActive: {
+    borderBottomWidth: 2,
+    borderBottomColor: "#1976D2",
+  },
+  tabText: {
+    fontSize: 14,
+    color: "#888",
+    fontWeight: "500",
+  },
+  tabTextActive: {
+    color: "#1976D2",
+  },
+  errorText: {
+    fontSize: 12,
+    color: "#D32F2F",
+    marginTop: 4,
+    marginBottom: 4,
+  },
+  failedList: {
+    flex: 1,
+    backgroundColor: "#F5F5F5",
+  },
+  failedListContent: {
+    padding: 12,
+    gap: 8,
   },
 });

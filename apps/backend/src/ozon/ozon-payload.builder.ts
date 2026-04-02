@@ -47,7 +47,7 @@ function attr(
 
 const COVER_TYPE_MAP: Record<string, string> = {
   "мягкий переплет": "Мягкая обложка",
-  "твердый переплет": "Твердая обложка",
+  "твердый переплет": "Твердый переплет",
 };
 
 const PAPER_TYPE_MAP: Record<string, string> = {

@@ -114,6 +114,8 @@ export class OzonApiClient {
     const url = `${this.baseUrl}${endpoint}`;
     this.logger.debug(`POST ${endpoint}`);
 
+    await this.throttle();
+
     const res = await fetch(url, {
       method: 'POST',
       headers: {
@@ -207,6 +209,19 @@ export class OzonApiClient {
         requestBody: body,
       };
     }
+  }
+
+  // Rate limiter: не более 1 запроса каждые 300ms (Ozon limit ~3 req/sec)
+  private lastRequestTime = 0;
+  private readonly minRequestInterval = 300;
+
+  private async throttle(): Promise<void> {
+    const now = Date.now();
+    const wait = this.minRequestInterval - (now - this.lastRequestTime);
+    if (wait > 0) {
+      await new Promise((resolve) => setTimeout(resolve, wait));
+    }
+    this.lastRequestTime = Date.now();
   }
 
   // Кэш: `${attributeId}:${normalizedValue}` → dictionary_value_id (или null если не найдено)

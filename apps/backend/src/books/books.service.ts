@@ -198,6 +198,26 @@ export class BooksService {
     return raw.map((r) => ({ boxId: r.boxId, boxNumber: r.boxNumber, count: parseInt(r.count, 10) }));
   }
 
+  async getFailedPublicationBooks(pagination: PaginationDto) {
+    const { page = 1, limit = 20 } = pagination;
+    const qb = this.booksRepository
+      .createQueryBuilder('book')
+      .leftJoinAndSelect('book.box', 'box')
+      .leftJoinAndSelect('book.photos', 'photos')
+      .leftJoinAndSelect('book.createdBy', 'createdBy')
+      .leftJoinAndSelect('book.ozonProduct', 'ozonProduct')
+      .where('book.status = :status', { status: BookStatus.PUBLICATION_FAILED })
+      .orderBy('book.updatedAt', 'DESC')
+      .skip((page - 1) * limit)
+      .take(limit);
+
+    const [data, total] = await qb.getManyAndCount();
+    return {
+      data,
+      meta: { total, page, limit, totalPages: Math.ceil(total / limit) },
+    };
+  }
+
   async getPendingReviewIds(boxId?: string): Promise<string[]> {
     const qb = this.booksRepository
       .createQueryBuilder('book')

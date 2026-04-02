@@ -116,6 +116,13 @@ export const adminService = {
     return data;
   },
 
+  async getFailedPublicationBooks(page = 1, limit = 20): Promise<PaginatedResponse<Book>> {
+    const { data } = await api.get<PaginatedResponse<Book>>('/admin/books/failed-publication', {
+      params: { page, limit },
+    });
+    return data;
+  },
+
   async getPendingReviewIds(boxId: string): Promise<string[]> {
     const { data } = await api.get<string[]>('/admin/books/pending-review/ids', {
       params: { boxId },

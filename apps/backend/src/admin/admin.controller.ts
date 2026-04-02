@@ -86,6 +86,12 @@ export class AdminController {
     return this.adminService.getPendingReviewBooks(pagination, boxId);
   }
 
+  @Get('books/failed-publication')
+  @ApiOperation({ summary: 'Карточки с ошибкой публикации на Ozon' })
+  getFailedPublicationBooks(@Query() pagination: PaginationDto) {
+    return this.adminService.getFailedPublicationBooks(pagination);
+  }
+
   // Book database
   @Get('books/database')
   @ApiOperation({ summary: 'Поиск по базе книг' })
