@@ -60,6 +60,9 @@ export function PendingReviewScreen() {
   const [failedBooks, setFailedBooks] = useState<Book[]>([]);
   const [loadingFailed, setLoadingFailed] = useState(false);
   const [retryingId, setRetryingId] = useState<string | null>(null);
+  const [failedSelectMode, setFailedSelectMode] = useState(false);
+  const [failedSelectedIds, setFailedSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkRetrying, setBulkRetrying] = useState(false);
 
   const fetchFailedBooks = useCallback(async () => {
     setLoadingFailed(true);
@@ -126,12 +129,50 @@ export function PendingReviewScreen() {
     setSelectedIds(new Set());
   }, []);
 
+  const exitFailedSelectMode = useCallback(() => {
+    setFailedSelectMode(false);
+    setFailedSelectedIds(new Set());
+  }, []);
+
+  const toggleFailedSelect = useCallback((id: string) => {
+    setFailedSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+
+  const handleBulkRetry = () => {
+    if (failedSelectedIds.size === 0) return;
+    initiatePublish({ type: "bulk", ids: Array.from(failedSelectedIds) });
+  };
+
   useLayoutEffect(() => {
     if (selectMode) {
       navigation.setOptions({
         headerRight: () => (
           <TouchableOpacity
             onPress={exitSelectMode}
+            style={{
+              width: 44,
+              height: 44,
+              backgroundColor: "#1976D2",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            <Text style={{ color: "#fff", fontSize: 15, fontWeight: "600" }}>
+              Отмена
+            </Text>
+          </TouchableOpacity>
+        ),
+      });
+    } else if (failedSelectMode) {
+      navigation.setOptions({
+        headerRight: () => (
+          <TouchableOpacity
+            onPress={exitFailedSelectMode}
             style={{
               width: 44,
               height: 44,
@@ -319,20 +360,28 @@ export function PendingReviewScreen() {
         await booksService.publishToOzon(action.book.id, storeId);
         Alert.alert("Готово", "Карточка отправлена на модерацию Ozon");
         setBooks((prev) => prev.filter((b) => b.id !== action.book.id));
+        setFailedBooks((prev) => prev.filter((b) => b.id !== action.book.id));
+        if (failedSelectMode) exitFailedSelectMode();
       } catch {
         Alert.alert("Ошибка", "Не удалось загрузить в Озон");
       } finally {
         setPublishingId(null);
       }
     } else {
-      setBulkPublishing(true);
+      const isFailedRetry = action.ids.some((id) =>
+        failedBooks.some((b) => b.id === id),
+      );
+      if (isFailedRetry) setBulkRetrying(true);
+      else setBulkPublishing(true);
       try {
         const result = await booksService.publishBulkToOzon(
           action.ids,
           storeId,
         );
         setBooks((prev) => prev.filter((b) => !action.ids.includes(b.id)));
-        exitSelectMode();
+        setFailedBooks((prev) => prev.filter((b) => !action.ids.includes(b.id)));
+        if (isFailedRetry) exitFailedSelectMode();
+        else exitSelectMode();
         if (result.failed > 0) {
           Alert.alert(
             "Готово с ошибками",
@@ -347,6 +396,7 @@ export function PendingReviewScreen() {
       } catch {
         Alert.alert("Ошибка", "Не удалось загрузить книги в Озон");
       } finally {
+        setBulkRetrying(false);
         setBulkPublishing(false);
       }
     }
@@ -538,11 +588,18 @@ export function PendingReviewScreen() {
   const renderFailedItem = ({ item }: { item: Book }) => {
     const coverPhoto = item.photos?.find((p) => p.sortOrder === 0);
     const isRetrying = retryingId === item.id;
+    const isSelected = failedSelectedIds.has(item.id);
     return (
       <TouchableOpacity
-        style={styles.card}
+        style={[styles.card, failedSelectMode && isSelected && styles.cardSelected]}
         activeOpacity={0.7}
-        onPress={() => navigation.navigate("ProductDetail", { bookId: item.id, editable: true })}
+        onPress={() => {
+          if (failedSelectMode) {
+            toggleFailedSelect(item.id);
+          } else {
+            navigation.navigate("ProductDetail", { bookId: item.id, editable: true });
+          }
+        }}
       >
         <View style={styles.imageWrapper}>
           {coverPhoto ? (
@@ -550,6 +607,11 @@ export function PendingReviewScreen() {
           ) : (
             <View style={[styles.image, styles.placeholder]}>
               <Text style={styles.placeholderText}>Нет фото</Text>
+            </View>
+          )}
+          {failedSelectMode && (
+            <View style={[styles.checkbox, isSelected && styles.checkboxSelected]}>
+              {isSelected && <Text style={styles.checkmark}>✓</Text>}
             </View>
           )}
         </View>
@@ -561,18 +623,20 @@ export function PendingReviewScreen() {
               {item.ozonProduct.errorMessage}
             </Text>
           ) : null}
-          <TouchableOpacity
-            style={[styles.publishBtn, isRetrying && styles.publishBtnDisabled]}
-            onPress={() => handleRetry(item)}
-            disabled={isRetrying}
-            activeOpacity={0.7}
-          >
-            {isRetrying ? (
-              <ActivityIndicator size="small" color="#fff" />
-            ) : (
-              <Text style={styles.publishBtnText}>Повторить</Text>
-            )}
-          </TouchableOpacity>
+          {!failedSelectMode && (
+            <TouchableOpacity
+              style={[styles.publishBtn, isRetrying && styles.publishBtnDisabled]}
+              onPress={() => handleRetry(item)}
+              disabled={isRetrying}
+              activeOpacity={0.7}
+            >
+              {isRetrying ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <Text style={styles.publishBtnText}>Повторить</Text>
+              )}
+            </TouchableOpacity>
+          )}
         </View>
       </TouchableOpacity>
     );
@@ -749,7 +813,11 @@ export function PendingReviewScreen() {
                   activeOpacity={0.7}
                   onPress={() => {
                     setMenuVisible(false);
-                    setSelectMode(true);
+                    if (activeTab === "failed") {
+                      setFailedSelectMode(true);
+                    } else {
+                      setSelectMode(true);
+                    }
                   }}
                 >
                   <Text style={styles.menuItemText}>Выбрать несколько</Text>
@@ -996,6 +1064,44 @@ export function PendingReviewScreen() {
             Распознавание: {polling.completed + polling.failed}/{polling.total}
             {polling.failed > 0 ? `  (ошибок: ${polling.failed})` : ""}
           </Text>
+        </View>
+      )}
+      {failedSelectMode && (
+        <View style={styles.bottomBar}>
+          <TouchableOpacity
+            onPress={() => {
+              const allSelected = failedBooks.every((b) => failedSelectedIds.has(b.id));
+              if (allSelected) {
+                setFailedSelectedIds(new Set());
+              } else {
+                setFailedSelectedIds(new Set(failedBooks.map((b) => b.id)));
+              }
+            }}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.bottomBarCount}>
+              {failedBooks.every((b) => failedSelectedIds.has(b.id))
+                ? "Снять все"
+                : `Выбрать все (${failedBooks.length})`}
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[
+              styles.bottomBarBtn,
+              (failedSelectedIds.size === 0 || bulkRetrying) && styles.bottomBarBtnDisabled,
+            ]}
+            onPress={handleBulkRetry}
+            disabled={failedSelectedIds.size === 0 || bulkRetrying}
+            activeOpacity={0.8}
+          >
+            {bulkRetrying ? (
+              <ActivityIndicator size="small" color="#fff" />
+            ) : (
+              <Text style={styles.bottomBarBtnText}>
+                Повторить{failedSelectedIds.size > 0 ? ` (${failedSelectedIds.size})` : ""}
+              </Text>
+            )}
+          </TouchableOpacity>
         </View>
       )}
       {selectMode && !polling && (
