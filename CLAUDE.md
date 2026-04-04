@@ -4,19 +4,20 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-**BookScanner** — система автоматизации создания карточек товаров (б/у книг) для маркетплейса Ozon на основе фотографий.
+**BookScanner (Jolly Book)** — система автоматизации создания карточек товаров (б/у книг) для маркетплейса Ozon на основе фотографий.
 
 ### Key Features
 
-- 📱 Mobile app (React Native) для операторов: загрузка фото, создание карточек, корректировка данных
-- 🖥️ Admin panel (встроена в mobile app при роли администратора): управление пользователями, статистика, база книг
-- 🤖 Backend API: обработка фотографий, OCR, AI-распознавание, интеграция с Ozon
-- 📊 Статистика работы сотрудников (количество карточек, производительность)
+- Mobile app (React Native/Expo) для операторов: загрузка фото, создание карточек, корректировка данных
+- Admin panel (встроена в mobile app при роли администратора): управление пользователями, статистика, база книг, настройки Ozon магазинов
+- Backend API (NestJS): обработка фотографий, AI-распознавание (Gemini Vision + OpenAI), интеграция с Ozon
+- Work sessions: рабочие сессии операторов для группировки карточек
+- Статистика работы сотрудников (количество карточек, производительность)
 
 ### User Roles
 
-- **Operator** (Фотограф/Сотрудник): создание карточек, загрузка фото, проверка данных
-- **Admin** (Администратор): управление пользователями, настройки, статистика, база книг
+- **Operator** (OPERATOR): создание карточек, загрузка фото, проверка данных, рабочие сессии
+- **Admin** (ADMIN): управление пользователями, настройки системы, статистика, база книг, модерация
 
 ---
 
@@ -27,75 +28,69 @@ BookScanner/
 ├── apps/
 │   ├── backend/                 # NestJS backend
 │   │   ├── src/
-│   │   │   ├── auth/           # Authentication & authorization
+│   │   │   ├── auth/           # JWT auth (login, register, refresh)
 │   │   │   ├── users/          # User management
-│   │   │   ├── books/          # Book cards CRUD
-│   │   │   ├── photos/         # Photo processing & storage
-│   │   │   ├── vision/         # OCR & AI extraction
-│   │   │   ├── ozon/           # Ozon integration
-│   │   │   ├── admin/          # Admin features
-│   │   │   ├── stats/          # Statistics & reporting
-│   │   │   └── common/         # Shared filters, guards, decorators
-│   │   ├── test/               # Unit & e2e tests
-│   │   ├── .env.example        # Environment variables template
+│   │   │   ├── boxes/          # Box management (уникальность boxNumber per user)
+│   │   │   ├── books/          # Book cards CRUD + bulk actions
+│   │   │   ├── photos/         # Photo upload/reorder/delete
+│   │   │   ├── vision/         # AI extraction (BullMQ queue + Gemini Vision)
+│   │   │   ├── ozon/           # Ozon integration (publish, bulk, status cron)
+│   │   │   ├── admin/          # Admin: stats, search, pending review
+│   │   │   ├── stats/          # Activity logs
+│   │   │   ├── settings/       # System settings (Ozon stores, etc.)
+│   │   │   ├── work-sessions/  # Work session tracking
+│   │   │   ├── common/         # Guards, decorators, filters, interceptors
+│   │   │   ├── database/
+│   │   │   │   └── migrations/ # TypeORM migrations
+│   │   │   ├── app.module.ts
+│   │   │   ├── main.ts
+│   │   │   └── data-source.ts
+│   │   ├── Dockerfile
+│   │   ├── .env.example
 │   │   └── package.json
 │   │
-│   └── mobile/                  # React Native (Expo)
+│   └── mobile/                  # React Native (Expo ~54)
 │       ├── src/
 │       │   ├── screens/
-│       │   │   ├── auth/       # Login/Register screens
-│       │   │   ├── operator/   # Operator screens
-│       │   │   │   ├── CreateCard.tsx
-│       │   │   │   ├── PhotoUpload.tsx
-│       │   │   │   ├── CardsList.tsx
-│       │   │   │   └── CardDetail.tsx
-│       │   │   └── admin/      # Admin screens
-│       │   │       ├── Dashboard.tsx
-│       │   │       ├── UserManagement.tsx
-│       │   │       ├── Statistics.tsx
-│       │   │       └── BookDatabase.tsx
-│       │   ├── components/     # Reusable components
-│       │   ├── hooks/          # Custom hooks
-│       │   ├── services/       # API clients
-│       │   ├── context/        # Context API (auth, user state)
-│       │   ├── utils/          # Utilities, helpers
-│       │   ├── navigation/     # Navigation config
-│       │   ├── types/          # TypeScript types
-│       │   └── App.tsx
-│       ├── app.json            # Expo config
+│       │   │   ├── auth/           # LoginScreen, RegisterScreen
+│       │   │   ├── operator/       # CardsList, CreateCard, CardDetail, PhotoUpload, SettingsScreen
+│       │   │   └── admin/          # Dashboard, UserManagement, Statistics, BookDatabase,
+│       │   │                       # PendingReview, ProductDetail
+│       │   ├── components/         # Button, Card, Input, LoadingOverlay, PhotoGrid
+│       │   ├── hooks/              # useAuth
+│       │   ├── services/           # api.ts, auth/books/boxes/photos/sessions/vision/admin .service.ts
+│       │   ├── context/            # AuthContext
+│       │   ├── utils/              # format.ts, sessionStore.ts, storage.ts
+│       │   ├── navigation/         # AppNavigator, AuthNavigator, OperatorNavigator, AdminNavigator, DevNavigator
+│       │   ├── types/              # index.ts
+│       │   └── config.ts           # API base URL
+│       ├── App.tsx
+│       ├── app.json               # name: "Jolly Book", version: "1.0.1"
 │       └── package.json
 │
 ├── packages/
-│   ├── shared/                  # Shared types & constants
-│   │   ├── src/
-│   │   │   ├── types/          # Shared TS interfaces
-│   │   │   ├── constants/      # App constants
-│   │   │   ├── utils/          # Validation, formatting
-│   │   │   └── index.ts
-│   │   └── package.json
+│   ├── shared/                  # @bookscanner/shared — shared TS types, constants, utils
+│   │   └── src/
+│   │       ├── types/           # user, book, box, photo, ocr, ozon, stats, settings, api types
+│   │       ├── constants/       # auth, ozon, photo constants
+│   │       └── utils/           # formatting, validation
 │   │
-│   └── ocr-processor/           # Photo processing module
-│       ├── src/
-│       │   ├── ocr.ts          # Tesseract OCR
-│       │   ├── vision.ts       # AI vision API (Claude/Google Vision)
-│       │   ├── extraction.ts   # Data extraction logic
-│       │   ├── validators.ts   # Extracted data validation
-│       │   └── index.ts
-│       └── package.json
+│   └── ocr-processor/           # @bookscanner/ocr-processor — OCR/Vision library
+│       └── src/
+│           ├── ocr.ts           # OCR processing
+│           ├── vision.ts        # Gemini Vision integration
+│           ├── extraction.ts    # Data extraction logic
+│           └── validators.ts    # Extracted data validation
 │
 ├── docker/
-│   ├── postgres.dockerfile     # PostgreSQL setup
-│   └── docker-compose.dev.yml  # Development environment
+│   ├── docker-compose.dev.yml   # PostgreSQL 14 + Redis 7
+│   └── docker-compose.prod.yml  # PostgreSQL + Redis + Backend + Nginx + Certbot
 │
-├── .github/
-│   └── workflows/              # CI/CD pipelines (optional)
-│
-├── ТЗ.md                        # Technical specification
-├── CLAUDE.md                    # This file
-├── package.json               # Root workspace config (pnpm)
-├── pnpm-workspace.yaml        # Workspace definition
-├── tsconfig.json              # Root TS config
-└── .gitignore
+├── CLAUDE.md
+├── ТЗ.md
+├── package.json                 # pnpm workspace root
+├── pnpm-workspace.yaml
+└── tsconfig.json
 ```
 
 ---
@@ -104,51 +99,58 @@ BookScanner/
 
 ### Backend (apps/backend)
 
-- **Framework**: NestJS with TypeScript
-- **Database**: PostgreSQL with TypeORM
-- **Authentication**: JWT tokens
-- **OCR & Vision**:
-  - Tesseract.js (local OCR)
-  - Claude API or Google Vision API (AI extraction)
-- **File Storage**: AWS S3 or local filesystem
-- **API Documentation**: Swagger/OpenAPI
-- **Testing**: Jest, Supertest
+- **Framework**: NestJS 10.4 with TypeScript 5.4
+- **Runtime**: Node 20 (Alpine in Docker)
+- **Database**: PostgreSQL 14 + TypeORM 0.3.20
+- **Queue**: BullMQ 5.72 + Redis 7 (vision extraction jobs)
+- **Authentication**: JWT (access + refresh tokens), bcryptjs, passport-jwt
+- **AI/Vision**: OpenAI API + Google Gemini Vision API (via `@bookscanner/ocr-processor`)
+- **File Storage**: AWS S3 (`@aws-sdk/client-s3`) or local filesystem (configurable)
+- **API Documentation**: Swagger at `/api/docs`
+- **Security**: Helmet, throttler (rate limiting), CORS, global validation pipe
+- **Other**: `@nestjs/schedule` (cron for Ozon status), `@nestjs/config`
 
 ### Mobile (apps/mobile)
 
-- **Framework**: React Native with Expo Go later ejecting Expo to bare
-- **Language**: TypeScript
-- **Navigation**: React Navigation
-- **State Management**: Context API + useState
-- **HTTP Client**: Axios
-- **Image handling**: expo-image-picker, expo-image-manipulator
-- **Storage**: AsyncStorage (local caching)
+- **Framework**: React Native 0.81.5 + Expo ~54
+- **Language**: TypeScript 5.9
+- **Navigation**: React Navigation 7 (native-stack + bottom-tabs)
+- **State Management**: Context API (AuthContext) + useState
+- **HTTP Client**: Axios 1.13 (with JWT interceptors + token refresh)
+- **Image**: expo-image-picker, expo-image-manipulator, react-native-image-crop-picker
+- **Storage**: AsyncStorage
+- **Icons**: @expo/vector-icons
+- **API Base URL**: `https://jollybook.duckdns.org/api`
 
-### Shared (packages/shared)
+### Packages
 
-- **Purpose**: Common types, constants, utilities
-- **Exports**: TypeScript interfaces, enums, validation functions
-
-### OCR Processor (packages/ocr-processor)
-
-- **OCR Engine**: Tesseract.js
-- **Vision AI**: Claude API / Google Vision API
-- **Data extraction**: Pattern matching, text parsing
+- **@bookscanner/shared**: Common TypeScript types, enums, constants, utils (no runtime deps)
+- **@bookscanner/ocr-processor**: OCR + Gemini Vision extraction library (depends on `openai`)
 
 ---
 
 ## Database Schema (PostgreSQL)
 
-### Core Tables
+### Tables
 
-- `users` — User accounts with role (operator/admin)
-- `boxes` - Коробки каждая из которых имеет свой артикль
-- `books` — Book cards with metadata
-- `book_photos` — Photos for each book (up to 10) содержит file_url на S3
-- `ocr_results` - Results from OCR
-- `ozon_products` — Generated Ozon listings
-- `activity_logs` — Statistics (cards created, user actions)
-- `system_settings` - Settings that admin can change
+| Table | Key Columns |
+|-------|-------------|
+| `users` | id (UUID), fullName, phone (unique), email (unique), passwordHash, role (OPERATOR/ADMIN), isApproved, refreshToken |
+| `boxes` | id (UUID), boxNumber, description, createdById (FK users) — unique (boxNumber, createdById) |
+| `books` | id (UUID), sku (unique), title, author, isbn, publisher, yearPublished, dimensions (JSONB), weightGross, weightNet, paperType, coverType, pageCount, language, price, annotation, hashtags[], condition, bookType, direction, boxId, createdById, workSessionId, status (PENDING_REVIEW/PENDING_PUBLICATION/PUBLISHED/PUBLICATION_FAILED), publishedToOzon |
+| `book_photos` | id (UUID), bookId, fileUrl, fileKey, sortOrder, originalFilename, mimeType, fileSizeBytes |
+| `ocr_results` | id (UUID), bookId (unique), rawOcrText, extractedData (JSONB), photo01Extraction (JSONB), photo02Extraction (JSONB), status, errorMessage |
+| `ozon_products` | id (UUID), bookId (unique), ozonProductId, taskId, publishPayload (JSONB), status, averageMarketPrice, errorMessage |
+| `work_sessions` | id (UUID), userId, status (active/completed), startedAt, endedAt |
+| `activity_logs` | id (UUID), userId, action, entityType, entityId, metadata (JSONB) |
+| `system_settings` | id (UUID), key (unique), value, description, valueType |
+
+### Migrations
+
+Located in `apps/backend/src/database/migrations/`:
+- `1710600000000-AddWorkSessions.ts`
+- `1710700000000-AddBookStatus.ts`
+- `1710800000000-BoxNumberUniquePerUser.ts`
 
 ---
 
@@ -156,249 +158,169 @@ BookScanner/
 
 ### Prerequisites
 
-- Node.js 18+
-- pnpm (npm i -g pnpm)
-- PostgreSQL 14+
-- Docker (optional, for PostgreSQL)
+- Node.js 20+
+- pnpm (`npm i -g pnpm`)
+- PostgreSQL 14+ or Docker
+- Redis 7+ or Docker
 
 ### Installation
 
 ```bash
-# Clone and setup
 cd /Users/gabryszewski003/projects/BookScanner
 pnpm install
 
-# Setup environment files
+# Setup environment
 cp apps/backend/.env.example apps/backend/.env
-# Update .env with your database credentials, API keys, etc.
+# Edit .env with DB credentials, API keys
 
-# Run PostgreSQL in Docker (optional)
+# Start infrastructure
 docker-compose -f docker/docker-compose.dev.yml up -d
 
-# Run database migrations
-cd apps/backend
-pnpm run migration:run
+# Run migrations
+cd apps/backend && pnpm migration:run
 ```
 
 ### Common Commands
 
-#### Backend Development
-
 ```bash
-# From repository root
-cd apps/backend
+# Backend (from apps/backend)
+pnpm dev              # Dev server with hot reload
+pnpm build            # Production build
+pnpm test             # Unit tests
+pnpm test:e2e         # E2E tests
+pnpm migration:create # Create new migration
+pnpm migration:run    # Apply migrations
+pnpm migration:revert # Revert last migration
 
-# Development server with hot reload
-pnpm dev
+# Mobile (from apps/mobile)
+pnpm start            # Expo dev server
+pnpm ios              # iOS simulator
+pnpm android          # Android emulator
 
-# Run tests
-pnpm test
+# Shared packages (from packages/shared or packages/ocr-processor)
+pnpm build            # Compile to dist/
 
-# Run tests in watch mode
-pnpm test:watch
-
-# Run e2e tests
-pnpm test:e2e
-
-# Build for production
-pnpm build
-
-# Database migrations
-pnpm migration:create   # Create new migration
-pnpm migration:run      # Run migrations
-pnpm migration:revert   # Revert last migration
-
-# Generate API docs
-pnpm swagger
-```
-
-#### Mobile Development
-
-```bash
-# From repository root
-cd apps/mobile
-
-# Start Expo dev server
-pnpm start
-
-# Run on iOS simulator
-pnpm ios
-
-# Run on Android emulator
-pnpm android
-
-# Run tests
-pnpm test
-
-# Build for production
-pnpm build
-```
-
-#### Workspace (root level)
-
-```bash
-# Install dependencies across all packages
-pnpm install
-
-# Build all packages
-pnpm build
-
-# Run tests in all packages
-pnpm test
-
-# Lint all packages
-pnpm lint
-
-# Shared package specific
-cd packages/shared
-pnpm build  # Compile to dist/
+# Root
+pnpm install          # Install all workspace deps
+pnpm build            # Build all packages
+pnpm lint             # Lint all
 ```
 
 ---
 
 ## API Endpoints (Backend)
 
-### Authentication
+All routes prefixed with `/api`.
 
-- `POST /auth/register` — Register new user (requires admin approval)
-- `POST /auth/login` — Login with phone/email + password
-- `POST /auth/refresh` — Refresh JWT token
-- `POST /auth/logout` — Logout
+### Auth (`/api/auth`)
+- `POST /register` — Register (requires admin approval)
+- `POST /login` — Login (phone/email + password)
+- `POST /refresh` — Refresh JWT tokens
 
-### Boxes (Operator)
+### Boxes (`/api/boxes`)
+- `GET /` — List user's boxes
+- `POST /` — Create box
+- `PATCH /:id` — Update box
 
-- `POST /boxes/create` - Create a new box of books
-- `GET /boxes` - Get the list of boxes
-- `GET /boxes/:id` - Get box details
-- `PATCH /boxes/:id` - Update box details
-- `DELETE /box/:id` - Delete box
+### Books (`/api/books`)
+- `GET /` — List books (paginated, filterable)
+- `GET /:id` — Get book details
+- `POST /` — Create book card
+- `POST /create-with-photos` — Create book + upload photos in single FormData request
+- `PATCH /:id` — Update book
+- `DELETE /:id` — Delete book
 
-### Books (Operator)
+### Photos (`/api/photos`)
+- `POST /upload` — Upload photos (multipart, up to 10MB/photo)
+- `DELETE /:id` — Delete photo
+- `PATCH /reorder` — Reorder photos
 
-- `POST /books` — Create new book card
-- `GET /books` — List user's books
-- `GET /books/:id` — Get book details
-- `PATCH /books/:id` — Update book data
-- `DELETE /books/:id` — Delete book
+### Vision (`/api/vision`)
+- `POST /extract` — Extract data from book photo (queues BullMQ job)
+- `POST /extract-bulk` — Bulk queue extraction for multiple books
+- `GET /results/:bookId` — Get OCR results for a book
 
-### Photos
+### Ozon (`/api/ozon`)
+- `POST /publish` — Publish single book to Ozon
+- `POST /publish-bulk` — Bulk publish books to Ozon
+- `GET /status/:bookId` — Get publication status
 
-- `POST /books/:id/photos` — Upload photos (up to 10)
-- `PATCH /books/:id/photos/:photoId` — Replace photo
-- `DELETE /books/:id/photos/:photoId` — Delete photo
-- `POST /books/:id/photos/reorder` — Change photo order
+### Admin (`/api/admin`)
+- `GET /stats` — Statistics summary
+- `GET /books/search` — Search books across all users
+- `GET /pending-review` — Books with PENDING_REVIEW status
 
-### Vision & OCR
+### Settings (`/api/settings`)
+- `GET /` — Get all system settings (includes Ozon store configs)
+- `PUT /` or `POST /` — Upsert setting
 
-- `POST /vision/extract` — Extract data from photo
-- `POST /vision/isbn-lookup` — Search by ISBN on Ozon
+### Stats (`/api/stats`)
+- `GET /summary` — Activity summary
 
-### Ozon Integration
+### Work Sessions (`/api/work-sessions`)
+- `GET /` — List sessions
+- `POST /` — Start session
+- `PATCH /:id` — Update session status (complete)
 
-- `POST /ozon/publish` — Create product listing on Ozon
-- `GET /ozon/price-lookup` — Get average price from Ozon
-
-### Admin
-
-- `GET /admin/users` — List all users
-- `POST /admin/users` — Create user
-- `PATCH /admin/users/:id` — Update user (role, permissions)
-- `DELETE /admin/users/:id` — Delete user
-- `GET /admin/statistics` — Get statistics (cards, users, performance)
-- `GET /admin/books/database` — Search/export book database
-- `POST /admin/settings` — Update system settings
-- `GET /admin/settings` — Get current settings
+### Users (`/api/users`)
+- `GET /` — List users (admin)
+- `GET /:id` — Get user
+- `POST /` — Create user (admin)
+- `PATCH /:id` — Update user (role, isApproved, etc.)
 
 ---
 
 ## Key Implementation Details
 
-### Photo Processing Workflow
+### Vision/OCR Workflow
 
-1. **Upload**: Operator uploads 2-10 photos (Photo 01 = cover, Photo 02 = book info)
-2. **Extraction**:
-   - Photo 01: Size (by ruler), title, author
-   - Photo 02: ISBN, title, author, dimensions, weight, publisher, year, paper type, cover type, pages, annotation
-3. **AI Processing**: Use Claude API to extract and validate data
-4. **Price Lookup**: Query Ozon API for similar books, calculate average price
-5. **Card Generation**: Auto-fill Ozon product card with extracted data + manual fields
-6. **Validation**: Operator reviews and corrects data before publishing
+1. Photos uploaded via `POST /api/photos/upload` or `POST /api/books/create-with-photos`
+2. Vision extraction queued via BullMQ (`POST /api/vision/extract` or `/extract-bulk`)
+3. `vision.processor.ts` processes jobs using `@bookscanner/ocr-processor` (Gemini Vision)
+4. Results stored in `ocr_results` table, book fields auto-populated
+5. Operator reviews extracted data in `CardDetail` screen and corrects if needed
 
-### Book Card Structure
+### Book Status Flow
 
-```typescript
-interface BookCard {
-  id: string;
-  boxNumber: string;
-  sku: string; // BoxNumber_UniqueCode
-
-  // Basic info
-  title: string;
-  author: string;
-  isbn: string;
-  publisher: string;
-  yearPublished: number;
-
-  // Physical attributes
-  dimensions: { width: number; height: number; depth: number };
-  weightGross: number;
-  weightNet: number;
-  paperType: "офсетная" | "глянцевая" | "матовая";
-  coverType: "твердый переплет" | "мягкий переплет";
-  pageCount: number;
-  language: "русский" | "английский";
-
-  // Ozon specific
-  price: number;
-  annotation: string;
-  hashtags: string[];
-  condition: "Хорошая";
-
-  // Photos
-  photos: PhotoReference[]; // 2 required, up to 5 additional for Ozon
-
-  // Metadata
-  createdBy: string; // User ID
-  createdAt: Date;
-  updatedAt: Date;
-  publishedToOzon?: Date;
-}
+```
+PENDING_REVIEW → (admin approves) → PENDING_PUBLICATION → (ozon publish) → PUBLISHED
+                                                                          ↘ PUBLICATION_FAILED
 ```
 
-### Authentication & Authorization
+### Ozon Integration
 
-- JWT tokens (access + refresh)
-- Role-based access control: `@Roles('operator', 'admin')`
-- Admin features hidden in mobile UI unless `isAdmin === true`
-- Phone/Email uniqueness validation
+- `ozon-api.client.ts` — raw Ozon API calls
+- `ozon-payload.builder.ts` — builds Ozon product payload from book entity
+- `ozon-status.cron.ts` — periodic cron to check publication task statuses
+- Multiple Ozon stores configurable via `system_settings` (key pattern: `ozon_store_*`)
+- Fixed category: Книги → Букинистические издания (1942–2010) → Печатная книга
+- Annotation prefix: "ВНИМАНИЕ! Книга не новая! Состояние - на фото."
 
-### Statistics Tracking
+### Authentication Flow
 
-- `activity_logs` table: card creation, user login, data extraction events
-- Admin dashboard shows: total cards, cards per user, daily/weekly trends
+- JWT access token (short-lived) + refresh token (stored in DB on user)
+- `JwtAuthGuard` + `RolesGuard` on protected routes
+- `@Roles('admin')` decorator for admin-only endpoints
+- `@CurrentUser()` decorator extracts user from JWT payload
+- Mobile: Axios interceptor auto-refreshes token on 401, retries original request
 
----
+### Mobile Navigation
 
-## Error Handling & Validation
-
-- All requests validated with class-validators (NestJS)
-- Extracted data validated against expected schema
-- User-friendly error messages in Russian
-- Invalid photos rejected (format, size > 10MB)
-- Missing required fields fallback to defaults per spec
-
----
-
-## Security Considerations
-
-- Passwords hashed with bcrypt (NestJS guard)
-- JWT tokens expire (15 min access, 7 day refresh)
-- Admin approval required for user registration
-- File uploads scanned for viruses (optional ClamAV integration)
-- Rate limiting on auth endpoints
-- CORS configured for mobile app domain
-- Least Privilege
-- Privileged access control management
+```
+AppNavigator (root)
+├── AuthNavigator (unauthenticated)
+│   ├── Login
+│   └── Register
+├── OperatorNavigator (role: OPERATOR)
+│   ├── CardsTab → CardsList → CreateCard / CardDetail / PhotoUpload
+│   └── ProfileTab → ProfileScreen
+├── AdminNavigator (role: ADMIN)
+│   ├── MainTab → Dashboard / Statistics / BookDatabase / PendingReview / ProductDetail
+│   ├── CardCreationTab → CardsList / CreateCard / CardDetail / PhotoUpload
+│   ├── SettingsTab → SettingsScreen / UserManagement
+│   └── ProfileTab → ProfileScreen
+└── DevNavigator (dev only)
+```
 
 ---
 
@@ -406,73 +328,61 @@ interface BookCard {
 
 ```bash
 # Database
-DATABASE_URL=postgresql://user:password@localhost:5432/bookscanner
 DB_HOST=localhost
 DB_PORT=5432
 DB_USER=postgres
 DB_PASSWORD=password
 DB_NAME=bookscanner
 
+# Redis
+REDIS_HOST=localhost
+REDIS_PORT=6379
+
 # JWT
 JWT_SECRET=your-secret-key
-JWT_EXPIRATION=900 # 15 minutes
-JWT_REFRESH_EXPIRATION=604800 # 7 days
+JWT_EXPIRATION=900        # 15 minutes
+JWT_REFRESH_EXPIRATION=604800  # 7 days
 
-# AI/Vision API
-CLAUDE_API_KEY=sk-...
-VISION_API_KEY=... # Google Vision or alternative
+# AI/Vision
+OPENAI_API_KEY=sk-...
+# Gemini key configured in ocr-processor
 
 # Ozon Integration
 OZON_API_KEY=...
 OZON_CLIENT_ID=...
 
-# File Storage
+# File Storage (choose one)
+STORAGE_TYPE=local         # 'local' or 's3'
 AWS_S3_BUCKET=bookscanner-photos
 AWS_ACCESS_KEY_ID=...
 AWS_SECRET_ACCESS_KEY=...
-AWS_REGION=us-east-1
+AWS_REGION=eu-central-1
 
 # App
 NODE_ENV=development
 BACKEND_PORT=3000
-FRONTEND_URL=http://localhost:8100
+CORS_ORIGINS=http://localhost:8081
 ```
+
+---
+
+## Deployment
+
+Production runs via Docker Compose (`docker/docker-compose.prod.yml`):
+- PostgreSQL + Redis on internal network
+- Backend built from `apps/backend/Dockerfile` (Node 20-alpine, pnpm)
+- Nginx reverse proxy with SSL via Certbot
+- Production domain: `jollybook.duckdns.org`
+
+Build order in Dockerfile: `shared` → `ocr-processor` → `backend`
 
 ---
 
 ## Important Notes
 
-1. **Photo Requirements**:
-   - Photo 01 (cover) must include measurement ruler for size detection
-   - Photo 02 (book info page) required for metadata extraction
-   - Max 10MB per photo, JPEG/PNG format
-
-2. **Ozon Integration**:
-   - Fixed category: Книги → Букинистические издания (1942–2010) → Печатная книга
-   - Default values: height = 35mm, weight = 450g (if not detected)
-   - Annotation prefix: "ВНИМАНИЕ! Книга не новая! Состояние - на фото."
-
-3. **Operator Flow**:
-   - Upload box number + photos
-   - System auto-extracts data
-   - Review & correct info
-   - Generate SKU (BoxNumber_UniqueCode)
-   - Lookup price on Ozon
-   - Publish to Ozon or save as draft
-
-4. **Admin Functions**:
-   - Create/delete users
-   - View per-user statistics
-   - Manage system settings (OCR prompts, photo limits, etc.)
-   - Search & export book database
-
----
-
-## Testing Strategy
-
-- **Unit Tests**: Individual services, validators, utilities
-- **Integration Tests**: API endpoints with mock database
-- **E2E Tests**: Full workflow (upload → extract → publish)
-- Test photos in `/apps/backend/test/fixtures/photos/`
-
----
+1. **Photo Limits**: Max 10MB per photo, JPEG/PNG, up to 10 photos per book
+2. **SKU Format**: `BoxNumber_UniqueCode` (auto-generated)
+3. **Default values if not detected**: height = 35mm, weight = 450g
+4. **boxNumber uniqueness**: scoped per user (not globally unique)
+5. **Admin approval**: new users require `isApproved = true` before they can use the app
+6. **Swagger docs**: available at `http://localhost:3000/api/docs` in development
