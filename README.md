@@ -86,7 +86,7 @@ pnpm install
 
 # 2. Настроить переменные окружения
 cp apps/backend/.env.example apps/backend/.env
-# Заполнить .env своими данными (см. раздел ниже)
+# Заполнить .env
 
 # 3. Запустить базу данных и Redis
 docker-compose -f docker/docker-compose.dev.yml up -d
