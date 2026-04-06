@@ -164,7 +164,10 @@ export function PhotoUploadScreen() {
       const cropped = await ImageCropPicker.openCropper({
         path: localUri,
         mediaType: "photo",
+        freeStyleCropEnabled: true,
+        cropping: true,
         compressImageQuality: 0.8,
+        cropperToolbarTitle: "Кадрировать",
       });
 
       if (photo.id) {
