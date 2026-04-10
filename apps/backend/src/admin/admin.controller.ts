@@ -81,9 +81,8 @@ export class AdminController {
 
   @Get('books/pending-review')
   @ApiOperation({ summary: 'Карточки ожидающие проверки' })
-  @ApiQuery({ name: 'boxId', required: false })
-  getPendingReviewBooks(@Query() pagination: PaginationDto, @Query('boxId') boxId?: string) {
-    return this.adminService.getPendingReviewBooks(pagination, boxId);
+  getPendingReviewBooks(@Query() dto: SearchBooksDto) {
+    return this.adminService.getPendingReviewBooks(dto);
   }
 
   @Get('books/failed-publication')

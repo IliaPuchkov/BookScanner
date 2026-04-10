@@ -78,8 +78,9 @@ export class AdminService {
     return this.booksService.findAll('', UserRole.ADMIN, dto, boxId, search, createdById, dateFrom, dateTo, undefined, status);
   }
 
-  async getPendingReviewBooks(pagination: PaginationDto, boxId?: string) {
-    return this.booksService.findAll('', UserRole.ADMIN, pagination, boxId, undefined, undefined, undefined, undefined, undefined, BookStatus.PENDING_REVIEW);
+  async getPendingReviewBooks(dto: SearchBooksDto) {
+    const { boxId, createdById, dateFrom, dateTo, search } = dto;
+    return this.booksService.findAll('', UserRole.ADMIN, dto, boxId, search, createdById, dateFrom, dateTo, undefined, BookStatus.PENDING_REVIEW);
   }
 
   async getPendingReviewCountsByBox() {

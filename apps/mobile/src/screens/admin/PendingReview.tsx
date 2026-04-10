@@ -3,6 +3,7 @@ import {
   View,
   SectionList,
   FlatList,
+  ScrollView,
   StyleSheet,
   RefreshControl,
   Text,
@@ -15,16 +16,25 @@ import {
 } from "react-native";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import { Input } from "../../components/Input";
 import { adminService } from "../../services/admin.service";
 import type { OzonStore, OzonStoreLimits } from "../../services/admin.service";
+import { boxesService } from "../../services/boxes.service";
 import { booksService } from "../../services/books.service";
 import { visionService } from "../../services/vision.service";
-import type { Book } from "../../types";
+import type { Book, Box, User } from "../../types";
 import type {
   AdminCardCreationParamList,
   AdminMainStackParamList,
 } from "../../navigation/AdminNavigator";
 import { formatDate } from "../../utils/format";
+
+interface Filters {
+  boxId?: string;
+  createdById?: string;
+  dateFrom?: string;
+  dateTo?: string;
+}
 
 type Nav = NativeStackNavigationProp<AdminCardCreationParamList>;
 
@@ -64,6 +74,18 @@ export function PendingReviewScreen() {
   const [failedSelectedIds, setFailedSelectedIds] = useState<Set<string>>(new Set());
   const [bulkRetrying, setBulkRetrying] = useState(false);
 
+  // Filter state
+  const [search, setSearch] = useState("");
+  const [showFilters, setShowFilters] = useState(false);
+  const [filters, setFilters] = useState<Filters>({});
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const [boxes, setBoxes] = useState<Box[]>([]);
+  const [filterUsers, setFilterUsers] = useState<Array<{ id: string; fullName: string }>>([]);
+  const searchTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const activeParamsRef = useRef({ search: "", filters: {} as Filters });
+  const loadingMoreRef = useRef(false);
+
   const fetchFailedBooks = useCallback(async () => {
     setLoadingFailed(true);
     try {
@@ -74,6 +96,25 @@ export function PendingReviewScreen() {
     } finally {
       setLoadingFailed(false);
     }
+  }, []);
+
+  // Load filter options once
+  useEffect(() => {
+    const loadOptions = async () => {
+      try {
+        const [boxesRes, usersRes] = await Promise.all([
+          boxesService.getBoxes(1, 100),
+          adminService.getUsers(1, 100),
+        ]);
+        setBoxes(boxesRes.data);
+        setFilterUsers(
+          usersRes.data.map((u: User) => ({ id: u.id, fullName: u.fullName })),
+        );
+      } catch {
+        // silent
+      }
+    };
+    loadOptions();
   }, []);
 
   const [polling, setPolling] = useState<{
@@ -113,7 +154,7 @@ export function PendingReviewScreen() {
         } else {
           Alert.alert("Готово", `Распознано ${completed} карточек`);
         }
-        fetchBooks(1, "refresh");
+        fetchBooks(1, activeParamsRef.current.search, activeParamsRef.current.filters, "refresh");
       } else {
         setPolling((prev) => prev ? { ...prev, completed, failed } : null);
       }
@@ -218,12 +259,32 @@ export function PendingReviewScreen() {
   }, [navigation, selectMode, exitSelectMode]);
 
   const fetchBooks = useCallback(
-    async (p: number, mode: "initial" | "refresh" | "more") => {
+    async (
+      p: number,
+      query: string,
+      currentFilters: Filters,
+      mode: "initial" | "refresh" | "more",
+    ) => {
       if (mode === "initial") setLoading(true);
       if (mode === "more") setLoadingMore(true);
 
       try {
-        const res = await adminService.getPendingReviewBooks(p, 20);
+        if (mode !== "more") {
+          activeParamsRef.current = { search: query, filters: currentFilters };
+        }
+
+        const params: Record<string, string> = {};
+        if (currentFilters.boxId) params.boxId = currentFilters.boxId;
+        if (currentFilters.createdById) params.createdById = currentFilters.createdById;
+        if (currentFilters.dateFrom) params.dateFrom = currentFilters.dateFrom;
+        if (currentFilters.dateTo) params.dateTo = currentFilters.dateTo;
+        if (query) params.search = query;
+
+        const res = await adminService.getPendingReviewBooks(
+          p,
+          20,
+          Object.keys(params).length > 0 ? params : undefined,
+        );
 
         if (mode === "more") {
           setBooks((prev) => [...prev, ...res.data]);
@@ -235,6 +296,7 @@ export function PendingReviewScreen() {
       } catch {
         console.error("PendingReview fetch error");
       } finally {
+        loadingMoreRef.current = false;
         setLoading(false);
         setRefreshing(false);
         setLoadingMore(false);
@@ -249,7 +311,7 @@ export function PendingReviewScreen() {
         isReturningRef.current = false;
         return;
       }
-      fetchBooks(1, "initial");
+      fetchBooks(1, search, filters, "initial");
       fetchFailedBooks();
       adminService
         .getPendingReviewCountsByBox()
@@ -335,7 +397,7 @@ export function PendingReviewScreen() {
   const handleRefresh = () => {
     setRefreshing(true);
     setBoxAllIds({});
-    fetchBooks(1, "refresh");
+    fetchBooks(1, search, filters, "refresh");
     fetchFailedBooks();
     adminService
       .getPendingReviewCountsByBox()
@@ -350,10 +412,46 @@ export function PendingReviewScreen() {
   };
 
   const handleLoadMore = () => {
-    if (hasMore && !loadingMore && !loading) {
-      fetchBooks(page + 1, "more");
+    if (hasMore && !loadingMoreRef.current && !loading) {
+      loadingMoreRef.current = true;
+      const { search: s, filters: f } = activeParamsRef.current;
+      fetchBooks(page + 1, s, f, "more");
     }
   };
+
+  const handleSearch = (text: string) => {
+    setSearch(text);
+    if (searchTimeout.current) clearTimeout(searchTimeout.current);
+    searchTimeout.current = setTimeout(() => {
+      fetchBooks(1, text, filters, "initial");
+    }, 400);
+  };
+
+  const applyFilters = () => {
+    const newFilters: Filters = { ...filters };
+    if (dateFrom) newFilters.dateFrom = dateFrom;
+    else delete newFilters.dateFrom;
+    if (dateTo) newFilters.dateTo = dateTo;
+    else delete newFilters.dateTo;
+    setFilters(newFilters);
+    setShowFilters(false);
+    fetchBooks(1, search, newFilters, "initial");
+  };
+
+  const resetFilters = () => {
+    const empty: Filters = {};
+    setFilters(empty);
+    setDateFrom("");
+    setDateTo("");
+    setShowFilters(false);
+    fetchBooks(1, search, empty, "initial");
+  };
+
+  const activeFilterCount =
+    (filters.boxId ? 1 : 0) +
+    (filters.createdById ? 1 : 0) +
+    (filters.dateFrom ? 1 : 0) +
+    (filters.dateTo ? 1 : 0);
 
   const executePublish = async (
     action: { type: "single"; book: Book } | { type: "bulk"; ids: string[] },
@@ -720,14 +818,6 @@ export function PendingReviewScreen() {
     );
   };
 
-  if (loading && !refreshing) {
-    return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#1976D2" />
-      </View>
-    );
-  }
-
   return (
     <>
       <Modal
@@ -855,7 +945,132 @@ export function PendingReviewScreen() {
         </TouchableOpacity>
       </View>
 
-      {activeTab === "pending" ? (
+      {activeTab === "pending" && (
+        <View style={styles.searchBar}>
+          <Input
+            label=""
+            placeholder="Поиск по названию, автору, ISBN..."
+            value={search}
+            onChangeText={handleSearch}
+            style={{ marginBottom: 0 }}
+          />
+          <TouchableOpacity
+            style={[
+              styles.filterBtn,
+              activeFilterCount > 0 && styles.filterBtnActive,
+            ]}
+            onPress={() => setShowFilters(!showFilters)}
+          >
+            <Text
+              style={[
+                styles.filterBtnText,
+                activeFilterCount > 0 && styles.filterBtnTextActive,
+              ]}
+            >
+              Фильтры{activeFilterCount > 0 ? ` (${activeFilterCount})` : ""}
+            </Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {activeTab === "pending" && showFilters && (
+        <View style={styles.filterPanel}>
+          {/* Box filter */}
+          <Text style={styles.filterLabel}>Коробка</Text>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={styles.chipRow}
+          >
+            <TouchableOpacity
+              style={[styles.chip, !filters.boxId && styles.chipActive]}
+              onPress={() => setFilters((f) => ({ ...f, boxId: undefined }))}
+            >
+              <Text style={[styles.chipText, !filters.boxId && styles.chipTextActive]}>
+                Все
+              </Text>
+            </TouchableOpacity>
+            {boxes.map((box) => (
+              <TouchableOpacity
+                key={box.id}
+                style={[styles.chip, filters.boxId === box.id && styles.chipActive]}
+                onPress={() => setFilters((f) => ({ ...f, boxId: box.id }))}
+              >
+                <Text style={[styles.chipText, filters.boxId === box.id && styles.chipTextActive]}>
+                  {box.boxNumber}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+
+          {/* Operator filter */}
+          <Text style={styles.filterLabel}>Оператор</Text>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={styles.chipRow}
+          >
+            <TouchableOpacity
+              style={[styles.chip, !filters.createdById && styles.chipActive]}
+              onPress={() => setFilters((f) => ({ ...f, createdById: undefined }))}
+            >
+              <Text style={[styles.chipText, !filters.createdById && styles.chipTextActive]}>
+                Все
+              </Text>
+            </TouchableOpacity>
+            {filterUsers.map((user) => (
+              <TouchableOpacity
+                key={user.id}
+                style={[styles.chip, filters.createdById === user.id && styles.chipActive]}
+                onPress={() => setFilters((f) => ({ ...f, createdById: user.id }))}
+              >
+                <Text style={[styles.chipText, filters.createdById === user.id && styles.chipTextActive]}>
+                  {user.fullName}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+
+          {/* Date range */}
+          <Text style={styles.filterLabel}>Период создания</Text>
+          <View style={styles.dateRow}>
+            <View style={{ flex: 1 }}>
+              <Input
+                label=""
+                placeholder="с (ГГГГ-ММ-ДД)"
+                value={dateFrom}
+                onChangeText={setDateFrom}
+                style={{ marginBottom: 0 }}
+              />
+            </View>
+            <Text style={styles.dateSep}>—</Text>
+            <View style={{ flex: 1 }}>
+              <Input
+                label=""
+                placeholder="по (ГГГГ-ММ-ДД)"
+                value={dateTo}
+                onChangeText={setDateTo}
+                style={{ marginBottom: 0 }}
+              />
+            </View>
+          </View>
+
+          <View style={styles.filterActions}>
+            <TouchableOpacity style={styles.resetBtn} onPress={resetFilters}>
+              <Text style={styles.resetBtnText}>Сбросить</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.applyBtn} onPress={applyFilters}>
+              <Text style={styles.applyBtnText}>Применить</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
+
+      {activeTab === "pending" && loading && !refreshing ? (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#1976D2" />
+        </View>
+      ) : activeTab === "pending" ? (
         <SectionList
           style={styles.container}
           sections={sections}
@@ -1537,5 +1752,109 @@ const styles = StyleSheet.create({
   failedListContent: {
     padding: 12,
     gap: 8,
+  },
+  searchBar: {
+    backgroundColor: "#fff",
+    paddingHorizontal: 16,
+    paddingTop: 8,
+    paddingBottom: 8,
+  },
+  filterBtn: {
+    alignSelf: "flex-start",
+    paddingVertical: 6,
+    paddingHorizontal: 14,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "#ddd",
+    marginTop: 6,
+  },
+  filterBtnActive: {
+    borderColor: "#1976D2",
+    backgroundColor: "#E3F2FD",
+  },
+  filterBtnText: {
+    fontSize: 13,
+    color: "#666",
+  },
+  filterBtnTextActive: {
+    color: "#1976D2",
+    fontWeight: "600",
+  },
+  filterPanel: {
+    backgroundColor: "#fff",
+    paddingHorizontal: 16,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "#eee",
+  },
+  filterLabel: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#555",
+    marginTop: 10,
+    marginBottom: 6,
+  },
+  chipRow: {
+    flexDirection: "row",
+    marginBottom: 4,
+  },
+  chip: {
+    paddingVertical: 5,
+    paddingHorizontal: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#ddd",
+    marginRight: 6,
+    backgroundColor: "#fafafa",
+  },
+  chipActive: {
+    borderColor: "#1976D2",
+    backgroundColor: "#E3F2FD",
+  },
+  chipText: {
+    fontSize: 12,
+    color: "#666",
+  },
+  chipTextActive: {
+    color: "#1976D2",
+    fontWeight: "600",
+  },
+  dateRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  dateSep: {
+    fontSize: 16,
+    color: "#999",
+    marginTop: -16,
+  },
+  filterActions: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    marginTop: 12,
+    gap: 10,
+  },
+  resetBtn: {
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#ddd",
+  },
+  resetBtnText: {
+    fontSize: 13,
+    color: "#666",
+  },
+  applyBtn: {
+    paddingVertical: 8,
+    paddingHorizontal: 20,
+    borderRadius: 8,
+    backgroundColor: "#1976D2",
+  },
+  applyBtnText: {
+    fontSize: 13,
+    color: "#fff",
+    fontWeight: "600",
   },
 });
