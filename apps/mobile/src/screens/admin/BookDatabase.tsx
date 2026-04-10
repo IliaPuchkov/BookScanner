@@ -63,6 +63,10 @@ export function BookDatabaseScreen() {
 
   const searchTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   const fetchIdRef = useRef(0);
+  // Tracks the search/filters actually used for the current list (applied, not UI state)
+  const activeParamsRef = useRef({ search: "", filters: filters });
+  // Synchronous guard: prevents onEndReached from firing multiple times before re-render
+  const loadingMoreRef = useRef(false);
 
   // Load filter options once
   useEffect(() => {
@@ -96,6 +100,11 @@ export function BookDatabaseScreen() {
       if (mode === "more") setLoadingMore(true);
 
       try {
+        // Sync applied params before the async call so handleLoadMore reads them
+        if (mode !== "more") {
+          activeParamsRef.current = { search: query, filters: currentFilters };
+        }
+
         const params: Filters = {};
         if (currentFilters.boxId) params.boxId = currentFilters.boxId;
         if (currentFilters.createdById)
@@ -125,6 +134,7 @@ export function BookDatabaseScreen() {
         console.error("BookDatabase fetch error:", e);
       } finally {
         if (fetchId === fetchIdRef.current) {
+          loadingMoreRef.current = false;
           setLoading(false);
           setRefreshing(false);
           setLoadingMore(false);
@@ -156,8 +166,10 @@ export function BookDatabaseScreen() {
   };
 
   const handleLoadMore = () => {
-    if (hasMore && !loadingMore && !loading) {
-      fetchBooks(page + 1, search, filters, "more");
+    if (hasMore && !loadingMoreRef.current && !loading) {
+      loadingMoreRef.current = true;
+      const { search: s, filters: f } = activeParamsRef.current;
+      fetchBooks(page + 1, s, f, "more");
     }
   };
 
