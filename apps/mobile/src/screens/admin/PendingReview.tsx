@@ -83,6 +83,7 @@ export function PendingReviewScreen() {
     ids: string[];
   } | null>(null);
   const pollingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const isReturningRef = useRef(false);
 
   useEffect(() => {
     if (!polling) return;
@@ -244,6 +245,10 @@ export function PendingReviewScreen() {
 
   useFocusEffect(
     useCallback(() => {
+      if (isReturningRef.current) {
+        isReturningRef.current = false;
+        return;
+      }
       fetchBooks(1, "initial");
       fetchFailedBooks();
       adminService
@@ -597,6 +602,7 @@ export function PendingReviewScreen() {
           if (failedSelectMode) {
             toggleFailedSelect(item.id);
           } else {
+            isReturningRef.current = true;
             navigation.navigate("ProductDetail", { bookId: item.id, editable: true });
           }
         }}
@@ -655,6 +661,7 @@ export function PendingReviewScreen() {
           if (selectMode) {
             toggleSelect(item.id);
           } else {
+            isReturningRef.current = true;
             navigation.navigate("ProductDetail", {
               bookId: item.id,
               editable: true,

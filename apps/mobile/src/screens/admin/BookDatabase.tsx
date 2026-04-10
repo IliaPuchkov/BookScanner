@@ -63,6 +63,7 @@ export function BookDatabaseScreen() {
 
   const searchTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   const fetchIdRef = useRef(0);
+  const isReturningRef = useRef(false);
   // Tracks the search/filters actually used for the current list (applied, not UI state)
   const activeParamsRef = useRef({ search: "", filters: filters });
   // Synchronous guard: prevents onEndReached from firing multiple times before re-render
@@ -147,6 +148,10 @@ export function BookDatabaseScreen() {
   // Load on screen focus
   useFocusEffect(
     useCallback(() => {
+      if (isReturningRef.current) {
+        isReturningRef.current = false;
+        return;
+      }
       fetchBooks(1, search, filters, "initial");
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [fetchBooks]),
@@ -426,9 +431,10 @@ export function BookDatabaseScreen() {
           renderItem={({ item }) => (
             <BookCard
               book={item}
-              onPress={() =>
-                navigation.navigate("ProductDetail", { bookId: item.id })
-              }
+              onPress={() => {
+                isReturningRef.current = true;
+                navigation.navigate("ProductDetail", { bookId: item.id });
+              }}
               userRole="admin"
             />
           )}

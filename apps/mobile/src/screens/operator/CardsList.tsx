@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo } from "react";
+import React, { useState, useCallback, useMemo, useRef } from "react";
 import {
   View,
   SectionList,
@@ -33,6 +33,7 @@ export function CardsListScreen() {
   const [starting, setStarting] = useState(false);
   const [boxCounts, setBoxCounts] = useState<Record<string, number>>({});
   const { user } = useAuth();
+  const isReturningRef = useRef(false);
 
   const fetchActiveSession = useCallback(async () => {
     try {
@@ -84,6 +85,10 @@ export function CardsListScreen() {
 
   useFocusEffect(
     useCallback(() => {
+      if (isReturningRef.current) {
+        isReturningRef.current = false;
+        return;
+      }
       setLoading(true);
       fetchActiveSession().then((active) => {
         if (active) {
@@ -236,9 +241,10 @@ export function CardsListScreen() {
         renderItem={({ item }: { item: Book }) => (
           <BookCard
             book={item}
-            onPress={() =>
-              navigation.navigate("CardDetail", { bookId: item.id })
-            }
+            onPress={() => {
+              isReturningRef.current = true;
+              navigation.navigate("CardDetail", { bookId: item.id });
+            }}
             userRole={user?.role}
           />
         )}
