@@ -8,6 +8,10 @@ import {
   TouchableOpacity,
   ScrollView,
   ActivityIndicator,
+  Alert,
+  Modal,
+  TouchableWithoutFeedback,
+  TextInput,
 } from "react-native";
 import {
   useFocusEffect,
@@ -18,14 +22,147 @@ import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import type { RouteProp } from "@react-navigation/native";
 import { Input } from "../../components/Input";
 import { BookCard } from "../../components/Card";
+import { DatePickerInput } from "../../components/DatePickerInput";
 import { adminService } from "../../services/admin.service";
 import { boxesService } from "../../services/boxes.service";
 import { BookStatus } from "../../types";
 import type { Book, Box, User } from "../../types";
 import type { AdminMainStackParamList } from "../../navigation/AdminNavigator";
+import { formatDate } from "../../utils/format";
 
 type Nav = NativeStackNavigationProp<AdminMainStackParamList>;
 type Route = RouteProp<AdminMainStackParamList, "BookDatabase">;
+
+function FilterTag({
+  label,
+  onRemove,
+}: {
+  label: string;
+  onRemove: () => void;
+}) {
+  return (
+    <View style={tagStyles.tag}>
+      <Text style={tagStyles.label} numberOfLines={1}>
+        {label}
+      </Text>
+      <TouchableOpacity
+        onPress={onRemove}
+        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+      >
+        <Text style={tagStyles.remove}>✕</Text>
+      </TouchableOpacity>
+    </View>
+  );
+}
+
+const tagStyles = StyleSheet.create({
+  tag: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#E3F2FD",
+    borderRadius: 14,
+    paddingVertical: 5,
+    paddingLeft: 10,
+    paddingRight: 8,
+    marginRight: 6,
+  },
+  label: {
+    fontSize: 12,
+    color: "#1565C0",
+    maxWidth: 160,
+    marginRight: 5,
+  },
+  remove: {
+    fontSize: 10,
+    color: "#1976D2",
+    fontWeight: "700",
+  },
+});
+
+function FilterRow({
+  label,
+  value,
+  onOpen,
+  onClear,
+}: {
+  label: string;
+  value?: string;
+  onOpen: () => void;
+  onClear: () => void;
+}) {
+  return (
+    <View style={rowStyles.row}>
+      <Text style={rowStyles.label}>{label}</Text>
+      <Text
+        style={[rowStyles.value, !value && rowStyles.valuePlaceholder]}
+        numberOfLines={1}
+      >
+        {value ?? "—"}
+      </Text>
+      {value ? (
+        <TouchableOpacity
+          style={rowStyles.btn}
+          onPress={onClear}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+        >
+          <Text style={rowStyles.clearIcon}>✕</Text>
+        </TouchableOpacity>
+      ) : (
+        <TouchableOpacity
+          style={rowStyles.btn}
+          onPress={onOpen}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+        >
+          <Text style={rowStyles.plusIcon}>+</Text>
+        </TouchableOpacity>
+      )}
+    </View>
+  );
+}
+
+const rowStyles = StyleSheet.create({
+  row: {
+    flexDirection: "row",
+    alignItems: "center",
+    height: 46,
+    borderBottomWidth: 1,
+    borderBottomColor: "#f0f0f0",
+    paddingHorizontal: 2,
+  },
+  label: {
+    fontSize: 13,
+    color: "#555",
+    width: 130,
+  },
+  value: {
+    flex: 1,
+    fontSize: 13,
+    color: "#1976D2",
+    fontWeight: "500",
+    marginRight: 4,
+  },
+  valuePlaceholder: {
+    color: "#bbb",
+    fontWeight: "400",
+  },
+  btn: {
+    width: 28,
+    height: 28,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  plusIcon: {
+    fontSize: 22,
+    color: "#1976D2",
+    fontWeight: "300",
+    lineHeight: 26,
+  },
+  clearIcon: {
+    fontSize: 12,
+    color: "#999",
+    fontWeight: "700",
+  },
+});
 
 interface Filters {
   boxId?: string;
@@ -62,6 +199,18 @@ export function BookDatabaseScreen() {
   const [priceMax, setPriceMax] = useState("");
   const [yearFrom, setYearFrom] = useState("");
   const [yearTo, setYearTo] = useState("");
+  // Picker modal — which filter row was tapped
+  const [activePickerFilter, setActivePickerFilter] = useState<string | null>(
+    null,
+  );
+  const [pickerSearch, setPickerSearch] = useState("");
+  // Temp state inside range modals (date/price/year) before "Применить"
+  const [tempDateFrom, setTempDateFrom] = useState("");
+  const [tempDateTo, setTempDateTo] = useState("");
+  const [tempPriceMin, setTempPriceMin] = useState("");
+  const [tempPriceMax, setTempPriceMax] = useState("");
+  const [tempYearFrom, setTempYearFrom] = useState("");
+  const [tempYearTo, setTempYearTo] = useState("");
 
   // Filter options
   const [boxes, setBoxes] = useState<Box[]>([]);
@@ -190,24 +339,77 @@ export function BookDatabaseScreen() {
     }
   };
 
-  const applyFilters = () => {
-    const newFilters: Filters = { ...filters };
-    if (dateFrom) newFilters.dateFrom = dateFrom;
-    else delete newFilters.dateFrom;
-    if (dateTo) newFilters.dateTo = dateTo;
-    else delete newFilters.dateTo;
-    if (priceMin) newFilters.priceMin = priceMin;
-    else delete newFilters.priceMin;
-    if (priceMax) newFilters.priceMax = priceMax;
-    else delete newFilters.priceMax;
-    if (yearFrom) newFilters.yearFrom = yearFrom;
-    else delete newFilters.yearFrom;
-    if (yearTo) newFilters.yearTo = yearTo;
-    else delete newFilters.yearTo;
-    if (!newFilters.status) delete newFilters.status;
-    setFilters(newFilters);
-    setShowFilters(false);
-    fetchBooks(1, search, newFilters, "initial");
+  const openPicker = (key: string) => {
+    if (key === "date") {
+      setTempDateFrom(dateFrom);
+      setTempDateTo(dateTo);
+    }
+    if (key === "price") {
+      setTempPriceMin(priceMin);
+      setTempPriceMax(priceMax);
+    }
+    if (key === "year") {
+      setTempYearFrom(yearFrom);
+      setTempYearTo(yearTo);
+    }
+    setPickerSearch("");
+    setActivePickerFilter(key);
+  };
+
+  const applyRangeFilter = (key: "date" | "price" | "year") => {
+    if (key === "price") {
+      if (
+        tempPriceMin &&
+        tempPriceMax &&
+        parseFloat(tempPriceMin) > parseFloat(tempPriceMax)
+      ) {
+        Alert.alert(
+          "Ошибка",
+          "Минимальная цена не может быть больше максимальной",
+        );
+        return;
+      }
+      setPriceMin(tempPriceMin);
+      setPriceMax(tempPriceMax);
+      const newF = { ...filters };
+      if (tempPriceMin) newF.priceMin = tempPriceMin;
+      else delete newF.priceMin;
+      if (tempPriceMax) newF.priceMax = tempPriceMax;
+      else delete newF.priceMax;
+      setFilters(newF);
+      setActivePickerFilter(null);
+      fetchBooks(1, search, newF, "initial");
+    } else if (key === "year") {
+      if (
+        tempYearFrom &&
+        tempYearTo &&
+        parseInt(tempYearFrom, 10) > parseInt(tempYearTo, 10)
+      ) {
+        Alert.alert("Ошибка", 'Год "от" не может быть больше года "до"');
+        return;
+      }
+      setYearFrom(tempYearFrom);
+      setYearTo(tempYearTo);
+      const newF = { ...filters };
+      if (tempYearFrom) newF.yearFrom = tempYearFrom;
+      else delete newF.yearFrom;
+      if (tempYearTo) newF.yearTo = tempYearTo;
+      else delete newF.yearTo;
+      setFilters(newF);
+      setActivePickerFilter(null);
+      fetchBooks(1, search, newF, "initial");
+    } else {
+      setDateFrom(tempDateFrom);
+      setDateTo(tempDateTo);
+      const newF = { ...filters };
+      if (tempDateFrom) newF.dateFrom = tempDateFrom;
+      else delete newF.dateFrom;
+      if (tempDateTo) newF.dateTo = tempDateTo;
+      else delete newF.dateTo;
+      setFilters(newF);
+      setActivePickerFilter(null);
+      fetchBooks(1, search, newF, "initial");
+    }
   };
 
   const resetFilters = () => {
@@ -221,6 +423,32 @@ export function BookDatabaseScreen() {
     setYearTo("");
     setShowFilters(false);
     fetchBooks(1, search, empty, "initial");
+  };
+
+  const removeFilter = (
+    key: "status" | "boxId" | "createdById" | "date" | "price" | "year",
+  ) => {
+    const newFilters = { ...filters };
+    if (key === "date") {
+      delete newFilters.dateFrom;
+      delete newFilters.dateTo;
+      setDateFrom("");
+      setDateTo("");
+    } else if (key === "price") {
+      delete newFilters.priceMin;
+      delete newFilters.priceMax;
+      setPriceMin("");
+      setPriceMax("");
+    } else if (key === "year") {
+      delete newFilters.yearFrom;
+      delete newFilters.yearTo;
+      setYearFrom("");
+      setYearTo("");
+    } else {
+      delete newFilters[key];
+    }
+    setFilters(newFilters);
+    fetchBooks(1, search, newFilters, "initial");
   };
 
   const activeFilterCount =
@@ -260,242 +488,440 @@ export function BookDatabaseScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* Filter panel */}
+      {/* Active filter tags */}
+      {/* {activeFilterCount > 0 && (
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={styles.activeTagsRow}
+          contentContainerStyle={styles.activeTagsContent}
+        >
+          {filters.status && (
+            <FilterTag
+              label={
+                filters.status === BookStatus.PENDING_REVIEW
+                  ? "На проверке"
+                  : filters.status === BookStatus.PUBLISHED
+                  ? "Загружено в Ozon"
+                  : filters.status
+              }
+              onRemove={() => removeFilter("status")}
+            />
+          )}
+          {filters.boxId && (
+            <FilterTag
+              label={`Коробка: ${boxes.find((b) => b.id === filters.boxId)?.boxNumber ?? "..."}`}
+              onRemove={() => removeFilter("boxId")}
+            />
+          )}
+          {filters.createdById && (
+            <FilterTag
+              label={users.find((u) => u.id === filters.createdById)?.fullName ?? "Оператор"}
+              onRemove={() => removeFilter("createdById")}
+            />
+          )}
+          {(filters.dateFrom || filters.dateTo) && (
+            <FilterTag
+              label={`${filters.dateFrom ? formatDate(filters.dateFrom) : "..."} — ${filters.dateTo ? formatDate(filters.dateTo) : "..."}`}
+              onRemove={() => removeFilter("date")}
+            />
+          )}
+          {(filters.priceMin || filters.priceMax) && (
+            <FilterTag
+              label={`${filters.priceMin || "0"} — ${filters.priceMax || "∞"} ₽`}
+              onRemove={() => removeFilter("price")}
+            />
+          )}
+          {(filters.yearFrom || filters.yearTo) && (
+            <FilterTag
+              label={`${filters.yearFrom || "..."} — ${filters.yearTo || "..."} г.`}
+              onRemove={() => removeFilter("year")}
+            />
+          )}
+        </ScrollView>
+      )} */}
+
+      {/* Compact filter rows */}
       {showFilters && (
         <View style={styles.filterPanel}>
-          {/* Status filter */}
-          <Text style={styles.filterLabel}>Статус</Text>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            style={styles.chipRow}
-          >
-            <TouchableOpacity
-              style={[styles.chip, !filters.status && styles.chipActive]}
-              onPress={() => setFilters((f) => ({ ...f, status: undefined }))}
-            >
-              <Text
-                style={[
-                  styles.chipText,
-                  !filters.status && styles.chipTextActive,
-                ]}
-              >
-                Все
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[
-                styles.chip,
-                filters.status === BookStatus.PENDING_REVIEW &&
-                  styles.chipActive,
-              ]}
-              onPress={() =>
-                setFilters((f) => ({ ...f, status: BookStatus.PENDING_REVIEW }))
-              }
-            >
-              <Text
-                style={[
-                  styles.chipText,
-                  filters.status === BookStatus.PENDING_REVIEW &&
-                    styles.chipTextActive,
-                ]}
-              >
-                Ожидает проверки администратора
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[
-                styles.chip,
-                filters.status === BookStatus.PUBLISHED && styles.chipActive,
-              ]}
-              onPress={() =>
-                setFilters((f) => ({ ...f, status: BookStatus.PUBLISHED }))
-              }
-            >
-              <Text
-                style={[
-                  styles.chipText,
-                  filters.status === BookStatus.PUBLISHED &&
-                    styles.chipTextActive,
-                ]}
-              >
-                Загружено в Ozon
-              </Text>
-            </TouchableOpacity>
-          </ScrollView>
-
-          {/* Box filter */}
-          <Text style={styles.filterLabel}>Коробка</Text>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            style={styles.chipRow}
-          >
-            <TouchableOpacity
-              style={[styles.chip, !filters.boxId && styles.chipActive]}
-              onPress={() => setFilters((f) => ({ ...f, boxId: undefined }))}
-            >
-              <Text
-                style={[
-                  styles.chipText,
-                  !filters.boxId && styles.chipTextActive,
-                ]}
-              >
-                Все
-              </Text>
-            </TouchableOpacity>
-            {boxes.map((box) => (
-              <TouchableOpacity
-                key={box.id}
-                style={[
-                  styles.chip,
-                  filters.boxId === box.id && styles.chipActive,
-                ]}
-                onPress={() => setFilters((f) => ({ ...f, boxId: box.id }))}
-              >
-                <Text
-                  style={[
-                    styles.chipText,
-                    filters.boxId === box.id && styles.chipTextActive,
-                  ]}
-                >
-                  {box.boxNumber}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
-
-          {/* Operator filter */}
-          <Text style={styles.filterLabel}>Оператор</Text>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            style={styles.chipRow}
-          >
-            <TouchableOpacity
-              style={[styles.chip, !filters.createdById && styles.chipActive]}
-              onPress={() =>
-                setFilters((f) => ({ ...f, createdById: undefined }))
-              }
-            >
-              <Text
-                style={[
-                  styles.chipText,
-                  !filters.createdById && styles.chipTextActive,
-                ]}
-              >
-                Все
-              </Text>
-            </TouchableOpacity>
-            {users.map((user) => (
-              <TouchableOpacity
-                key={user.id}
-                style={[
-                  styles.chip,
-                  filters.createdById === user.id && styles.chipActive,
-                ]}
-                onPress={() =>
-                  setFilters((f) => ({ ...f, createdById: user.id }))
-                }
-              >
-                <Text
-                  style={[
-                    styles.chipText,
-                    filters.createdById === user.id && styles.chipTextActive,
-                  ]}
-                >
-                  {user.fullName}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
-
-          {/* Date range */}
-          <Text style={styles.filterLabel}>Период создания</Text>
-          <View style={styles.dateRow}>
-            <View style={{ flex: 1 }}>
-              <Input
-                label=""
-                placeholder="с (ГГГГ-ММ-ДД)"
-                value={dateFrom}
-                onChangeText={setDateFrom}
-                style={{ marginBottom: 0 }}
-              />
-            </View>
-            <Text style={styles.dateSep}>—</Text>
-            <View style={{ flex: 1 }}>
-              <Input
-                label=""
-                placeholder="по (ГГГГ-ММ-ДД)"
-                value={dateTo}
-                onChangeText={setDateTo}
-                style={{ marginBottom: 0 }}
-              />
-            </View>
-          </View>
-
-          {/* Price range */}
-          <Text style={styles.filterLabel}>Цена (₽)</Text>
-          <View style={styles.dateRow}>
-            <View style={{ flex: 1 }}>
-              <Input
-                label=""
-                placeholder="от"
-                value={priceMin}
-                onChangeText={setPriceMin}
-                keyboardType="numeric"
-                style={{ marginBottom: 0 }}
-              />
-            </View>
-            <Text style={styles.dateSep}>—</Text>
-            <View style={{ flex: 1 }}>
-              <Input
-                label=""
-                placeholder="до"
-                value={priceMax}
-                onChangeText={setPriceMax}
-                keyboardType="numeric"
-                style={{ marginBottom: 0 }}
-              />
-            </View>
-          </View>
-
-          {/* Year range */}
-          <Text style={styles.filterLabel}>Год издания</Text>
-          <View style={styles.dateRow}>
-            <View style={{ flex: 1 }}>
-              <Input
-                label=""
-                placeholder="от"
-                value={yearFrom}
-                onChangeText={setYearFrom}
-                keyboardType="numeric"
-                style={{ marginBottom: 0 }}
-              />
-            </View>
-            <Text style={styles.dateSep}>—</Text>
-            <View style={{ flex: 1 }}>
-              <Input
-                label=""
-                placeholder="до"
-                value={yearTo}
-                onChangeText={setYearTo}
-                keyboardType="numeric"
-                style={{ marginBottom: 0 }}
-              />
-            </View>
-          </View>
-
-          <View style={styles.filterActions}>
+          {/* Status */}
+          <FilterRow
+            label="Статус"
+            value={
+              filters.status === BookStatus.PENDING_REVIEW
+                ? "На проверке"
+                : filters.status === BookStatus.PUBLISHED
+                  ? "Загружено в Ozon"
+                  : undefined
+            }
+            onOpen={() => openPicker("status")}
+            onClear={() => removeFilter("status")}
+          />
+          {/* Box */}
+          <FilterRow
+            label="Коробка"
+            value={
+              filters.boxId
+                ? boxes.find((b) => b.id === filters.boxId)?.boxNumber
+                : undefined
+            }
+            onOpen={() => openPicker("boxId")}
+            onClear={() => removeFilter("boxId")}
+          />
+          {/* Operator */}
+          <FilterRow
+            label="Оператор"
+            value={
+              filters.createdById
+                ? users.find((u) => u.id === filters.createdById)?.fullName
+                : undefined
+            }
+            onOpen={() => openPicker("createdById")}
+            onClear={() => removeFilter("createdById")}
+          />
+          {/* Date */}
+          <FilterRow
+            label="Период создания"
+            value={
+              filters.dateFrom || filters.dateTo
+                ? `${filters.dateFrom ? formatDate(filters.dateFrom) : "..."} — ${filters.dateTo ? formatDate(filters.dateTo) : "..."}`
+                : undefined
+            }
+            onOpen={() => openPicker("date")}
+            onClear={() => removeFilter("date")}
+          />
+          {/* Price */}
+          <FilterRow
+            label="Цена (₽)"
+            value={
+              filters.priceMin || filters.priceMax
+                ? `${filters.priceMin || "0"} — ${filters.priceMax || "∞"} ₽`
+                : undefined
+            }
+            onOpen={() => openPicker("price")}
+            onClear={() => removeFilter("price")}
+          />
+          {/* Year */}
+          <FilterRow
+            label="Год издания"
+            value={
+              filters.yearFrom || filters.yearTo
+                ? `${filters.yearFrom || "..."} — ${filters.yearTo || "..."}`
+                : undefined
+            }
+            onOpen={() => openPicker("year")}
+            onClear={() => removeFilter("year")}
+          />
+          {activeFilterCount > 0 && (
             <TouchableOpacity style={styles.resetBtn} onPress={resetFilters}>
-              <Text style={styles.resetBtnText}>Сбросить</Text>
+              <Text style={styles.resetBtnText}>Сбросить всё</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.applyBtn} onPress={applyFilters}>
-              <Text style={styles.applyBtnText}>Применить</Text>
-            </TouchableOpacity>
-          </View>
+          )}
         </View>
       )}
+
+      {/* Per-filter picker modal */}
+      <Modal
+        visible={activePickerFilter !== null}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setActivePickerFilter(null)}
+      >
+        <TouchableWithoutFeedback onPress={() => setActivePickerFilter(null)}>
+          <View style={styles.pickerOverlay}>
+            <TouchableWithoutFeedback>
+              <View style={styles.pickerSheet}>
+                <View style={styles.pickerSheetHeader}>
+                  <Text style={styles.pickerSheetTitle}>
+                    {activePickerFilter === "status"
+                      ? "Статус"
+                      : activePickerFilter === "boxId"
+                        ? "Коробка"
+                        : activePickerFilter === "createdById"
+                          ? "Оператор"
+                          : activePickerFilter === "date"
+                            ? "Период создания"
+                            : activePickerFilter === "price"
+                              ? "Цена (₽)"
+                              : "Год издания"}
+                  </Text>
+                  <TouchableOpacity onPress={() => setActivePickerFilter(null)}>
+                    <Text style={styles.pickerDoneBtn}>Закрыть</Text>
+                  </TouchableOpacity>
+                </View>
+
+                {/* Status chips */}
+                {activePickerFilter === "status" && (
+                  <View style={styles.pickerBody}>
+                    <ScrollView
+                      horizontal
+                      showsHorizontalScrollIndicator={false}
+                      style={styles.chipRow}
+                    >
+                      {(
+                        [
+                          [undefined, "Все"],
+                          [BookStatus.PENDING_REVIEW, "На проверке"],
+                          [BookStatus.PUBLISHED, "Загружено в Ozon"],
+                        ] as const
+                      ).map(([val, label]) => {
+                        const active = filters.status === val;
+                        return (
+                          <TouchableOpacity
+                            key={label}
+                            style={[styles.chip, active && styles.chipActive]}
+                            onPress={() => {
+                              const newF = { ...filters, status: val };
+                              if (!val) delete newF.status;
+                              setFilters(newF);
+                              fetchBooks(1, search, newF, "initial");
+                              setActivePickerFilter(null);
+                            }}
+                          >
+                            <Text
+                              style={[
+                                styles.chipText,
+                                active && styles.chipTextActive,
+                              ]}
+                            >
+                              {label}
+                            </Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </ScrollView>
+                  </View>
+                )}
+
+                {/* Box searchable list */}
+                {activePickerFilter === "boxId" && (
+                  <View style={styles.pickerBody}>
+                    <TextInput
+                      style={styles.pickerSearchInput}
+                      placeholder="Поиск по номеру коробки..."
+                      placeholderTextColor="#aaa"
+                      value={pickerSearch}
+                      onChangeText={setPickerSearch}
+                      autoFocus
+                      clearButtonMode="while-editing"
+                    />
+                    <FlatList
+                      data={[
+                        { id: "", boxNumber: "Все коробки" },
+                        ...boxes.filter((b) =>
+                          b.boxNumber
+                            .toLowerCase()
+                            .includes(pickerSearch.toLowerCase()),
+                        ),
+                      ]}
+                      keyExtractor={(item) => item.id}
+                      style={styles.pickerList}
+                      keyboardShouldPersistTaps="handled"
+                      renderItem={({ item }) => {
+                        const isAll = item.id === "";
+                        const active = isAll
+                          ? !filters.boxId
+                          : filters.boxId === item.id;
+                        return (
+                          <TouchableOpacity
+                            style={[
+                              styles.pickerListItem,
+                              active && styles.pickerListItemActive,
+                            ]}
+                            onPress={() => {
+                              const newF = { ...filters };
+                              if (isAll) delete newF.boxId;
+                              else newF.boxId = item.id;
+                              setFilters(newF);
+                              fetchBooks(1, search, newF, "initial");
+                              setActivePickerFilter(null);
+                            }}
+                          >
+                            <Text
+                              style={[
+                                styles.pickerListItemText,
+                                active && styles.pickerListItemTextActive,
+                              ]}
+                            >
+                              {item.boxNumber}
+                            </Text>
+                            {active && (
+                              <Text style={styles.pickerListCheckmark}>✓</Text>
+                            )}
+                          </TouchableOpacity>
+                        );
+                      }}
+                    />
+                  </View>
+                )}
+
+                {/* Operator searchable list */}
+                {activePickerFilter === "createdById" && (
+                  <View style={styles.pickerBody}>
+                    <TextInput
+                      style={styles.pickerSearchInput}
+                      placeholder="Поиск по имени..."
+                      placeholderTextColor="#aaa"
+                      value={pickerSearch}
+                      onChangeText={setPickerSearch}
+                      autoFocus
+                      clearButtonMode="while-editing"
+                    />
+                    <FlatList
+                      data={[
+                        { id: "", fullName: "Все операторы" },
+                        ...users.filter((u) =>
+                          u.fullName
+                            .toLowerCase()
+                            .includes(pickerSearch.toLowerCase()),
+                        ),
+                      ]}
+                      keyExtractor={(item) => item.id}
+                      style={styles.pickerList}
+                      keyboardShouldPersistTaps="handled"
+                      renderItem={({ item }) => {
+                        const isAll = item.id === "";
+                        const active = isAll
+                          ? !filters.createdById
+                          : filters.createdById === item.id;
+                        return (
+                          <TouchableOpacity
+                            style={[
+                              styles.pickerListItem,
+                              active && styles.pickerListItemActive,
+                            ]}
+                            onPress={() => {
+                              const newF = { ...filters };
+                              if (isAll) delete newF.createdById;
+                              else newF.createdById = item.id;
+                              setFilters(newF);
+                              fetchBooks(1, search, newF, "initial");
+                              setActivePickerFilter(null);
+                            }}
+                          >
+                            <Text
+                              style={[
+                                styles.pickerListItemText,
+                                active && styles.pickerListItemTextActive,
+                              ]}
+                            >
+                              {item.fullName}
+                            </Text>
+                            {active && (
+                              <Text style={styles.pickerListCheckmark}>✓</Text>
+                            )}
+                          </TouchableOpacity>
+                        );
+                      }}
+                    />
+                  </View>
+                )}
+
+                {/* Date range */}
+                {activePickerFilter === "date" && (
+                  <View style={styles.pickerBody}>
+                    <View style={styles.rangeRow}>
+                      <DatePickerInput
+                        value={tempDateFrom}
+                        onChange={setTempDateFrom}
+                        placeholder="с"
+                        maximumDate={
+                          tempDateTo ? new Date(tempDateTo) : undefined
+                        }
+                      />
+                      <Text style={styles.rangeSep}>—</Text>
+                      <DatePickerInput
+                        value={tempDateTo}
+                        onChange={setTempDateTo}
+                        placeholder="по"
+                        minimumDate={
+                          tempDateFrom ? new Date(tempDateFrom) : undefined
+                        }
+                      />
+                    </View>
+                    <TouchableOpacity
+                      style={[styles.applyBtn, { marginTop: 16 }]}
+                      onPress={() => applyRangeFilter("date")}
+                    >
+                      <Text style={styles.applyBtnText}>Применить</Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
+
+                {/* Price range */}
+                {activePickerFilter === "price" && (
+                  <View style={styles.pickerBody}>
+                    <View style={styles.rangeRow}>
+                      <View style={{ flex: 1 }}>
+                        <Input
+                          label=""
+                          placeholder="от"
+                          value={tempPriceMin}
+                          onChangeText={setTempPriceMin}
+                          keyboardType="numeric"
+                          style={{ marginBottom: 0 }}
+                        />
+                      </View>
+                      <Text style={styles.rangeSep}>—</Text>
+                      <View style={{ flex: 1 }}>
+                        <Input
+                          label=""
+                          placeholder="до"
+                          value={tempPriceMax}
+                          onChangeText={setTempPriceMax}
+                          keyboardType="numeric"
+                          style={{ marginBottom: 0 }}
+                        />
+                      </View>
+                    </View>
+                    <TouchableOpacity
+                      style={[styles.applyBtn, { marginTop: 16 }]}
+                      onPress={() => applyRangeFilter("price")}
+                    >
+                      <Text style={styles.applyBtnText}>Применить</Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
+
+                {/* Year range */}
+                {activePickerFilter === "year" && (
+                  <View style={styles.pickerBody}>
+                    <View style={styles.rangeRow}>
+                      <View style={{ flex: 1 }}>
+                        <Input
+                          label=""
+                          placeholder="от"
+                          value={tempYearFrom}
+                          onChangeText={setTempYearFrom}
+                          keyboardType="numeric"
+                          style={{ marginBottom: 0 }}
+                        />
+                      </View>
+                      <Text style={styles.rangeSep}>—</Text>
+                      <View style={{ flex: 1 }}>
+                        <Input
+                          label=""
+                          placeholder="до"
+                          value={tempYearTo}
+                          onChangeText={setTempYearTo}
+                          keyboardType="numeric"
+                          style={{ marginBottom: 0 }}
+                        />
+                      </View>
+                    </View>
+                    <TouchableOpacity
+                      style={[styles.applyBtn, { marginTop: 16 }]}
+                      onPress={() => applyRangeFilter("year")}
+                    >
+                      <Text style={styles.applyBtnText}>Применить</Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
+              </View>
+            </TouchableWithoutFeedback>
+          </View>
+        </TouchableWithoutFeedback>
+      </Modal>
 
       {loading && !refreshing ? (
         <View style={styles.loadingContainer}>
@@ -521,7 +947,19 @@ export function BookDatabaseScreen() {
           }
           onEndReached={handleLoadMore}
           onEndReachedThreshold={0.3}
-          ListEmptyComponent={<Text style={styles.empty}>Нет результатов</Text>}
+          ListEmptyComponent={
+            <View style={styles.emptyContainer}>
+              <Text style={styles.empty}>Нет результатов</Text>
+              {activeFilterCount > 0 && (
+                <TouchableOpacity
+                  style={styles.emptyResetBtn}
+                  onPress={resetFilters}
+                >
+                  <Text style={styles.emptyResetText}>Сбросить фильтры</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          }
           ListFooterComponent={
             loadingMore ? (
               <ActivityIndicator
@@ -569,12 +1007,95 @@ const styles = StyleSheet.create({
     color: "#1976D2",
     fontWeight: "600",
   },
+  activeTagsRow: {
+    backgroundColor: "#fff",
+    borderBottomWidth: 1,
+    borderBottomColor: "#eee",
+  },
+  activeTagsContent: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    alignItems: "center",
+  },
   filterPanel: {
     backgroundColor: "#fff",
     paddingHorizontal: 16,
-    paddingBottom: 12,
+    paddingBottom: 8,
     borderBottomWidth: 1,
     borderBottomColor: "#eee",
+  },
+  pickerOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.4)",
+    justifyContent: "flex-end",
+  },
+  pickerSheet: {
+    backgroundColor: "#fff",
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    paddingBottom: 32,
+  },
+  pickerSheetHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingHorizontal: 20,
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: "#eee",
+  },
+  pickerSheetTitle: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: "#222",
+  },
+  pickerDoneBtn: {
+    fontSize: 15,
+    color: "#999",
+  },
+  pickerBody: {
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 8,
+  },
+  pickerSearchInput: {
+    height: 40,
+    borderWidth: 1,
+    borderColor: "#ddd",
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    fontSize: 14,
+    color: "#333",
+    backgroundColor: "#FAFAFA",
+    marginBottom: 8,
+  },
+  pickerList: {
+    maxHeight: 280,
+  },
+  pickerListItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 13,
+    paddingHorizontal: 4,
+    borderBottomWidth: 1,
+    borderBottomColor: "#f0f0f0",
+  },
+  pickerListItemActive: {
+    backgroundColor: "#F0F7FF",
+  },
+  pickerListItemText: {
+    fontSize: 15,
+    color: "#333",
+  },
+  pickerListItemTextActive: {
+    color: "#1976D2",
+    fontWeight: "600",
+  },
+  pickerListCheckmark: {
+    fontSize: 16,
+    color: "#1976D2",
+    fontWeight: "700",
   },
   filterLabel: {
     fontSize: 13,
@@ -659,5 +1180,30 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
+  },
+  rangeRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  rangeSep: {
+    fontSize: 16,
+    color: "#999",
+  },
+  emptyContainer: {
+    alignItems: "center",
+    marginTop: 40,
+  },
+  emptyResetBtn: {
+    marginTop: 12,
+    paddingVertical: 8,
+    paddingHorizontal: 20,
+    borderRadius: 8,
+    backgroundColor: "#1976D2",
+  },
+  emptyResetText: {
+    fontSize: 13,
+    color: "#fff",
+    fontWeight: "600",
   },
 });
