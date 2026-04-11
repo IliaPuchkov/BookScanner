@@ -12,6 +12,8 @@ import {
   Modal,
   TouchableWithoutFeedback,
   TextInput,
+  KeyboardAvoidingView,
+  Platform,
 } from "react-native";
 import {
   useFocusEffect,
@@ -574,6 +576,10 @@ export function BookDatabaseScreen() {
         animationType="slide"
         onRequestClose={() => setActivePickerFilter(null)}
       >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          style={{ flex: 1 }}
+        >
         <TouchableWithoutFeedback onPress={() => setActivePickerFilter(null)}>
           <View style={styles.pickerOverlay}>
             <TouchableWithoutFeedback>
@@ -868,6 +874,7 @@ export function BookDatabaseScreen() {
             </TouchableWithoutFeedback>
           </View>
         </TouchableWithoutFeedback>
+        </KeyboardAvoidingView>
       </Modal>
 
       {loading && !refreshing ? (

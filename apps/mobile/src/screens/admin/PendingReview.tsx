@@ -21,6 +21,8 @@ import {
   Modal,
   TouchableWithoutFeedback,
   TextInput,
+  KeyboardAvoidingView,
+  Platform,
 } from "react-native";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
@@ -1413,6 +1415,10 @@ export function PendingReviewScreen() {
         animationType="slide"
         onRequestClose={() => setActivePickerFilter(null)}
       >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          style={{ flex: 1 }}
+        >
         <TouchableWithoutFeedback onPress={() => setActivePickerFilter(null)}>
           <View style={styles.pickerOverlay}>
             <TouchableWithoutFeedback>
@@ -1657,6 +1663,7 @@ export function PendingReviewScreen() {
             </TouchableWithoutFeedback>
           </View>
         </TouchableWithoutFeedback>
+        </KeyboardAvoidingView>
       </Modal>
 
       {activeTab === "pending" && loading && !refreshing ? (
