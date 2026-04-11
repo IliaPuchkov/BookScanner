@@ -488,59 +488,6 @@ export function BookDatabaseScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* Active filter tags */}
-      {/* {activeFilterCount > 0 && (
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          style={styles.activeTagsRow}
-          contentContainerStyle={styles.activeTagsContent}
-        >
-          {filters.status && (
-            <FilterTag
-              label={
-                filters.status === BookStatus.PENDING_REVIEW
-                  ? "На проверке"
-                  : filters.status === BookStatus.PUBLISHED
-                  ? "Загружено в Ozon"
-                  : filters.status
-              }
-              onRemove={() => removeFilter("status")}
-            />
-          )}
-          {filters.boxId && (
-            <FilterTag
-              label={`Коробка: ${boxes.find((b) => b.id === filters.boxId)?.boxNumber ?? "..."}`}
-              onRemove={() => removeFilter("boxId")}
-            />
-          )}
-          {filters.createdById && (
-            <FilterTag
-              label={users.find((u) => u.id === filters.createdById)?.fullName ?? "Оператор"}
-              onRemove={() => removeFilter("createdById")}
-            />
-          )}
-          {(filters.dateFrom || filters.dateTo) && (
-            <FilterTag
-              label={`${filters.dateFrom ? formatDate(filters.dateFrom) : "..."} — ${filters.dateTo ? formatDate(filters.dateTo) : "..."}`}
-              onRemove={() => removeFilter("date")}
-            />
-          )}
-          {(filters.priceMin || filters.priceMax) && (
-            <FilterTag
-              label={`${filters.priceMin || "0"} — ${filters.priceMax || "∞"} ₽`}
-              onRemove={() => removeFilter("price")}
-            />
-          )}
-          {(filters.yearFrom || filters.yearTo) && (
-            <FilterTag
-              label={`${filters.yearFrom || "..."} — ${filters.yearTo || "..."} г.`}
-              onRemove={() => removeFilter("year")}
-            />
-          )}
-        </ScrollView>
-      )} */}
-
       {/* Compact filter rows */}
       {showFilters && (
         <View style={styles.filterPanel}>
@@ -614,7 +561,7 @@ export function BookDatabaseScreen() {
           />
           {activeFilterCount > 0 && (
             <TouchableOpacity style={styles.resetBtn} onPress={resetFilters}>
-              <Text style={styles.resetBtnText}>Сбросить всё</Text>
+              <Text style={styles.resetBtnText}>Сбросить фильтры</Text>
             </TouchableOpacity>
           )}
         </View>
@@ -1020,7 +967,7 @@ const styles = StyleSheet.create({
   filterPanel: {
     backgroundColor: "#fff",
     paddingHorizontal: 16,
-    paddingBottom: 8,
+    paddingBottom: 16,
     borderBottomWidth: 1,
     borderBottomColor: "#eee",
   },
@@ -1150,11 +1097,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: "#ddd",
+    borderColor: "#1976D2",
+    backgroundColor: "#1976D2",
   },
   resetBtnText: {
     fontSize: 13,
-    color: "#666",
+    color: "#fff",
   },
   applyBtn: {
     paddingVertical: 8,

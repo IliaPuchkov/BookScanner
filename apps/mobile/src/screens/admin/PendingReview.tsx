@@ -661,24 +661,25 @@ export function PendingReviewScreen() {
         .catch(() => {});
       adminService
         .getOzonStores()
-        .then(async ({ stores }) => {
-          setStores(stores);
-          // Load limits for each store in parallel; undefined = loading, null = failed
-          const entries = await Promise.all(
-            stores.map(async (store) => {
-              try {
-                const limits = await adminService.getOzonStoreLimits(store.id);
-                return [store.id, limits] as const;
-              } catch {
-                return [store.id, null] as const;
-              }
-            }),
-          );
-          setStoreLimits(Object.fromEntries(entries));
-        })
+        .then(({ stores }) => setStores(stores))
         .catch(() => {});
     }, [fetchBooks]),
   );
+
+  const refreshStoreLimits = async (storeList: OzonStore[]) => {
+    setStoreLimits(Object.fromEntries(storeList.map((s) => [s.id, undefined])));
+    const entries = await Promise.all(
+      storeList.map(async (store) => {
+        try {
+          const limits = await adminService.getOzonStoreLimits(store.id);
+          return [store.id, limits] as const;
+        } catch {
+          return [store.id, null] as const;
+        }
+      }),
+    );
+    setStoreLimits(Object.fromEntries(entries));
+  };
 
   const getLimitStatus = (storeId: string, count: number) => {
     const limits = storeLimits[storeId];
@@ -947,6 +948,7 @@ export function PendingReviewScreen() {
       return;
     }
     setPendingPublishAction(action);
+    refreshStoreLimits(stores);
     setStorePickerVisible(true);
   };
 
@@ -964,6 +966,7 @@ export function PendingReviewScreen() {
         return;
       }
       setPendingPublishAction({ type: "single", book });
+      refreshStoreLimits(stores);
       setStorePickerVisible(true);
     },
     [stores],
@@ -1342,49 +1345,6 @@ export function PendingReviewScreen() {
         </View>
       )}
 
-      {/* {activeTab === "pending" && activeFilterCount > 0 && (
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          style={styles.activeTagsRow}
-          contentContainerStyle={styles.activeTagsContent}
-        >
-          {filters.boxId && (
-            <FilterTag
-              label={`Коробка: ${boxes.find((b) => b.id === filters.boxId)?.boxNumber ?? "..."}`}
-              onRemove={() => removeFilter("boxId")}
-            />
-          )}
-          {filters.createdById && (
-            <FilterTag
-              label={
-                filterUsers.find((u) => u.id === filters.createdById)
-                  ?.fullName ?? "Оператор"
-              }
-              onRemove={() => removeFilter("createdById")}
-            />
-          )}
-          {(filters.dateFrom || filters.dateTo) && (
-            <FilterTag
-              label={`${filters.dateFrom ? formatDate(filters.dateFrom) : "..."} — ${filters.dateTo ? formatDate(filters.dateTo) : "..."}`}
-              onRemove={() => removeFilter("date")}
-            />
-          )}
-          {(filters.priceMin || filters.priceMax) && (
-            <FilterTag
-              label={`${filters.priceMin || "0"} — ${filters.priceMax || "∞"} ₽`}
-              onRemove={() => removeFilter("price")}
-            />
-          )}
-          {(filters.yearFrom || filters.yearTo) && (
-            <FilterTag
-              label={`${filters.yearFrom || "..."} — ${filters.yearTo || "..."} г.`}
-              onRemove={() => removeFilter("year")}
-            />
-          )}
-        </ScrollView>
-      )} */}
-
       {activeTab === "pending" && showFilters && (
         <View style={styles.filterPanel}>
           <FilterRow
@@ -1440,7 +1400,7 @@ export function PendingReviewScreen() {
           />
           {activeFilterCount > 0 && (
             <TouchableOpacity style={styles.resetBtn} onPress={resetFilters}>
-              <Text style={styles.resetBtnText}>Сбросить всё</Text>
+              <Text style={styles.resetBtnText}>Сбросить фильтры</Text>
             </TouchableOpacity>
           )}
         </View>
@@ -1489,7 +1449,9 @@ export function PendingReviewScreen() {
                       data={[
                         { id: "", boxNumber: "Все коробки" },
                         ...boxes.filter((b) =>
-                          b.boxNumber.toLowerCase().includes(pickerSearch.toLowerCase())
+                          b.boxNumber
+                            .toLowerCase()
+                            .includes(pickerSearch.toLowerCase()),
                         ),
                       ]}
                       keyExtractor={(item) => item.id}
@@ -1497,10 +1459,15 @@ export function PendingReviewScreen() {
                       keyboardShouldPersistTaps="handled"
                       renderItem={({ item }) => {
                         const isAll = item.id === "";
-                        const active = isAll ? !filters.boxId : filters.boxId === item.id;
+                        const active = isAll
+                          ? !filters.boxId
+                          : filters.boxId === item.id;
                         return (
                           <TouchableOpacity
-                            style={[styles.pickerListItem, active && styles.pickerListItemActive]}
+                            style={[
+                              styles.pickerListItem,
+                              active && styles.pickerListItemActive,
+                            ]}
                             onPress={() => {
                               const newF = { ...filters };
                               if (isAll) delete newF.boxId;
@@ -1510,10 +1477,17 @@ export function PendingReviewScreen() {
                               setActivePickerFilter(null);
                             }}
                           >
-                            <Text style={[styles.pickerListItemText, active && styles.pickerListItemTextActive]}>
+                            <Text
+                              style={[
+                                styles.pickerListItemText,
+                                active && styles.pickerListItemTextActive,
+                              ]}
+                            >
                               {item.boxNumber}
                             </Text>
-                            {active && <Text style={styles.pickerListCheckmark}>✓</Text>}
+                            {active && (
+                              <Text style={styles.pickerListCheckmark}>✓</Text>
+                            )}
                           </TouchableOpacity>
                         );
                       }}
@@ -1536,7 +1510,9 @@ export function PendingReviewScreen() {
                       data={[
                         { id: "", fullName: "Все операторы" },
                         ...filterUsers.filter((u) =>
-                          u.fullName.toLowerCase().includes(pickerSearch.toLowerCase())
+                          u.fullName
+                            .toLowerCase()
+                            .includes(pickerSearch.toLowerCase()),
                         ),
                       ]}
                       keyExtractor={(item) => item.id}
@@ -1544,10 +1520,15 @@ export function PendingReviewScreen() {
                       keyboardShouldPersistTaps="handled"
                       renderItem={({ item }) => {
                         const isAll = item.id === "";
-                        const active = isAll ? !filters.createdById : filters.createdById === item.id;
+                        const active = isAll
+                          ? !filters.createdById
+                          : filters.createdById === item.id;
                         return (
                           <TouchableOpacity
-                            style={[styles.pickerListItem, active && styles.pickerListItemActive]}
+                            style={[
+                              styles.pickerListItem,
+                              active && styles.pickerListItemActive,
+                            ]}
                             onPress={() => {
                               const newF = { ...filters };
                               if (isAll) delete newF.createdById;
@@ -1557,10 +1538,17 @@ export function PendingReviewScreen() {
                               setActivePickerFilter(null);
                             }}
                           >
-                            <Text style={[styles.pickerListItemText, active && styles.pickerListItemTextActive]}>
+                            <Text
+                              style={[
+                                styles.pickerListItemText,
+                                active && styles.pickerListItemTextActive,
+                              ]}
+                            >
                               {item.fullName}
                             </Text>
-                            {active && <Text style={styles.pickerListCheckmark}>✓</Text>}
+                            {active && (
+                              <Text style={styles.pickerListCheckmark}>✓</Text>
+                            )}
                           </TouchableOpacity>
                         );
                       }}
@@ -1744,7 +1732,7 @@ export function PendingReviewScreen() {
           }
           onEndReached={handleLoadMore}
           onEndReachedThreshold={0.3}
-          stickySectionHeadersEnabled={false}
+          stickySectionHeadersEnabled={true}
           removeClippedSubviews={true}
           maxToRenderPerBatch={8}
           updateCellsBatchingPeriod={50}
@@ -2424,6 +2412,7 @@ const styles = StyleSheet.create({
   filterPanel: {
     backgroundColor: "#fff",
     paddingHorizontal: 16,
+    paddingBottom: 16,
     borderBottomWidth: 1,
     borderBottomColor: "#eee",
   },
@@ -2553,11 +2542,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: "#ddd",
+    borderColor: "#1976D2",
+    backgroundColor: "#1976D2",
   },
   resetBtnText: {
     fontSize: 13,
-    color: "#666",
+    color: "#fff",
   },
   applyBtn: {
     paddingVertical: 8,

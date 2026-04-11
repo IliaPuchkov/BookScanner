@@ -12,6 +12,8 @@ import {
   KeyboardAvoidingView,
   Platform,
   TouchableOpacity,
+  Modal,
+  TouchableWithoutFeedback,
 } from "react-native";
 import {
   useRoute,
@@ -22,6 +24,8 @@ import { type NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { Button } from "../../components/Button";
 import { booksService } from "../../services/books.service";
 import { visionService } from "../../services/vision.service";
+import { adminService } from "../../services/admin.service";
+import type { OzonStore, OzonStoreLimits } from "../../services/admin.service";
 import type { Book, UpdateBookDto } from "../../types";
 import { BookStatus, PaperType, CoverType } from "../../types";
 import type { AdminCardCreationParamList } from "../../navigation/AdminNavigator";
@@ -124,6 +128,11 @@ export function ProductDetailScreen() {
   const [publishing, setPublishing] = useState(false);
   const [checkingStatus, setCheckingStatus] = useState(false);
   const [reExtracting, setReExtracting] = useState(false);
+  const [stores, setStores] = useState<OzonStore[]>([]);
+  const [storeLimits, setStoreLimits] = useState<
+    Record<string, OzonStoreLimits | null | undefined>
+  >({});
+  const [storePickerVisible, setStorePickerVisible] = useState(false);
 
   // Edit fields
   const [editTitle, setEditTitle] = useState("");
@@ -145,6 +154,29 @@ export function ProductDetailScreen() {
   const [editPaperType, setEditPaperType] = useState<PaperType | undefined>(
     undefined,
   );
+
+  const refreshStoreLimits = async (storeList: OzonStore[]) => {
+    // Reset to undefined (loading) before fetching
+    setStoreLimits(Object.fromEntries(storeList.map((s) => [s.id, undefined])));
+    const entries = await Promise.all(
+      storeList.map(async (store) => {
+        try {
+          const limits = await adminService.getOzonStoreLimits(store.id);
+          return [store.id, limits] as const;
+        } catch {
+          return [store.id, null] as const;
+        }
+      }),
+    );
+    setStoreLimits(Object.fromEntries(entries));
+  };
+
+  useEffect(() => {
+    adminService
+      .getOzonStores()
+      .then(({ stores: s }) => setStores(s))
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     Promise.all([
@@ -223,31 +255,60 @@ export function ProductDetailScreen() {
     setEditing(false);
   };
 
+  const getLimitStatus = (storeId: string) => {
+    const limits = storeLimits[storeId];
+    if (limits === undefined)
+      return { blocked: false, label: "Загрузка...", warn: false };
+    if (limits === null)
+      return { blocked: false, label: "Лимиты недоступны", warn: false };
+
+    const totalRemaining =
+      limits.total.limit > 0 ? limits.total.limit - limits.total.usage : null;
+    const totalExhausted = totalRemaining !== null && totalRemaining <= 0;
+    const totalLine =
+      totalRemaining !== null
+        ? `Ассортимент: ${totalRemaining} / ${limits.total.limit} осталось мест`
+        : "Ассортимент: не ограничен";
+
+    if (totalExhausted) {
+      return { blocked: true, label: totalLine, warn: true };
+    }
+
+    if (limits.daily_create.limit > 0) {
+      const remaining = limits.daily_create.limit - limits.daily_create.usage;
+      const createLine = `Создание: ${remaining} / ${limits.daily_create.limit} сегодня`;
+      if (remaining <= 0) {
+        return { blocked: true, label: `${createLine}\n${totalLine}`, warn: true };
+      }
+      return { blocked: false, label: `${createLine}\n${totalLine}`, warn: false };
+    }
+
+    return { blocked: false, label: `Создание: не ограничено\n${totalLine}`, warn: false };
+  };
+
   const handlePublish = () => {
     if (!book) return;
-    Alert.alert(
-      "Загрузить в Озон?",
-      `"${book.title}" будет опубликована на Озоне`,
-      [
-        { text: "Отмена", style: "cancel" },
-        {
-          text: "Загрузить",
-          onPress: async () => {
-            setPublishing(true);
-            try {
-              await booksService.publishToOzon(book.id);
-              const updated = await booksService.getBook(bookId);
-              setBook(updated);
-              Alert.alert("Готово", "Карточка отправлена на модерацию Ozon");
-            } catch {
-              Alert.alert("Ошибка", "Не удалось загрузить в Озон");
-            } finally {
-              setPublishing(false);
-            }
-          },
-        },
-      ],
-    );
+    if (stores.length === 0) {
+      Alert.alert("Нет магазинов", "Добавьте магазин Ozon в настройках");
+      return;
+    }
+    refreshStoreLimits(stores);
+    setStorePickerVisible(true);
+  };
+
+  const executePublish = async (storeId: string) => {
+    if (!book) return;
+    setPublishing(true);
+    try {
+      await booksService.publishToOzon(book.id, storeId);
+      const updated = await booksService.getBook(bookId);
+      setBook(updated);
+      Alert.alert("Готово", "Карточка отправлена на модерацию Ozon");
+    } catch {
+      Alert.alert("Ошибка", "Не удалось загрузить в Озон");
+    } finally {
+      setPublishing(false);
+    }
   };
 
   const handleCheckStatus = async () => {
@@ -340,10 +401,56 @@ export function ProductDetailScreen() {
     STATUS_CONFIG[book.status] || STATUS_CONFIG[BookStatus.PENDING_REVIEW];
 
   return (
-    <KeyboardAvoidingView
-      style={{ flex: 1 }}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
-    >
+    <>
+      <Modal
+        visible={storePickerVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setStorePickerVisible(false)}
+      >
+        <TouchableWithoutFeedback onPress={() => setStorePickerVisible(false)}>
+          <View style={styles.storeOverlay}>
+            <TouchableWithoutFeedback>
+              <View style={styles.storeContainer}>
+                <Text style={styles.storePickerTitle}>Выберите магазин Ozon</Text>
+                {stores.map((store) => {
+                  const { blocked, label, warn } = getLimitStatus(store.id);
+                  return (
+                    <TouchableOpacity
+                      key={store.id}
+                      style={[styles.storeItem, blocked && styles.storeItemBlocked]}
+                      activeOpacity={blocked ? 1 : 0.7}
+                      disabled={blocked}
+                      onPress={() => {
+                        setStorePickerVisible(false);
+                        Alert.alert(
+                          "Подтверждение",
+                          `Загрузить книгу в магазин "${store.name}"?`,
+                          [
+                            { text: "Отмена", style: "cancel" },
+                            { text: "Загрузить", onPress: () => executePublish(store.id) },
+                          ],
+                        );
+                      }}
+                    >
+                      <Text style={[styles.storeItemName, blocked && styles.storeItemBlockedText]}>
+                        {store.name}
+                      </Text>
+                      <Text style={[styles.storeItemLimits, warn && styles.storeItemLimitWarn]}>
+                        {label}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </TouchableWithoutFeedback>
+          </View>
+        </TouchableWithoutFeedback>
+      </Modal>
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+      >
       <ScrollView
         style={styles.container}
         contentContainerStyle={styles.scroll}
@@ -601,6 +708,7 @@ export function ProductDetailScreen() {
         </View>
       </ScrollView>
     </KeyboardAvoidingView>
+    </>
   );
 }
 
@@ -850,6 +958,50 @@ const styles = StyleSheet.create({
   },
   segmentTextActive: {
     color: "#1976D2",
+    fontWeight: "600",
+  },
+  storeOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.4)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  storeContainer: {
+    backgroundColor: "#fff",
+    borderRadius: 14,
+    padding: 16,
+    width: "80%",
+  },
+  storePickerTitle: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#555",
+    marginBottom: 12,
+  },
+  storeItem: {
+    paddingVertical: 12,
+    borderBottomWidth: 0.5,
+    borderBottomColor: "#eee",
+  },
+  storeItemBlocked: {
+    opacity: 0.5,
+    backgroundColor: "#fafafa",
+  },
+  storeItemName: {
+    fontSize: 15,
+    color: "#1976D2",
+    fontWeight: "600",
+  },
+  storeItemBlockedText: {
+    color: "#aaa",
+  },
+  storeItemLimits: {
+    fontSize: 11,
+    color: "#aaa",
+    marginTop: 2,
+  },
+  storeItemLimitWarn: {
+    color: "#E53935",
     fontWeight: "600",
   },
 });
