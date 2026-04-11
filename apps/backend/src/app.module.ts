@@ -15,6 +15,7 @@ import { AdminModule } from './admin/admin.module';
 import { StatsModule } from './stats/stats.module';
 import { SettingsModule } from './settings/settings.module';
 import { WorkSessionsModule } from './work-sessions/work-sessions.module';
+import { MaintenanceModule } from './maintenance/maintenance.module';
 
 @Module({
   imports: [
@@ -54,6 +55,7 @@ import { WorkSessionsModule } from './work-sessions/work-sessions.module';
     StatsModule,
     SettingsModule,
     WorkSessionsModule,
+    MaintenanceModule,
   ],
 })
 export class AppModule {}

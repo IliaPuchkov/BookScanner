@@ -88,5 +88,46 @@ api.interceptors.response.use(
   },
 );
 
+// ─── Server reachability tracking ────────────────────────────────────────────
+type ServerStatusListener = (reachable: boolean) => void;
+const _serverStatusListeners: ServerStatusListener[] = [];
+let _consecutiveNetworkFailures = 0;
+const NETWORK_FAILURE_THRESHOLD = 3;
+
+export function onServerStatusChange(listener: ServerStatusListener): () => void {
+  _serverStatusListeners.push(listener);
+  return () => {
+    const idx = _serverStatusListeners.indexOf(listener);
+    if (idx >= 0) _serverStatusListeners.splice(idx, 1);
+  };
+}
+
+function _notifyServerStatus(reachable: boolean) {
+  _serverStatusListeners.forEach((l) => l(reachable));
+}
+
+api.interceptors.response.use(
+  (response) => {
+    if (_consecutiveNetworkFailures >= NETWORK_FAILURE_THRESHOLD) {
+      _notifyServerStatus(true);
+    }
+    _consecutiveNetworkFailures = 0;
+    return response;
+  },
+  (error) => {
+    if (!error.response) {
+      // No response = network/server completely unreachable
+      _consecutiveNetworkFailures++;
+      if (_consecutiveNetworkFailures >= NETWORK_FAILURE_THRESHOLD) {
+        _notifyServerStatus(false);
+      }
+    } else {
+      // Server responded (even with error) — it's alive
+      _consecutiveNetworkFailures = 0;
+    }
+    return Promise.reject(error);
+  },
+);
+
 export { STORAGE_KEYS };
 export default api;

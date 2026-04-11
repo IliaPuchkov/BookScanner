@@ -6,6 +6,7 @@ import {
   Alert,
   TextInput,
   ScrollView,
+  Switch,
   ActivityIndicator,
   RefreshControl,
   TouchableOpacity,
@@ -15,9 +16,43 @@ import {
 import { useNavigation } from "@react-navigation/native";
 import { useAuth } from "../../hooks/useAuth";
 import { adminService, type OzonStore, type OzonStoreLimits } from "../../services/admin.service";
+import { useMaintenanceContext } from "../../context/MaintenanceContext";
 
 const AI_PROMPT_KEY = "vision_ai_prompt";
 const MAX_PHOTOS_KEY = "max_photo_count";
+
+const MAINTENANCE_ENABLED_KEY = "maintenance_enabled";
+const MAINTENANCE_START_AT_KEY = "maintenance_start_at";
+const MAINTENANCE_END_AT_KEY = "maintenance_end_at";
+const MAINTENANCE_MESSAGE_KEY = "maintenance_message";
+const MAINTENANCE_INSTRUCTIONS_KEY = "maintenance_instructions";
+const MAINTENANCE_WARNING_MINUTES_KEY = "maintenance_warning_minutes";
+
+function parseRuDateTime(s: string): string | null {
+  const trimmed = s.trim();
+  if (!trimmed) return null;
+  const [datePart, timePart] = trimmed.split(" ");
+  if (!datePart) return null;
+  const [dd, mm, yyyy] = datePart.split(".");
+  const [hh, min] = (timePart || "00:00").split(":");
+  const d = new Date(
+    parseInt(yyyy, 10),
+    parseInt(mm, 10) - 1,
+    parseInt(dd, 10),
+    parseInt(hh || "0", 10),
+    parseInt(min || "0", 10),
+  );
+  if (isNaN(d.getTime())) return null;
+  return d.toISOString();
+}
+
+function isoToRu(iso: string | null | undefined): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return iso;
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${pad(d.getDate())}.${pad(d.getMonth() + 1)}.${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
 const DEFAULT_MAX_PHOTOS = 10;
 
 const PRICE_DEFAULT_KEY = "price_default";
@@ -71,6 +106,16 @@ export function SettingsScreen() {
   const [loadingSettings, setLoadingSettings] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
+  // Maintenance settings
+  const { refresh: refreshMaintenance } = useMaintenanceContext();
+  const [maintenanceEnabled, setMaintenanceEnabled] = useState(false);
+  const [maintenanceStartAt, setMaintenanceStartAt] = useState("");
+  const [maintenanceEndAt, setMaintenanceEndAt] = useState("");
+  const [maintenanceMessage, setMaintenanceMessage] = useState("");
+  const [maintenanceInstructions, setMaintenanceInstructions] = useState("");
+  const [maintenanceWarningMinutes, setMaintenanceWarningMinutes] = useState("30");
+  const [savingMaintenance, setSavingMaintenance] = useState(false);
+
   const applySettings = (
     settings: Awaited<ReturnType<typeof adminService.getSettings>>,
   ) => {
@@ -90,6 +135,19 @@ export function SettingsScreen() {
     if (pdp) setPriceDiscountPercent(pdp.value);
     const pam = settings.find((s) => s.key === PRICE_AI_MULTIPLIER_KEY);
     if (pam) setPriceAiMultiplier(pam.value);
+
+    const mEnabled = settings.find((s) => s.key === MAINTENANCE_ENABLED_KEY);
+    setMaintenanceEnabled(mEnabled?.value === "true");
+    const mStart = settings.find((s) => s.key === MAINTENANCE_START_AT_KEY);
+    setMaintenanceStartAt(isoToRu(mStart?.value));
+    const mEnd = settings.find((s) => s.key === MAINTENANCE_END_AT_KEY);
+    setMaintenanceEndAt(isoToRu(mEnd?.value));
+    const mMsg = settings.find((s) => s.key === MAINTENANCE_MESSAGE_KEY);
+    setMaintenanceMessage(mMsg?.value ?? "");
+    const mInstr = settings.find((s) => s.key === MAINTENANCE_INSTRUCTIONS_KEY);
+    setMaintenanceInstructions(mInstr?.value ?? "");
+    const mWarn = settings.find((s) => s.key === MAINTENANCE_WARNING_MINUTES_KEY);
+    setMaintenanceWarningMinutes(mWarn?.value ?? "30");
   };
 
   const loadStores = useCallback(async () => {
@@ -339,6 +397,85 @@ export function SettingsScreen() {
       Alert.alert("Ошибка", "Не удалось добавить магазин");
     } finally {
       setSavingStore(false);
+    }
+  };
+
+  const handleSaveMaintenance = async () => {
+    const startIso = maintenanceStartAt ? parseRuDateTime(maintenanceStartAt) : null;
+    const endIso = maintenanceEndAt ? parseRuDateTime(maintenanceEndAt) : null;
+
+    if (maintenanceStartAt && !startIso) {
+      Alert.alert("Ошибка", "Неверный формат даты начала. Используйте ДД.ММ.ГГГГ ЧЧ:ММ");
+      return;
+    }
+    if (maintenanceEndAt && !endIso) {
+      Alert.alert("Ошибка", "Неверный формат даты окончания. Используйте ДД.ММ.ГГГГ ЧЧ:ММ");
+      return;
+    }
+    const warnMin = parseInt(maintenanceWarningMinutes, 10);
+    if (isNaN(warnMin) || warnMin < 0) {
+      Alert.alert("Ошибка", "Укажите корректное количество минут предупреждения");
+      return;
+    }
+
+    setSavingMaintenance(true);
+    try {
+      const calls = [
+        adminService.upsertSetting({
+          key: MAINTENANCE_ENABLED_KEY,
+          value: String(maintenanceEnabled),
+          valueType: "boolean",
+          description: "Режим технических работ",
+        }),
+        adminService.upsertSetting({
+          key: MAINTENANCE_WARNING_MINUTES_KEY,
+          value: String(warnMin),
+          valueType: "number",
+          description: "За сколько минут до начала показывать предупреждение",
+        }),
+      ];
+
+      // Only save date/text fields if they have a value — backend rejects empty strings
+      if (startIso) {
+        calls.push(adminService.upsertSetting({
+          key: MAINTENANCE_START_AT_KEY,
+          value: startIso,
+          valueType: "string",
+          description: "Дата и время начала технических работ (ISO)",
+        }));
+      }
+      if (endIso) {
+        calls.push(adminService.upsertSetting({
+          key: MAINTENANCE_END_AT_KEY,
+          value: endIso,
+          valueType: "string",
+          description: "Приблизительное время окончания технических работ (ISO)",
+        }));
+      }
+      if (maintenanceMessage.trim()) {
+        calls.push(adminService.upsertSetting({
+          key: MAINTENANCE_MESSAGE_KEY,
+          value: maintenanceMessage.trim(),
+          valueType: "string",
+          description: "Причина / описание технических работ",
+        }));
+      }
+      if (maintenanceInstructions.trim()) {
+        calls.push(adminService.upsertSetting({
+          key: MAINTENANCE_INSTRUCTIONS_KEY,
+          value: maintenanceInstructions.trim(),
+          valueType: "string",
+          description: "Инструкции для пользователей на время работ",
+        }));
+      }
+
+      await Promise.all(calls);
+      await refreshMaintenance();
+      Alert.alert("Готово", maintenanceEnabled ? "Технические работы включены" : "Настройки сохранены");
+    } catch {
+      Alert.alert("Ошибка", "Не удалось сохранить настройки");
+    } finally {
+      setSavingMaintenance(false);
     }
   };
 
@@ -782,6 +919,143 @@ export function SettingsScreen() {
                 </>
               )}
             </View>
+
+            {/* Maintenance */}
+            <View style={styles.card}>
+              <View style={styles.sectionHeader}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.sectionTitle}>Технические работы</Text>
+                  <Text style={styles.sectionDesc}>
+                    Управление режимом обслуживания сервера. При включении пользователи увидят экран технических работ.
+                  </Text>
+                </View>
+              </View>
+
+              <View style={styles.maintenanceToggleRow}>
+                <Text style={[styles.maintenanceToggleLabel, maintenanceEnabled && styles.maintenanceToggleLabelActive]}>
+                  {maintenanceEnabled ? "🔴  Технические работы ВКЛЮЧЕНЫ" : "🟢  Технические работы выключены"}
+                </Text>
+                <Switch
+                  value={maintenanceEnabled}
+                  onValueChange={setMaintenanceEnabled}
+                  trackColor={{ false: "#ddd", true: "#FFCDD2" }}
+                  thumbColor={maintenanceEnabled ? "#E53935" : "#fff"}
+                />
+              </View>
+
+              <Text style={styles.maintenanceFieldLabel}>Дата и время начала (ДД.ММ.ГГГГ ЧЧ:ММ)</Text>
+              <View style={styles.maintenanceDateRow}>
+                <TextInput
+                  style={[styles.maintenanceInput, { flex: 1, marginBottom: 0 }]}
+                  value={maintenanceStartAt}
+                  onChangeText={setMaintenanceStartAt}
+                  placeholder="напр. 15.04.2026 18:00"
+                  placeholderTextColor="#bbb"
+                  keyboardType="numbers-and-punctuation"
+                />
+              </View>
+              <View style={styles.maintenanceDateShortcuts}>
+                {[
+                  { label: "Сегодня", offset: 0 },
+                  { label: "Завтра", offset: 1 },
+                ].map(({ label, offset }) => (
+                  <TouchableOpacity
+                    key={label}
+                    style={styles.maintenanceDateChip}
+                    onPress={() => {
+                      const d = new Date();
+                      d.setDate(d.getDate() + offset);
+                      d.setSeconds(0, 0);
+                      const pad = (n: number) => String(n).padStart(2, "0");
+                      setMaintenanceStartAt(
+                        `${pad(d.getDate())}.${pad(d.getMonth() + 1)}.${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}`,
+                      );
+                    }}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={styles.maintenanceDateChipText}>{label}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              <Text style={[styles.maintenanceFieldLabel, { marginTop: 8 }]}>Примерное окончание (ДД.ММ.ГГГГ ЧЧ:ММ)</Text>
+              <TextInput
+                style={styles.maintenanceInput}
+                value={maintenanceEndAt}
+                onChangeText={setMaintenanceEndAt}
+                placeholder="напр. 15.04.2026 20:00"
+                placeholderTextColor="#bbb"
+                keyboardType="numbers-and-punctuation"
+              />
+              <View style={styles.maintenanceDateShortcuts}>
+                {[
+                  { label: "Сегодня", offset: 0 },
+                  { label: "Завтра", offset: 1 },
+                ].map(({ label, offset }) => (
+                  <TouchableOpacity
+                    key={label}
+                    style={styles.maintenanceDateChip}
+                    onPress={() => {
+                      const d = new Date();
+                      d.setDate(d.getDate() + offset);
+                      d.setSeconds(0, 0);
+                      const pad = (n: number) => String(n).padStart(2, "0");
+                      setMaintenanceEndAt(
+                        `${pad(d.getDate())}.${pad(d.getMonth() + 1)}.${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}`,
+                      );
+                    }}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={styles.maintenanceDateChipText}>{label}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              <Text style={styles.maintenanceFieldLabel}>За сколько минут показывать предупреждение</Text>
+              <TextInput
+                style={styles.maintenanceInput}
+                value={maintenanceWarningMinutes}
+                onChangeText={setMaintenanceWarningMinutes}
+                placeholder="30"
+                placeholderTextColor="#bbb"
+                keyboardType="number-pad"
+              />
+
+              <Text style={styles.maintenanceFieldLabel}>Причина / сообщение для пользователей</Text>
+              <TextInput
+                style={[styles.maintenanceInput, styles.maintenanceTextArea]}
+                value={maintenanceMessage}
+                onChangeText={setMaintenanceMessage}
+                placeholder="Плановые технические работы по обновлению системы"
+                placeholderTextColor="#bbb"
+                multiline
+                numberOfLines={3}
+              />
+
+              <Text style={styles.maintenanceFieldLabel}>Инструкции для пользователей (необязательно)</Text>
+              <TextInput
+                style={[styles.maintenanceInput, styles.maintenanceTextArea]}
+                value={maintenanceInstructions}
+                onChangeText={setMaintenanceInstructions}
+                placeholder={"• Завершите текущую работу\n• Все сохранённые карточки останутся\n• Несохранённые данные будут потеряны"}
+                placeholderTextColor="#bbb"
+                multiline
+                numberOfLines={4}
+              />
+
+              <TouchableOpacity
+                style={[styles.maintenanceSaveBtn, savingMaintenance && styles.maintenanceSaveBtnDisabled]}
+                onPress={handleSaveMaintenance}
+                disabled={savingMaintenance}
+                activeOpacity={0.8}
+              >
+                {savingMaintenance ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <Text style={styles.maintenanceSaveBtnText}>Сохранить</Text>
+                )}
+              </TouchableOpacity>
+            </View>
           </>
         )}
       </ScrollView>
@@ -1076,5 +1350,88 @@ const styles = StyleSheet.create({
     color: "#222",
     backgroundColor: "#FAFAFA",
     textAlign: "center",
+  },
+  // Maintenance styles
+  maintenanceToggleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: "#FAFAFA",
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: "#eee",
+  },
+  maintenanceToggleLabel: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#555",
+    flex: 1,
+    marginRight: 12,
+  },
+  maintenanceToggleLabelActive: {
+    color: "#C62828",
+  },
+  maintenanceFieldLabel: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#888",
+    marginBottom: 6,
+    marginTop: 4,
+  },
+  maintenanceInput: {
+    borderWidth: 1,
+    borderColor: "#ddd",
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 14,
+    color: "#333",
+    backgroundColor: "#FAFAFA",
+    marginBottom: 12,
+  },
+  maintenanceTextArea: {
+    minHeight: 80,
+    textAlignVertical: "top",
+  },
+  maintenanceDateRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 6,
+  },
+  maintenanceDateShortcuts: {
+    flexDirection: "row",
+    gap: 8,
+    marginBottom: 4,
+  },
+  maintenanceDateChip: {
+    paddingVertical: 5,
+    paddingHorizontal: 14,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#1976D2",
+    backgroundColor: "#E3F2FD",
+  },
+  maintenanceDateChipText: {
+    fontSize: 12,
+    color: "#1976D2",
+    fontWeight: "600",
+  },
+  maintenanceSaveBtn: {
+    backgroundColor: "#1976D2",
+    borderRadius: 10,
+    paddingVertical: 13,
+    alignItems: "center",
+    marginTop: 4,
+  },
+  maintenanceSaveBtnDisabled: {
+    opacity: 0.5,
+  },
+  maintenanceSaveBtnText: {
+    color: "#fff",
+    fontSize: 15,
+    fontWeight: "600",
   },
 });

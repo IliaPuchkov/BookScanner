@@ -1,6 +1,8 @@
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AuthProvider } from './src/context/AuthContext';
+import { MaintenanceProvider } from './src/context/MaintenanceContext';
+import { ServerStatusProvider } from './src/context/ServerStatusContext';
 import { AppNavigator } from './src/navigation/AppNavigator';
 import { DevNavigator } from './src/navigation/DevNavigator';
 
@@ -19,10 +21,14 @@ export default function App() {
 
   return (
     <SafeAreaProvider>
-      <AuthProvider>
-        <StatusBar style="light" />
-        <AppNavigator />
-      </AuthProvider>
+      <ServerStatusProvider>
+        <MaintenanceProvider>
+          <AuthProvider>
+            <StatusBar style="light" />
+            <AppNavigator />
+          </AuthProvider>
+        </MaintenanceProvider>
+      </ServerStatusProvider>
     </SafeAreaProvider>
   );
 }
