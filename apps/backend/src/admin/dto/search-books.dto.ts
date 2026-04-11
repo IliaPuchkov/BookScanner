@@ -1,4 +1,4 @@
-import { IsOptional, IsString, IsUUID, IsEnum, IsDateString } from 'class-validator';
+import { IsOptional, IsString, IsUUID, IsEnum, IsDateString, IsNumberString } from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { PaginationDto } from '../../common/dto/pagination.dto';
 import { BookStatus } from '@bookscanner/shared';
@@ -33,4 +33,24 @@ export class SearchBooksDto extends PaginationDto {
   @IsOptional()
   @IsEnum(BookStatus)
   status?: BookStatus;
+
+  @ApiPropertyOptional({ description: 'Минимальная цена' })
+  @IsOptional()
+  @IsNumberString()
+  priceMin?: string;
+
+  @ApiPropertyOptional({ description: 'Максимальная цена' })
+  @IsOptional()
+  @IsNumberString()
+  priceMax?: string;
+
+  @ApiPropertyOptional({ description: 'Год издания от' })
+  @IsOptional()
+  @IsNumberString()
+  yearFrom?: string;
+
+  @ApiPropertyOptional({ description: 'Год издания до' })
+  @IsOptional()
+  @IsNumberString()
+  yearTo?: string;
 }

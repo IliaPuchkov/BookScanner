@@ -96,6 +96,10 @@ export const adminService = {
       dateFrom?: string;
       dateTo?: string;
       status?: string;
+      priceMin?: string;
+      priceMax?: string;
+      yearFrom?: string;
+      yearTo?: string;
     },
   ): Promise<PaginatedResponse<Book>> {
     const { data } = await api.get<PaginatedResponse<Book>>('/admin/books/database', {
@@ -113,6 +117,10 @@ export const adminService = {
       dateFrom?: string;
       dateTo?: string;
       search?: string;
+      priceMin?: string;
+      priceMax?: string;
+      yearFrom?: string;
+      yearTo?: string;
     },
   ): Promise<PaginatedResponse<Book>> {
     const { data } = await api.get<PaginatedResponse<Book>>('/admin/books/pending-review', {

@@ -69,6 +69,10 @@ export class BooksService {
     dateTo?: string,
     workSessionId?: string,
     status?: BookStatus,
+    priceMin?: string,
+    priceMax?: string,
+    yearFrom?: string,
+    yearTo?: string,
   ) {
     const qb = this.booksRepository
       .createQueryBuilder('book')
@@ -119,6 +123,22 @@ export class BooksService {
         '(book.title ILIKE :search OR book.author ILIKE :search OR book.isbn ILIKE :search)',
         { search: `%${search}%` },
       );
+    }
+
+    if (priceMin !== undefined) {
+      qb.andWhere('book.price >= :priceMin', { priceMin: parseFloat(priceMin) });
+    }
+
+    if (priceMax !== undefined) {
+      qb.andWhere('book.price <= :priceMax', { priceMax: parseFloat(priceMax) });
+    }
+
+    if (yearFrom !== undefined) {
+      qb.andWhere('book.yearPublished >= :yearFrom', { yearFrom: parseInt(yearFrom, 10) });
+    }
+
+    if (yearTo !== undefined) {
+      qb.andWhere('book.yearPublished <= :yearTo', { yearTo: parseInt(yearTo, 10) });
     }
 
     // For admin queries (no session filter), sort by box first so all books

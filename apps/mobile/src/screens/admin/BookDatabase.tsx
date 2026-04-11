@@ -33,6 +33,10 @@ interface Filters {
   dateFrom?: string;
   dateTo?: string;
   status?: string;
+  priceMin?: string;
+  priceMax?: string;
+  yearFrom?: string;
+  yearTo?: string;
 }
 
 export function BookDatabaseScreen() {
@@ -54,6 +58,10 @@ export function BookDatabaseScreen() {
   );
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
+  const [priceMin, setPriceMin] = useState("");
+  const [priceMax, setPriceMax] = useState("");
+  const [yearFrom, setYearFrom] = useState("");
+  const [yearTo, setYearTo] = useState("");
 
   // Filter options
   const [boxes, setBoxes] = useState<Box[]>([]);
@@ -113,6 +121,10 @@ export function BookDatabaseScreen() {
         if (currentFilters.dateFrom) params.dateFrom = currentFilters.dateFrom;
         if (currentFilters.dateTo) params.dateTo = currentFilters.dateTo;
         if (currentFilters.status) params.status = currentFilters.status;
+        if (currentFilters.priceMin) params.priceMin = currentFilters.priceMin;
+        if (currentFilters.priceMax) params.priceMax = currentFilters.priceMax;
+        if (currentFilters.yearFrom) params.yearFrom = currentFilters.yearFrom;
+        if (currentFilters.yearTo) params.yearTo = currentFilters.yearTo;
 
         const res = await adminService.getBookDatabase(
           p,
@@ -184,6 +196,14 @@ export function BookDatabaseScreen() {
     else delete newFilters.dateFrom;
     if (dateTo) newFilters.dateTo = dateTo;
     else delete newFilters.dateTo;
+    if (priceMin) newFilters.priceMin = priceMin;
+    else delete newFilters.priceMin;
+    if (priceMax) newFilters.priceMax = priceMax;
+    else delete newFilters.priceMax;
+    if (yearFrom) newFilters.yearFrom = yearFrom;
+    else delete newFilters.yearFrom;
+    if (yearTo) newFilters.yearTo = yearTo;
+    else delete newFilters.yearTo;
     if (!newFilters.status) delete newFilters.status;
     setFilters(newFilters);
     setShowFilters(false);
@@ -195,6 +215,10 @@ export function BookDatabaseScreen() {
     setFilters(empty);
     setDateFrom("");
     setDateTo("");
+    setPriceMin("");
+    setPriceMax("");
+    setYearFrom("");
+    setYearTo("");
     setShowFilters(false);
     fetchBooks(1, search, empty, "initial");
   };
@@ -202,9 +226,10 @@ export function BookDatabaseScreen() {
   const activeFilterCount =
     (filters.boxId ? 1 : 0) +
     (filters.createdById ? 1 : 0) +
-    (filters.dateFrom ? 1 : 0) +
-    (filters.dateTo ? 1 : 0) +
-    (filters.status ? 1 : 0);
+    (filters.dateFrom || filters.dateTo ? 1 : 0) +
+    (filters.status ? 1 : 0) +
+    (filters.priceMin || filters.priceMax ? 1 : 0) +
+    (filters.yearFrom || filters.yearTo ? 1 : 0);
 
   return (
     <View style={styles.container}>
@@ -404,6 +429,58 @@ export function BookDatabaseScreen() {
                 placeholder="по (ГГГГ-ММ-ДД)"
                 value={dateTo}
                 onChangeText={setDateTo}
+                style={{ marginBottom: 0 }}
+              />
+            </View>
+          </View>
+
+          {/* Price range */}
+          <Text style={styles.filterLabel}>Цена (₽)</Text>
+          <View style={styles.dateRow}>
+            <View style={{ flex: 1 }}>
+              <Input
+                label=""
+                placeholder="от"
+                value={priceMin}
+                onChangeText={setPriceMin}
+                keyboardType="numeric"
+                style={{ marginBottom: 0 }}
+              />
+            </View>
+            <Text style={styles.dateSep}>—</Text>
+            <View style={{ flex: 1 }}>
+              <Input
+                label=""
+                placeholder="до"
+                value={priceMax}
+                onChangeText={setPriceMax}
+                keyboardType="numeric"
+                style={{ marginBottom: 0 }}
+              />
+            </View>
+          </View>
+
+          {/* Year range */}
+          <Text style={styles.filterLabel}>Год издания</Text>
+          <View style={styles.dateRow}>
+            <View style={{ flex: 1 }}>
+              <Input
+                label=""
+                placeholder="от"
+                value={yearFrom}
+                onChangeText={setYearFrom}
+                keyboardType="numeric"
+                style={{ marginBottom: 0 }}
+              />
+            </View>
+            <Text style={styles.dateSep}>—</Text>
+            <View style={{ flex: 1 }}>
+              <Input
+                label=""
+                placeholder="до"
+                value={yearTo}
+                onChangeText={setYearTo}
+                keyboardType="numeric"
                 style={{ marginBottom: 0 }}
               />
             </View>

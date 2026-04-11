@@ -73,14 +73,13 @@ export class AdminService {
   }
 
   async searchBooks(dto: SearchBooksDto) {
-    const { search, boxId, createdById, dateFrom, dateTo, status } = dto;
-    // Admin sees all books. Pass dto directly to preserve the skip getter on PaginationDto.
-    return this.booksService.findAll('', UserRole.ADMIN, dto, boxId, search, createdById, dateFrom, dateTo, undefined, status);
+    const { search, boxId, createdById, dateFrom, dateTo, status, priceMin, priceMax, yearFrom, yearTo } = dto;
+    return this.booksService.findAll('', UserRole.ADMIN, dto, boxId, search, createdById, dateFrom, dateTo, undefined, status, priceMin, priceMax, yearFrom, yearTo);
   }
 
   async getPendingReviewBooks(dto: SearchBooksDto) {
-    const { boxId, createdById, dateFrom, dateTo, search } = dto;
-    return this.booksService.findAll('', UserRole.ADMIN, dto, boxId, search, createdById, dateFrom, dateTo, undefined, BookStatus.PENDING_REVIEW);
+    const { boxId, createdById, dateFrom, dateTo, search, priceMin, priceMax, yearFrom, yearTo } = dto;
+    return this.booksService.findAll('', UserRole.ADMIN, dto, boxId, search, createdById, dateFrom, dateTo, undefined, BookStatus.PENDING_REVIEW, priceMin, priceMax, yearFrom, yearTo);
   }
 
   async getPendingReviewCountsByBox() {
