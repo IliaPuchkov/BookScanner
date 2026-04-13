@@ -69,9 +69,9 @@ export const adminService = {
     await api.delete(`/admin/users/${id}`);
   },
 
-  async getStatistics(days = 7): Promise<StatsSummary> {
+  async getStatistics(dateFrom: string, dateTo: string, includeActiveSessions = false): Promise<StatsSummary> {
     const { data } = await api.get<StatsSummary>('/admin/statistics', {
-      params: { days },
+      params: { dateFrom, dateTo, includeActiveSessions },
     });
     return data;
   },

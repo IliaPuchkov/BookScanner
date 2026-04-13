@@ -120,6 +120,8 @@ export interface StatsSummary {
     userId: string;
     fullName: string;
     cardsCount: number;
+    completedCardsCount: number;
+    activeCardsCount: number;
   }>;
 }
 

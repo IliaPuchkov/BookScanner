@@ -60,9 +60,15 @@ export class AdminController {
   // Statistics
   @Get('statistics')
   @ApiOperation({ summary: 'Получить статистику' })
-  @ApiQuery({ name: 'days', required: false, type: Number })
-  getStatistics(@Query('days') days?: number) {
-    return this.adminService.getStatistics(days);
+  @ApiQuery({ name: 'dateFrom', required: false, type: String, description: 'ISO date string, начало периода' })
+  @ApiQuery({ name: 'dateTo', required: false, type: String, description: 'ISO date string, конец периода' })
+  @ApiQuery({ name: 'includeActiveSessions', required: false, type: Boolean })
+  getStatistics(
+    @Query('dateFrom') dateFrom?: string,
+    @Query('dateTo') dateTo?: string,
+    @Query('includeActiveSessions') includeActiveSessions?: string,
+  ) {
+    return this.adminService.getStatistics(dateFrom, dateTo, includeActiveSessions === 'true');
   }
 
   // Pending review

@@ -32,23 +32,26 @@ export class AdminService {
     return this.usersService.remove(id);
   }
 
-  async getStatistics(days?: number) {
-    const periodDays = days || 7;
+  async getStatistics(dateFrom?: string, dateTo?: string, includeActiveSessions = false) {
     const now = new Date();
 
     const startOfToday = new Date(now);
     startOfToday.setHours(0, 0, 0, 0);
 
-    const startOfPeriod = new Date(now.getTime() - periodDays * 24 * 60 * 60 * 1000);
+    const endOfToday = new Date(now);
+    endOfToday.setHours(23, 59, 59, 999);
+
+    const periodStart = dateFrom ? new Date(dateFrom) : startOfToday;
+    const periodEnd = dateTo ? new Date(dateTo) : endOfToday;
 
     const miniPagination = new PaginationDto();
     miniPagination.page = 1;
     miniPagination.limit = 1;
 
     const [cardsToday, cardsPeriod, perUserRaw, usersResult, totalCards, pendingReviewCount, totalAdmins, totalOperators] = await Promise.all([
-      this.booksService.countCreatedSince(startOfToday),
-      this.booksService.countCreatedSince(startOfPeriod),
-      this.booksService.getPerUserBookCounts(startOfPeriod),
+      this.booksService.countCreatedSince(startOfToday, endOfToday),
+      this.booksService.countCreatedSince(periodStart, periodEnd),
+      this.booksService.getPerUserBookCounts(periodStart, periodEnd, includeActiveSessions),
       this.usersService.findAll(miniPagination),
       this.booksService.countCreatedSince(),
       this.booksService.countPendingReview(),
@@ -64,11 +67,17 @@ export class AdminService {
       cardsToday,
       cardsThisWeek: cardsPeriod,
       pendingReviewCount,
-      perUser: perUserRaw.map((u) => ({
-        userId: u.userId,
-        fullName: u.fullName,
-        cardsCount: parseInt(u.booksCount, 10),
-      })),
+      perUser: perUserRaw.map((u) => {
+        const completed = parseInt(u.completedCount, 10);
+        const active = parseInt(u.activeCount, 10);
+        return {
+          userId: u.userId,
+          fullName: u.fullName,
+          cardsCount: includeActiveSessions ? completed + active : completed,
+          completedCardsCount: completed,
+          activeCardsCount: active,
+        };
+      }),
     };
   }
 

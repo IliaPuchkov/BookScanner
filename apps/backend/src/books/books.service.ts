@@ -165,30 +165,54 @@ export class BooksService {
     };
   }
 
-  async countCreatedSince(since?: Date): Promise<number> {
+  async countCreatedSince(since?: Date, until?: Date): Promise<number> {
     const qb = this.booksRepository.createQueryBuilder('book');
     if (since) {
       qb.where('book.createdAt >= :since', { since });
     }
+    if (until) {
+      qb.andWhere('book.createdAt <= :until', { until });
+    }
     return qb.getCount();
   }
 
-  async getPerUserBookCounts(since?: Date): Promise<Array<{ userId: string; fullName: string; booksCount: string }>> {
+  async getPerUserBookCounts(since?: Date, until?: Date, includeActiveSessions = false): Promise<Array<{ userId: string; fullName: string; completedCount: string; activeCount: string }>> {
     const qb = this.booksRepository
       .createQueryBuilder('book')
       .innerJoin('book.createdBy', 'user')
+      .leftJoin('book.workSession', 'workSession')
       .select('user.id', 'userId')
       .addSelect('user.fullName', 'fullName')
-      .addSelect('COUNT(*)', 'booksCount')
+      .addSelect(
+        "COUNT(CASE WHEN book.work_session_id IS NULL OR workSession.status = 'completed' THEN 1 END)",
+        'completedCount',
+      )
+      .addSelect(
+        "COUNT(CASE WHEN workSession.status != 'completed' AND book.work_session_id IS NOT NULL THEN 1 END)",
+        'activeCount',
+      )
       .groupBy('user.id')
-      .addGroupBy('user.fullName')
-      .orderBy('"booksCount"', 'DESC');
+      .addGroupBy('user.fullName');
 
     if (since) {
       qb.andWhere('book.createdAt >= :since', { since });
     }
+    if (until) {
+      qb.andWhere('book.createdAt <= :until', { until });
+    }
 
-    return qb.getRawMany();
+    const rows = await qb.getRawMany();
+
+    return rows
+      .filter((r) => includeActiveSessions
+        ? parseInt(r.completedCount, 10) + parseInt(r.activeCount, 10) > 0
+        : parseInt(r.completedCount, 10) > 0,
+      )
+      .sort((a, b) => {
+        const totalA = parseInt(a.completedCount, 10) + (includeActiveSessions ? parseInt(a.activeCount, 10) : 0);
+        const totalB = parseInt(b.completedCount, 10) + (includeActiveSessions ? parseInt(b.activeCount, 10) : 0);
+        return totalB - totalA;
+      });
   }
 
   async countPendingReview(): Promise<number> {
