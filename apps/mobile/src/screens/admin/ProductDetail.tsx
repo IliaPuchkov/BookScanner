@@ -30,6 +30,7 @@ import type { Book, UpdateBookDto } from "../../types";
 import { BookStatus, PaperType, CoverType } from "../../types";
 import type { AdminCardCreationParamList } from "../../navigation/AdminNavigator";
 import { formatPrice, formatDate } from "../../utils/format";
+import { bookEvents } from "../../utils/bookEvents";
 
 type Route = RouteProp<AdminCardCreationParamList, "ProductDetail">;
 type Nav = NativeStackNavigationProp<AdminCardCreationParamList, "ProductDetail">;
@@ -242,6 +243,7 @@ export function ProductDetailScreen() {
       setBook(updated);
       populateEditFields(updated);
       setEditing(false);
+      bookEvents.emitBookUpdated(updated);
       Alert.alert("Готово", "Карточка обновлена");
     } catch {
       Alert.alert("Ошибка", "Не удалось сохранить");
@@ -347,6 +349,7 @@ export function ProductDetailScreen() {
               populateEditFields(updated);
               const raw = freshOcr?.extractedData?.price;
               setAiPrice(typeof raw === "number" ? raw : null);
+              bookEvents.emitBookUpdated(updated);
               Alert.alert("Готово", "Данные обновлены из фотографий");
             } catch {
               Alert.alert("Ошибка", "Не удалось выполнить распознавание");

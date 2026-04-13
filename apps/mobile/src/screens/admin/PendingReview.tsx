@@ -39,6 +39,7 @@ import type {
   AdminMainStackParamList,
 } from "../../navigation/AdminNavigator";
 import { formatDate } from "../../utils/format";
+import { bookEvents } from "../../utils/bookEvents";
 
 interface Filters {
   boxId?: string;
@@ -452,6 +453,12 @@ export function PendingReviewScreen() {
     null,
   );
   const isReturningRef = useRef(false);
+
+  useEffect(() => {
+    return bookEvents.onBookUpdated((updatedBook) => {
+      setBooks((prev) => prev.map((b) => b.id === updatedBook.id ? updatedBook : b));
+    });
+  }, []);
 
   useEffect(() => {
     if (!polling) return;
@@ -1419,250 +1426,256 @@ export function PendingReviewScreen() {
           behavior={Platform.OS === "ios" ? "padding" : "height"}
           style={{ flex: 1 }}
         >
-        <TouchableWithoutFeedback onPress={() => setActivePickerFilter(null)}>
-          <View style={styles.pickerOverlay}>
-            <TouchableWithoutFeedback>
-              <View style={styles.pickerSheet}>
-                <View style={styles.pickerSheetHeader}>
-                  <Text style={styles.pickerSheetTitle}>
-                    {activePickerFilter === "boxId"
-                      ? "Коробка"
-                      : activePickerFilter === "createdById"
-                        ? "Оператор"
-                        : activePickerFilter === "date"
-                          ? "Период создания"
-                          : activePickerFilter === "price"
-                            ? "Цена (₽)"
-                            : "Год издания"}
-                  </Text>
-                  <TouchableOpacity onPress={() => setActivePickerFilter(null)}>
-                    <Text style={styles.pickerDoneBtn}>Закрыть</Text>
-                  </TouchableOpacity>
+          <TouchableWithoutFeedback onPress={() => setActivePickerFilter(null)}>
+            <View style={styles.pickerOverlay}>
+              <TouchableWithoutFeedback>
+                <View style={styles.pickerSheet}>
+                  <View style={styles.pickerSheetHeader}>
+                    <Text style={styles.pickerSheetTitle}>
+                      {activePickerFilter === "boxId"
+                        ? "Коробка"
+                        : activePickerFilter === "createdById"
+                          ? "Оператор"
+                          : activePickerFilter === "date"
+                            ? "Период создания"
+                            : activePickerFilter === "price"
+                              ? "Цена (₽)"
+                              : "Год издания"}
+                    </Text>
+                    <TouchableOpacity
+                      onPress={() => setActivePickerFilter(null)}
+                    >
+                      <Text style={styles.pickerDoneBtn}>Закрыть</Text>
+                    </TouchableOpacity>
+                  </View>
+
+                  {activePickerFilter === "boxId" && (
+                    <View style={styles.pickerBody}>
+                      <TextInput
+                        style={styles.pickerSearchInput}
+                        placeholder="Поиск по номеру коробки..."
+                        placeholderTextColor="#aaa"
+                        value={pickerSearch}
+                        onChangeText={setPickerSearch}
+                        autoFocus
+                        clearButtonMode="while-editing"
+                      />
+                      <FlatList
+                        data={[
+                          { id: "", boxNumber: "Все коробки" },
+                          ...boxes.filter((b) =>
+                            b.boxNumber
+                              .toLowerCase()
+                              .includes(pickerSearch.toLowerCase()),
+                          ),
+                        ]}
+                        keyExtractor={(item) => item.id}
+                        style={styles.pickerList}
+                        keyboardShouldPersistTaps="handled"
+                        renderItem={({ item }) => {
+                          const isAll = item.id === "";
+                          const active = isAll
+                            ? !filters.boxId
+                            : filters.boxId === item.id;
+                          return (
+                            <TouchableOpacity
+                              style={[
+                                styles.pickerListItem,
+                                active && styles.pickerListItemActive,
+                              ]}
+                              onPress={() => {
+                                const newF = { ...filters };
+                                if (isAll) delete newF.boxId;
+                                else newF.boxId = item.id;
+                                setFilters(newF);
+                                fetchBooks(1, search, newF, "initial");
+                                setActivePickerFilter(null);
+                              }}
+                            >
+                              <Text
+                                style={[
+                                  styles.pickerListItemText,
+                                  active && styles.pickerListItemTextActive,
+                                ]}
+                              >
+                                {item.boxNumber}
+                              </Text>
+                              {active && (
+                                <Text style={styles.pickerListCheckmark}>
+                                  ✓
+                                </Text>
+                              )}
+                            </TouchableOpacity>
+                          );
+                        }}
+                      />
+                    </View>
+                  )}
+
+                  {activePickerFilter === "createdById" && (
+                    <View style={styles.pickerBody}>
+                      <TextInput
+                        style={styles.pickerSearchInput}
+                        placeholder="Поиск по имени..."
+                        placeholderTextColor="#aaa"
+                        value={pickerSearch}
+                        onChangeText={setPickerSearch}
+                        autoFocus
+                        clearButtonMode="while-editing"
+                      />
+                      <FlatList
+                        data={[
+                          { id: "", fullName: "Все операторы" },
+                          ...filterUsers.filter((u) =>
+                            u.fullName
+                              .toLowerCase()
+                              .includes(pickerSearch.toLowerCase()),
+                          ),
+                        ]}
+                        keyExtractor={(item) => item.id}
+                        style={styles.pickerList}
+                        keyboardShouldPersistTaps="handled"
+                        renderItem={({ item }) => {
+                          const isAll = item.id === "";
+                          const active = isAll
+                            ? !filters.createdById
+                            : filters.createdById === item.id;
+                          return (
+                            <TouchableOpacity
+                              style={[
+                                styles.pickerListItem,
+                                active && styles.pickerListItemActive,
+                              ]}
+                              onPress={() => {
+                                const newF = { ...filters };
+                                if (isAll) delete newF.createdById;
+                                else newF.createdById = item.id;
+                                setFilters(newF);
+                                fetchBooks(1, search, newF, "initial");
+                                setActivePickerFilter(null);
+                              }}
+                            >
+                              <Text
+                                style={[
+                                  styles.pickerListItemText,
+                                  active && styles.pickerListItemTextActive,
+                                ]}
+                              >
+                                {item.fullName}
+                              </Text>
+                              {active && (
+                                <Text style={styles.pickerListCheckmark}>
+                                  ✓
+                                </Text>
+                              )}
+                            </TouchableOpacity>
+                          );
+                        }}
+                      />
+                    </View>
+                  )}
+
+                  {activePickerFilter === "date" && (
+                    <View style={styles.pickerBody}>
+                      <View style={styles.rangeRow}>
+                        <DatePickerInput
+                          value={tempDateFrom}
+                          onChange={setTempDateFrom}
+                          placeholder="с"
+                          maximumDate={
+                            tempDateTo ? new Date(tempDateTo) : undefined
+                          }
+                        />
+                        <Text style={styles.rangeSep}>—</Text>
+                        <DatePickerInput
+                          value={tempDateTo}
+                          onChange={setTempDateTo}
+                          placeholder="по"
+                          minimumDate={
+                            tempDateFrom ? new Date(tempDateFrom) : undefined
+                          }
+                        />
+                      </View>
+                      <TouchableOpacity
+                        style={[styles.applyBtn, { marginTop: 16 }]}
+                        onPress={() => applyRangeFilter("date")}
+                      >
+                        <Text style={styles.applyBtnText}>Применить</Text>
+                      </TouchableOpacity>
+                    </View>
+                  )}
+
+                  {activePickerFilter === "price" && (
+                    <View style={styles.pickerBody}>
+                      <View style={styles.rangeRow}>
+                        <View style={{ flex: 1 }}>
+                          <Input
+                            label=""
+                            placeholder="от"
+                            value={tempPriceMin}
+                            onChangeText={setTempPriceMin}
+                            keyboardType="numeric"
+                            style={{ marginBottom: 0 }}
+                          />
+                        </View>
+                        <Text style={styles.rangeSep}>—</Text>
+                        <View style={{ flex: 1 }}>
+                          <Input
+                            label=""
+                            placeholder="до"
+                            value={tempPriceMax}
+                            onChangeText={setTempPriceMax}
+                            keyboardType="numeric"
+                            style={{ marginBottom: 0 }}
+                          />
+                        </View>
+                      </View>
+                      <TouchableOpacity
+                        style={[styles.applyBtn, { marginTop: 16 }]}
+                        onPress={() => applyRangeFilter("price")}
+                      >
+                        <Text style={styles.applyBtnText}>Применить</Text>
+                      </TouchableOpacity>
+                    </View>
+                  )}
+
+                  {activePickerFilter === "year" && (
+                    <View style={styles.pickerBody}>
+                      <View style={styles.rangeRow}>
+                        <View style={{ flex: 1 }}>
+                          <Input
+                            label=""
+                            placeholder="от"
+                            value={tempYearFrom}
+                            onChangeText={setTempYearFrom}
+                            keyboardType="numeric"
+                            style={{ marginBottom: 0 }}
+                          />
+                        </View>
+                        <Text style={styles.rangeSep}>—</Text>
+                        <View style={{ flex: 1 }}>
+                          <Input
+                            label=""
+                            placeholder="до"
+                            value={tempYearTo}
+                            onChangeText={setTempYearTo}
+                            keyboardType="numeric"
+                            style={{ marginBottom: 0 }}
+                          />
+                        </View>
+                      </View>
+                      <TouchableOpacity
+                        style={[styles.applyBtn, { marginTop: 16 }]}
+                        onPress={() => applyRangeFilter("year")}
+                      >
+                        <Text style={styles.applyBtnText}>Применить</Text>
+                      </TouchableOpacity>
+                    </View>
+                  )}
                 </View>
-
-                {activePickerFilter === "boxId" && (
-                  <View style={styles.pickerBody}>
-                    <TextInput
-                      style={styles.pickerSearchInput}
-                      placeholder="Поиск по номеру коробки..."
-                      placeholderTextColor="#aaa"
-                      value={pickerSearch}
-                      onChangeText={setPickerSearch}
-                      autoFocus
-                      clearButtonMode="while-editing"
-                    />
-                    <FlatList
-                      data={[
-                        { id: "", boxNumber: "Все коробки" },
-                        ...boxes.filter((b) =>
-                          b.boxNumber
-                            .toLowerCase()
-                            .includes(pickerSearch.toLowerCase()),
-                        ),
-                      ]}
-                      keyExtractor={(item) => item.id}
-                      style={styles.pickerList}
-                      keyboardShouldPersistTaps="handled"
-                      renderItem={({ item }) => {
-                        const isAll = item.id === "";
-                        const active = isAll
-                          ? !filters.boxId
-                          : filters.boxId === item.id;
-                        return (
-                          <TouchableOpacity
-                            style={[
-                              styles.pickerListItem,
-                              active && styles.pickerListItemActive,
-                            ]}
-                            onPress={() => {
-                              const newF = { ...filters };
-                              if (isAll) delete newF.boxId;
-                              else newF.boxId = item.id;
-                              setFilters(newF);
-                              fetchBooks(1, search, newF, "initial");
-                              setActivePickerFilter(null);
-                            }}
-                          >
-                            <Text
-                              style={[
-                                styles.pickerListItemText,
-                                active && styles.pickerListItemTextActive,
-                              ]}
-                            >
-                              {item.boxNumber}
-                            </Text>
-                            {active && (
-                              <Text style={styles.pickerListCheckmark}>✓</Text>
-                            )}
-                          </TouchableOpacity>
-                        );
-                      }}
-                    />
-                  </View>
-                )}
-
-                {activePickerFilter === "createdById" && (
-                  <View style={styles.pickerBody}>
-                    <TextInput
-                      style={styles.pickerSearchInput}
-                      placeholder="Поиск по имени..."
-                      placeholderTextColor="#aaa"
-                      value={pickerSearch}
-                      onChangeText={setPickerSearch}
-                      autoFocus
-                      clearButtonMode="while-editing"
-                    />
-                    <FlatList
-                      data={[
-                        { id: "", fullName: "Все операторы" },
-                        ...filterUsers.filter((u) =>
-                          u.fullName
-                            .toLowerCase()
-                            .includes(pickerSearch.toLowerCase()),
-                        ),
-                      ]}
-                      keyExtractor={(item) => item.id}
-                      style={styles.pickerList}
-                      keyboardShouldPersistTaps="handled"
-                      renderItem={({ item }) => {
-                        const isAll = item.id === "";
-                        const active = isAll
-                          ? !filters.createdById
-                          : filters.createdById === item.id;
-                        return (
-                          <TouchableOpacity
-                            style={[
-                              styles.pickerListItem,
-                              active && styles.pickerListItemActive,
-                            ]}
-                            onPress={() => {
-                              const newF = { ...filters };
-                              if (isAll) delete newF.createdById;
-                              else newF.createdById = item.id;
-                              setFilters(newF);
-                              fetchBooks(1, search, newF, "initial");
-                              setActivePickerFilter(null);
-                            }}
-                          >
-                            <Text
-                              style={[
-                                styles.pickerListItemText,
-                                active && styles.pickerListItemTextActive,
-                              ]}
-                            >
-                              {item.fullName}
-                            </Text>
-                            {active && (
-                              <Text style={styles.pickerListCheckmark}>✓</Text>
-                            )}
-                          </TouchableOpacity>
-                        );
-                      }}
-                    />
-                  </View>
-                )}
-
-                {activePickerFilter === "date" && (
-                  <View style={styles.pickerBody}>
-                    <View style={styles.rangeRow}>
-                      <DatePickerInput
-                        value={tempDateFrom}
-                        onChange={setTempDateFrom}
-                        placeholder="с"
-                        maximumDate={
-                          tempDateTo ? new Date(tempDateTo) : undefined
-                        }
-                      />
-                      <Text style={styles.rangeSep}>—</Text>
-                      <DatePickerInput
-                        value={tempDateTo}
-                        onChange={setTempDateTo}
-                        placeholder="по"
-                        minimumDate={
-                          tempDateFrom ? new Date(tempDateFrom) : undefined
-                        }
-                      />
-                    </View>
-                    <TouchableOpacity
-                      style={[styles.applyBtn, { marginTop: 16 }]}
-                      onPress={() => applyRangeFilter("date")}
-                    >
-                      <Text style={styles.applyBtnText}>Применить</Text>
-                    </TouchableOpacity>
-                  </View>
-                )}
-
-                {activePickerFilter === "price" && (
-                  <View style={styles.pickerBody}>
-                    <View style={styles.rangeRow}>
-                      <View style={{ flex: 1 }}>
-                        <Input
-                          label=""
-                          placeholder="от"
-                          value={tempPriceMin}
-                          onChangeText={setTempPriceMin}
-                          keyboardType="numeric"
-                          style={{ marginBottom: 0 }}
-                        />
-                      </View>
-                      <Text style={styles.rangeSep}>—</Text>
-                      <View style={{ flex: 1 }}>
-                        <Input
-                          label=""
-                          placeholder="до"
-                          value={tempPriceMax}
-                          onChangeText={setTempPriceMax}
-                          keyboardType="numeric"
-                          style={{ marginBottom: 0 }}
-                        />
-                      </View>
-                    </View>
-                    <TouchableOpacity
-                      style={[styles.applyBtn, { marginTop: 16 }]}
-                      onPress={() => applyRangeFilter("price")}
-                    >
-                      <Text style={styles.applyBtnText}>Применить</Text>
-                    </TouchableOpacity>
-                  </View>
-                )}
-
-                {activePickerFilter === "year" && (
-                  <View style={styles.pickerBody}>
-                    <View style={styles.rangeRow}>
-                      <View style={{ flex: 1 }}>
-                        <Input
-                          label=""
-                          placeholder="от"
-                          value={tempYearFrom}
-                          onChangeText={setTempYearFrom}
-                          keyboardType="numeric"
-                          style={{ marginBottom: 0 }}
-                        />
-                      </View>
-                      <Text style={styles.rangeSep}>—</Text>
-                      <View style={{ flex: 1 }}>
-                        <Input
-                          label=""
-                          placeholder="до"
-                          value={tempYearTo}
-                          onChangeText={setTempYearTo}
-                          keyboardType="numeric"
-                          style={{ marginBottom: 0 }}
-                        />
-                      </View>
-                    </View>
-                    <TouchableOpacity
-                      style={[styles.applyBtn, { marginTop: 16 }]}
-                      onPress={() => applyRangeFilter("year")}
-                    >
-                      <Text style={styles.applyBtnText}>Применить</Text>
-                    </TouchableOpacity>
-                  </View>
-                )}
-              </View>
-            </TouchableWithoutFeedback>
-          </View>
-        </TouchableWithoutFeedback>
+              </TouchableWithoutFeedback>
+            </View>
+          </TouchableWithoutFeedback>
         </KeyboardAvoidingView>
       </Modal>
 
