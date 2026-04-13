@@ -9,14 +9,7 @@ const DEV_MACHINE_IP =
   "172.20.10.2";
 
 const getBaseUrl = (): string => {
-  if (__DEV__) {
-    // Реальное устройство (iOS и Android) — IP компьютера из Expo
-    return `http://172.20.10.2:3000/api`;
-    //return "https://bookscanner.duckdns.org/api";
-    //return "https://jollybook.duckdns.org/api";
-  }
-
-  // Production URL — заменить на реальный адрес сервера
+  //return `http://172.20.10.2:3000/api`;
   return "https://jollybook.duckdns.org/api";
 };
 
