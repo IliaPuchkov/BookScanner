@@ -204,10 +204,10 @@ export function PhotoGrid({
                 delayLongPress={250}
               />
             )}
-            {index < 2 && (
+            {index < 4 && (
               <View style={styles.badge} pointerEvents="none">
                 <Text style={styles.badgeText}>
-                  {index === 0 ? "Обложка" : "Инфо"}
+                  {index === 0 ? "Обложка" : "Инфо " + index}
                 </Text>
               </View>
             )}

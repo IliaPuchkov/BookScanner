@@ -98,10 +98,7 @@ export function CreateCardScreen() {
         mediaType: "photo",
         compressImageQuality: 0.8,
       });
-      setPhotos((prev) => [
-        ...prev,
-        ...results.map((r) => ({ uri: r.path })),
-      ]);
+      setPhotos((prev) => [...prev, ...results.map((r) => ({ uri: r.path }))]);
     } catch (err: any) {
       if (err?.code !== "E_PICKER_CANCELLED") {
         Alert.alert("Ошибка", "Не удалось выбрать фото");
@@ -130,17 +127,24 @@ export function CreateCardScreen() {
       ctx.resize({ width: 2000 });
       ctx.rotate(90);
       const rendered = await ctx.renderAsync();
-      const saved = await rendered.saveAsync({ compress: 0.8, format: SaveFormat.JPEG });
-      setPhotos((prev) => prev.map((p, i) => (i === index ? { ...p, uri: saved.uri } : p)));
+      const saved = await rendered.saveAsync({
+        compress: 0.8,
+        format: SaveFormat.JPEG,
+      });
+      setPhotos((prev) =>
+        prev.map((p, i) => (i === index ? { ...p, uri: saved.uri } : p)),
+      );
     } catch {
-      Alert.alert('Ошибка', 'Не удалось повернуть фото');
+      Alert.alert("Ошибка", "Не удалось повернуть фото");
     }
   };
 
   const handleRetakePhoto = async (index: number) => {
     const result = await ImagePicker.launchCameraAsync({ quality: 0.8 });
     if (!result.canceled) {
-      setPhotos((prev) => prev.map((p, i) => (i === index ? { uri: result.assets[0].uri } : p)));
+      setPhotos((prev) =>
+        prev.map((p, i) => (i === index ? { uri: result.assets[0].uri } : p)),
+      );
     }
   };
 
@@ -149,27 +153,33 @@ export function CreateCardScreen() {
     try {
       const result = await ImageCropPicker.openCropper({
         path: photo.uri,
-        mediaType: 'photo',
+        mediaType: "photo",
         freeStyleCropEnabled: true,
         cropping: true,
         compressImageQuality: 0.8,
-        cropperToolbarTitle: 'Кадрировать',
+        cropperToolbarTitle: "Кадрировать",
       });
-      setPhotos((prev) => prev.map((p, i) => (i === index ? { uri: result.path } : p)));
+      setPhotos((prev) =>
+        prev.map((p, i) => (i === index ? { uri: result.path } : p)),
+      );
     } catch (err: any) {
-      if (err?.code !== 'E_PICKER_CANCELLED') {
-        Alert.alert('Ошибка', 'Не удалось кадрировать фото');
+      if (err?.code !== "E_PICKER_CANCELLED") {
+        Alert.alert("Ошибка", "Не удалось кадрировать фото");
       }
     }
   };
 
   const handlePhotoPress = (index: number) => {
-    Alert.alert('Действие с фото', undefined, [
-      { text: 'Повернуть', onPress: () => handleRotatePhoto(index) },
-      { text: 'Кадрировать', onPress: () => handleCropPhoto(index) },
-      { text: 'Переснять', onPress: () => handleRetakePhoto(index) },
-      { text: 'Удалить', style: 'destructive', onPress: () => handleRemovePhoto(index) },
-      { text: 'Отмена', style: 'cancel' },
+    Alert.alert("Действие с фото", undefined, [
+      { text: "Повернуть", onPress: () => handleRotatePhoto(index) },
+      { text: "Кадрировать", onPress: () => handleCropPhoto(index) },
+      { text: "Переснять", onPress: () => handleRetakePhoto(index) },
+      {
+        text: "Удалить",
+        style: "destructive",
+        onPress: () => handleRemovePhoto(index),
+      },
+      { text: "Отмена", style: "cancel" },
     ]);
   };
 
@@ -190,7 +200,11 @@ export function CreateCardScreen() {
     setLoadingMessage("Создание карточки и загрузка фотографий...");
     try {
       const book = await booksService.createBookWithPhotos(
-        { title: "Новая книга", boxId: selectedBoxId, workSessionId: sessionId },
+        {
+          title: "Новая книга",
+          boxId: selectedBoxId,
+          workSessionId: sessionId,
+        },
         photos.map((p) => p.uri),
       );
 
