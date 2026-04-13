@@ -111,7 +111,7 @@ export class VisionService {
 
       const extractor = new GeminiVisionExtractor(apiKey);
 
-      const availablePhotos = photos.slice(0, 2).filter(Boolean);
+      const availablePhotos = photos.slice(0, 4).filter(Boolean);
       const imageBuffers = await Promise.all(
         availablePhotos.map(async (p) => ({
           buffer: await this.storage.download(p.fileKey),
