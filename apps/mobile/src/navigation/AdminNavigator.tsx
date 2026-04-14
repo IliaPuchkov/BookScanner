@@ -14,6 +14,7 @@ import { CardsListScreen } from "../screens/operator/CardsList";
 import { CreateCardScreen } from "../screens/operator/CreateCard";
 import { CardDetailScreen } from "../screens/operator/CardDetail";
 import { PhotoUploadScreen } from "../screens/operator/PhotoUpload";
+import ImportFromOzonScreen from "../screens/admin/ImportFromOzonScreen";
 
 export type AdminMainStackParamList = {
   Dashboard: undefined;
@@ -188,6 +189,11 @@ function SettingsStackScreen() {
         name="UserManagement"
         component={UserManagementScreen}
         options={{ title: "Управление пользователями" }}
+      />
+      <SettingsStack.Screen
+        name="ImportFromOzon"
+        component={ImportFromOzonScreen}
+        options={{ title: "Импорт с Озона" }}
       />
     </SettingsStack.Navigator>
   );

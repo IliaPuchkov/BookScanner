@@ -16,6 +16,7 @@ interface Props {
   book: Book;
   onPress: () => void;
   userRole?: string;
+  storeName?: string;
 }
 
 function getStatusConfig(status: BookStatus): { color: string; label: string } {
@@ -32,7 +33,7 @@ function getStatusConfig(status: BookStatus): { color: string; label: string } {
   }
 }
 
-export function BookCard({ book, onPress, userRole }: Props) {
+export function BookCard({ book, onPress, userRole, storeName }: Props) {
   const coverPhoto = book.photos?.find((p) => p.sortOrder === 0);
   const statusConfig = getStatusConfig(book.status);
 
@@ -73,6 +74,9 @@ export function BookCard({ book, onPress, userRole }: Props) {
             </Text>
           </View>
         )}
+        {storeName ? (
+          <Text style={styles.storeName}>Магазин: {storeName}</Text>
+        ) : null}
         {userRole === "admin" && (
           <View style={styles.meta}>
             {book.createdBy?.fullName ? (
@@ -166,5 +170,10 @@ const styles = StyleSheet.create({
   },
   statusText: {
     fontSize: 11,
+  },
+  storeName: {
+    fontSize: 11,
+    color: '#1976D2',
+    marginTop: 2,
   },
 });

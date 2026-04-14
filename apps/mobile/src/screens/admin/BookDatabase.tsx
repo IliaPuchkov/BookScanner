@@ -26,6 +26,7 @@ import { Input } from "../../components/Input";
 import { BookCard } from "../../components/Card";
 import { DatePickerInput } from "../../components/DatePickerInput";
 import { adminService } from "../../services/admin.service";
+import type { OzonStore } from "../../services/admin.service";
 import { boxesService } from "../../services/boxes.service";
 import { BookStatus } from "../../types";
 import type { Book, Box, User } from "../../types";
@@ -219,6 +220,7 @@ export function BookDatabaseScreen() {
   const [users, setUsers] = useState<Array<{ id: string; fullName: string }>>(
     [],
   );
+  const [ozonStores, setOzonStores] = useState<OzonStore[]>([]);
 
   const searchTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   const fetchIdRef = useRef(0);
@@ -232,14 +234,16 @@ export function BookDatabaseScreen() {
   useEffect(() => {
     const loadOptions = async () => {
       try {
-        const [boxesRes, usersRes] = await Promise.all([
+        const [boxesRes, usersRes, storesRes] = await Promise.all([
           boxesService.getBoxes(1, 100),
           adminService.getUsers(1, 100),
+          adminService.getOzonStores().catch(() => ({ stores: [], activeId: '' })),
         ]);
         setBoxes(boxesRes.data);
         setUsers(
           usersRes.data.map((u: User) => ({ id: u.id, fullName: u.fullName })),
         );
+        setOzonStores(storesRes.stores);
       } catch {
         // silent
       }
@@ -893,6 +897,11 @@ export function BookDatabaseScreen() {
                 navigation.navigate("ProductDetail", { bookId: item.id });
               }}
               userRole="admin"
+              storeName={
+                item.ozonProduct?.storeId
+                  ? ozonStores.find((s) => s.id === item.ozonProduct!.storeId)?.name
+                  : undefined
+              }
             />
           )}
           contentContainerStyle={styles.list}

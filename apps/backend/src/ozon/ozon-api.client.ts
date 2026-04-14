@@ -42,6 +42,33 @@ export interface OzonProductInfo {
   status: OzonProductInfoStatus;
 }
 
+export interface OzonProductListItem {
+  product_id: number;
+  offer_id: string;
+  name: string;
+}
+
+export interface OzonProductAttribute {
+  id: number;
+  complex_id: number;
+  values: Array<{ dictionary_value_id: number; value: string }>;
+}
+
+export interface OzonProductAttributes {
+  id: number;
+  offer_id: string;
+  name: string;
+  height: number;
+  depth: number;
+  width: number;
+  dimension_unit: string;
+  weight: number;
+  weight_unit: string;
+  primary_image: string;
+  images: string[];
+  attributes: OzonProductAttribute[];
+}
+
 @Injectable()
 export class OzonApiClient {
   private readonly logger = new Logger(OzonApiClient.name);
@@ -172,6 +199,44 @@ export class OzonApiClient {
       { task_id: taskId },
     );
     return response.result.items;
+  }
+
+  async getProductList(
+    storeId?: string,
+    lastId = '',
+    limit = 100,
+  ): Promise<{ items: OzonProductListItem[]; last_id: string; total: number }> {
+    const credentials = storeId
+      ? await this.getCredentialsForStore(storeId)
+      : await this.getCredentials();
+    const response = await this.post<{
+      result: { items: OzonProductListItem[]; last_id: string; total: number };
+    }>(
+      '/v3/product/list',
+      { filter: {}, last_id: lastId, limit },
+      credentials,
+    );
+    return response.result;
+  }
+
+  async getProductAttributesList(
+    productIds: number[],
+    storeId?: string,
+  ): Promise<OzonProductAttributes[]> {
+    const credentials = storeId
+      ? await this.getCredentialsForStore(storeId)
+      : await this.getCredentials();
+    const response = await this.post<{ result: OzonProductAttributes[] }>(
+      '/v4/product/info/attributes',
+      {
+        filter: { product_id: productIds.map(String), visibility: 'ALL' },
+        limit: productIds.length,
+        sort_by: 'id',
+        sort_dir: 'ASC',
+      },
+      credentials,
+    );
+    return response.result ?? [];
   }
 
   async getProductInfo(productId: number, offerId?: string): Promise<OzonProductInfo> {

@@ -9,6 +9,8 @@ import {
   Query,
   UseGuards,
   BadRequestException,
+  ParseIntPipe,
+  DefaultValuePipe,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiQuery } from '@nestjs/swagger';
@@ -17,12 +19,14 @@ import { OzonService } from './ozon.service';
 import { OzonApiClient } from './ozon-api.client';
 import { PublishDto } from './dto/publish.dto';
 import { BulkPublishDto } from './dto/bulk-publish.dto';
+import { ImportOzonDto } from './dto/import-ozon.dto';
 import { CreateOzonStoreDto, OzonStoreRecord, OzonStoreResponse } from './dto/ozon-store.dto';
 import { SettingsService } from '../settings/settings.service';
 import { EncryptionService } from '../common/encryption.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
+import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { UserRole, OZON_ATTR_BRAND, OZON_ATTR_AUTHOR } from '@bookscanner/shared';
 
 const OZON_STORES_KEY = 'ozon_stores';
@@ -72,6 +76,32 @@ export class OzonController {
   @ApiQuery({ name: 'query', description: 'ISBN, название или автор' })
   priceLookup(@Query('query') query: string) {
     return this.ozonService.priceLookup(query);
+  }
+
+  // ─── Import from Ozon ─────────────────────────────────────────────────────
+
+  @Get('import/list')
+  @Roles(UserRole.ADMIN)
+  @ApiOperation({ summary: 'Список товаров магазина на Ozon для импорта' })
+  @ApiQuery({ name: 'storeId', required: false })
+  @ApiQuery({ name: 'page', required: false, type: Number })
+  @ApiQuery({ name: 'limit', required: false, type: Number })
+  listImportableProducts(
+    @Query('storeId') storeId?: string,
+    @Query('page', new DefaultValuePipe(1), ParseIntPipe) page = 1,
+    @Query('limit', new DefaultValuePipe(50), ParseIntPipe) limit = 50,
+  ) {
+    return this.ozonService.listImportableProducts(storeId, page, limit);
+  }
+
+  @Post('import')
+  @Roles(UserRole.ADMIN)
+  @ApiOperation({ summary: 'Импортировать выбранные товары с Ozon в систему' })
+  importProducts(
+    @Body() dto: ImportOzonDto,
+    @CurrentUser() user: { id: string },
+  ) {
+    return this.ozonService.importProducts(dto.productIds, user.id, dto.storeId);
   }
 
   // ─── Ozon Store Management ───────────────────────────────────────────────

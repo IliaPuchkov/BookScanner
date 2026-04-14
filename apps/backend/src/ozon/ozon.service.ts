@@ -7,12 +7,17 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In } from 'typeorm';
 import { OzonProduct } from './entities/ozon-product.entity';
+import { Book } from '../books/entities/book.entity';
+import { BookPhoto } from '../photos/entities/book-photo.entity';
+import { Box } from '../boxes/entities/box.entity';
 import { BooksService } from '../books/books.service';
 import { OzonApiClient, OzonApiError } from './ozon-api.client';
 import { buildOzonImportPayload } from './ozon-payload.builder';
-import { BookStatus, OZON_ATTR_BRAND, OZON_ATTR_AUTHOR } from '@bookscanner/shared';
+import { mapOzonProductToBook } from './ozon-import.mapper';
+import { BookStatus, OZON_ATTR_BRAND, OZON_ATTR_AUTHOR, DEFAULT_PRICE } from '@bookscanner/shared';
 
 const IMPORTABLE_STATUSES = ['importing'];
+const OZON_IMPORT_BOX_NUMBER = 'OZON_IMPORT';
 
 @Injectable()
 export class OzonService {
@@ -21,6 +26,12 @@ export class OzonService {
   constructor(
     @InjectRepository(OzonProduct)
     private readonly ozonProductRepository: Repository<OzonProduct>,
+    @InjectRepository(Book)
+    private readonly bookRepository: Repository<Book>,
+    @InjectRepository(BookPhoto)
+    private readonly bookPhotoRepository: Repository<BookPhoto>,
+    @InjectRepository(Box)
+    private readonly boxRepository: Repository<Box>,
     private readonly booksService: BooksService,
     private readonly ozonApiClient: OzonApiClient,
   ) {}
@@ -95,6 +106,7 @@ export class OzonService {
 
     ozonProduct.publishPayload = payload;
     ozonProduct.status = 'importing';
+    if (storeId) ozonProduct.storeId = storeId;
 
     try {
       const result = await this.ozonApiClient.importProduct(payload, storeId);
@@ -311,6 +323,7 @@ export class OzonService {
             ozonProduct.publishPayload = payload;
             ozonProduct.taskId = result.task_id;
             ozonProduct.status = 'importing';
+            if (storeId) ozonProduct.storeId = storeId;
             await this.ozonProductRepository.save(ozonProduct);
             await this.booksService.updateFromExtraction(book.id, { status: BookStatus.PENDING_PUBLICATION });
             succeeded.push(book.id);
@@ -348,6 +361,204 @@ export class OzonService {
       failed: failed.length,
       failedBooks: failed,
       message: `Отправлено на модерацию: ${succeeded.length} из ${bookIds.length}`,
+    };
+  }
+
+  async listImportableProducts(
+    storeId?: string,
+    page = 1,
+    limit = 50,
+  ): Promise<{
+    items: Array<{
+      productId: number;
+      offerId: string;
+      name: string;
+      alreadyImported: boolean;
+      bookId?: string;
+    }>;
+    total: number;
+    page: number;
+  }> {
+    const credentials = storeId
+      ? await this.ozonApiClient.getCredentialsForStore(storeId)
+      : await this.ozonApiClient.getCredentials();
+    if (!credentials) {
+      throw new BadRequestException('Ozon API не настроен.');
+    }
+
+    // Ozon uses last_id cursor pagination — calculate which page to fetch
+    const pageSize = Math.min(limit, 100);
+    const skip = (page - 1) * pageSize;
+
+    // Traverse pages using last_id cursor to reach requested page
+    let lastId = '';
+    let fetchedItems: Array<{ product_id: number; offer_id: string; name: string }> = [];
+    let total = 0;
+    let accumulated = 0;
+
+    while (accumulated < skip + pageSize) {
+      const batchSize = Math.min(100, skip + pageSize - accumulated);
+      const result = await this.ozonApiClient.getProductList(storeId, lastId, batchSize);
+      total = result.total;
+
+      if (!result.items || result.items.length === 0) break;
+
+      fetchedItems = result.items;
+      accumulated += result.items.length;
+      lastId = result.last_id;
+
+      if (!lastId || result.items.length < batchSize) break;
+    }
+
+    // Take only the items for the requested page
+    const pageItems = fetchedItems.slice(Math.max(0, fetchedItems.length - pageSize));
+
+    // Check which items are already in our DB (match by sku = offer_id)
+    const offerIds = pageItems.map((i) => i.offer_id);
+    const existingBooks = offerIds.length > 0
+      ? await this.bookRepository.find({
+          where: offerIds.map((sku) => ({ sku })),
+          select: ['id', 'sku'],
+        })
+      : [];
+
+    const existingMap = new Map(existingBooks.map((b) => [b.sku, b.id]));
+
+    return {
+      items: pageItems.map((item) => ({
+        productId: item.product_id,
+        offerId: item.offer_id,
+        name: item.name,
+        alreadyImported: existingMap.has(item.offer_id),
+        bookId: existingMap.get(item.offer_id),
+      })),
+      total,
+      page,
+    };
+  }
+
+  async importProducts(
+    productIds: number[],
+    adminUserId: string,
+    storeId?: string,
+  ): Promise<{
+    total: number;
+    imported: number;
+    skipped: number;
+    failed: number;
+    failedItems: Array<{ productId: number; error: string }>;
+  }> {
+    if (!productIds.length) {
+      return { total: 0, imported: 0, skipped: 0, failed: 0, failedItems: [] };
+    }
+
+    // Find or create the import box for this admin
+    let importBox = await this.boxRepository.findOne({
+      where: { boxNumber: OZON_IMPORT_BOX_NUMBER, createdById: adminUserId },
+    });
+    if (!importBox) {
+      importBox = this.boxRepository.create({
+        boxNumber: OZON_IMPORT_BOX_NUMBER,
+        description: 'Импортировано с Озона',
+        createdById: adminUserId,
+      });
+      importBox = await this.boxRepository.save(importBox);
+    }
+
+    // Fetch full product data in batches of 1000
+    const BATCH = 1000;
+    const allAttributes: Awaited<ReturnType<typeof this.ozonApiClient.getProductAttributesList>> = [];
+    for (let i = 0; i < productIds.length; i += BATCH) {
+      const batch = productIds.slice(i, i + BATCH);
+      const attrs = await this.ozonApiClient.getProductAttributesList(batch, storeId);
+      allAttributes.push(...attrs);
+    }
+
+    // Check which SKUs already exist
+    const offerIds = allAttributes.map((p) => p.offer_id);
+    const existing = offerIds.length > 0
+      ? await this.bookRepository.find({
+          where: offerIds.map((sku) => ({ sku })),
+          select: ['id', 'sku'],
+        })
+      : [];
+    const existingSkus = new Set(existing.map((b) => b.sku));
+
+    let imported = 0;
+    let skipped = 0;
+    const failedItems: Array<{ productId: number; error: string }> = [];
+
+    for (const ozonProduct of allAttributes) {
+      if (existingSkus.has(ozonProduct.offer_id)) {
+        skipped++;
+        continue;
+      }
+
+      try {
+        const data = mapOzonProductToBook(ozonProduct);
+
+        // Create Book record
+        const book = this.bookRepository.create({
+          sku: data.sku,
+          title: data.title,
+          author: data.author,
+          isbn: data.isbn,
+          publisher: data.publisher,
+          yearPublished: data.yearPublished,
+          pageCount: data.pageCount,
+          language: data.language || 'русский',
+          annotation: data.annotation,
+          hashtags: data.hashtags,
+          condition: data.condition || 'Хорошая',
+          bookType: data.bookType || 'Печатная книга',
+          direction: data.direction || 'проза',
+          coverType: data.coverType,
+          paperType: data.paperType,
+          weightGross: data.weightGross,
+          dimensions: data.dimensions || { width: 0, height: 35, depth: 0 },
+          price: DEFAULT_PRICE,
+          status: BookStatus.PUBLISHED,
+          publishedToOzon: new Date(),
+          boxId: importBox.id,
+          createdById: adminUserId,
+        });
+        const savedBook = await this.bookRepository.save(book);
+
+        // Create BookPhoto records from Ozon image URLs
+        for (let i = 0; i < data.imageUrls.length; i++) {
+          const photo = this.bookPhotoRepository.create({
+            bookId: savedBook.id,
+            fileUrl: data.imageUrls[i],
+            sortOrder: i,
+            originalFilename: `ozon_${i + 1}.jpg`,
+            mimeType: 'image/jpeg',
+          });
+          await this.bookPhotoRepository.save(photo);
+        }
+
+        // Create OzonProduct record
+        const ozonProductRecord = this.ozonProductRepository.create({
+          bookId: savedBook.id,
+          ozonProductId: data.ozonProductId,
+          status: 'published',
+          storeId: storeId,
+        });
+        await this.ozonProductRepository.save(ozonProductRecord);
+
+        imported++;
+      } catch (error) {
+        const errMsg = error instanceof Error ? error.message : 'Неизвестная ошибка';
+        this.logger.error(`Failed to import ozon product ${ozonProduct.id}: ${errMsg}`);
+        failedItems.push({ productId: ozonProduct.id, error: errMsg });
+      }
+    }
+
+    return {
+      total: productIds.length,
+      imported,
+      skipped,
+      failed: failedItems.length,
+      failedItems,
     };
   }
 

@@ -37,6 +37,9 @@ export class OzonProduct {
   averageMarketPrice: number;
 
   @Column({ nullable: true })
+  storeId: string;
+
+  @Column({ nullable: true })
   errorMessage: string;
 
   @CreateDateColumn()

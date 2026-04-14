@@ -674,6 +674,23 @@ export function SettingsScreen() {
               )}
             </View>
 
+            {/* Import from Ozon */}
+            <TouchableOpacity
+              style={styles.card}
+              activeOpacity={0.75}
+              onPress={() => navigation.navigate("ImportFromOzon")}
+            >
+              <View style={[styles.sectionHeader, { marginBottom: 0 }]}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.sectionTitle}>Импорт с Озона</Text>
+                  <Text style={styles.sectionDesc}>
+                    Загрузить в систему товары, уже опубликованные в магазине на Озоне
+                  </Text>
+                </View>
+                <Text style={{ fontSize: 20, color: "#1976D2" }}>›</Text>
+              </View>
+            </TouchableOpacity>
+
             {/* Max photos setting */}
             <View style={styles.card}>
               <View style={styles.sectionHeader}>

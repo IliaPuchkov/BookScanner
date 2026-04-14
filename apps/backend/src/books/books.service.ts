@@ -78,7 +78,8 @@ export class BooksService {
       .createQueryBuilder('book')
       .leftJoinAndSelect('book.box', 'box')
       .leftJoinAndSelect('book.photos', 'photos')
-      .leftJoinAndSelect('book.createdBy', 'createdBy');
+      .leftJoinAndSelect('book.createdBy', 'createdBy')
+      .leftJoinAndSelect('book.ozonProduct', 'ozonProduct');
 
     if (role !== UserRole.ADMIN || workSessionId) {
       // Operators always see only their own books.

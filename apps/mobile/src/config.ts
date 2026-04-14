@@ -9,8 +9,8 @@ const DEV_MACHINE_IP =
   "172.20.10.2";
 
 const getBaseUrl = (): string => {
-  //return `http://172.20.10.2:3000/api`;
-  return "https://jollybook.duckdns.org/api";
+  return `http://192.168.1.3:3000/api`;
+  //return "https://jollybook.duckdns.org/api";
 };
 
 export const API_BASE_URL = getBaseUrl();

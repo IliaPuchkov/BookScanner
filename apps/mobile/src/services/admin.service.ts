@@ -175,4 +175,39 @@ export const adminService = {
     const { data } = await api.get<{ expiresAt: string | null }>(`/ozon/stores/${id}/key-expiry`);
     return data.expiresAt;
   },
+
+  async getOzonProductsForImport(
+    storeId?: string,
+    page = 1,
+    limit = 50,
+  ): Promise<{
+    items: Array<{
+      productId: number;
+      offerId: string;
+      name: string;
+      alreadyImported: boolean;
+      bookId?: string;
+    }>;
+    total: number;
+    page: number;
+  }> {
+    const { data } = await api.get('/ozon/import/list', {
+      params: { storeId, page, limit },
+    });
+    return data;
+  },
+
+  async importOzonProducts(dto: {
+    productIds: number[];
+    storeId?: string;
+  }): Promise<{
+    total: number;
+    imported: number;
+    skipped: number;
+    failed: number;
+    failedItems: Array<{ productId: number; error: string }>;
+  }> {
+    const { data } = await api.post('/ozon/import', dto);
+    return data;
+  },
 };
