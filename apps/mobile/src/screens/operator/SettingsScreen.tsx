@@ -105,6 +105,7 @@ export function SettingsScreen() {
 
   const [loadingSettings, setLoadingSettings] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [backfilling, setBackfilling] = useState(false);
 
   // Maintenance settings
   const { refresh: refreshMaintenance } = useMaintenanceContext();
@@ -688,6 +689,53 @@ export function SettingsScreen() {
                   </Text>
                 </View>
                 <Text style={{ fontSize: 20, color: "#1976D2" }}>›</Text>
+              </View>
+            </TouchableOpacity>
+
+            {/* Backfill store IDs */}
+            <TouchableOpacity
+              style={styles.card}
+              activeOpacity={0.75}
+              disabled={backfilling}
+              onPress={async () => {
+                Alert.alert(
+                  "Привязать магазины",
+                  "Система пройдёт по всем магазинам Озона и привяжет их к карточкам, у которых магазин ещё не указан. Это может занять некоторое время.",
+                  [
+                    { text: "Отмена", style: "cancel" },
+                    {
+                      text: "Запустить",
+                      onPress: async () => {
+                        setBackfilling(true);
+                        try {
+                          const res = await adminService.backfillStoreIds();
+                          Alert.alert(
+                            "Готово",
+                            `Обновлено карточек: ${res.updated}\nПроверено магазинов: ${res.stores}`,
+                          );
+                        } catch {
+                          Alert.alert("Ошибка", "Не удалось выполнить привязку");
+                        } finally {
+                          setBackfilling(false);
+                        }
+                      },
+                    },
+                  ],
+                );
+              }}
+            >
+              <View style={[styles.sectionHeader, { marginBottom: 0 }]}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.sectionTitle}>Привязать магазины к карточкам</Text>
+                  <Text style={styles.sectionDesc}>
+                    Проставить магазин для карточек, опубликованных до добавления этой функции
+                  </Text>
+                </View>
+                {backfilling ? (
+                  <ActivityIndicator size="small" color="#1976D2" />
+                ) : (
+                  <Text style={{ fontSize: 20, color: "#1976D2" }}>›</Text>
+                )}
               </View>
             </TouchableOpacity>
 

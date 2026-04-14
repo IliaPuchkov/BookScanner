@@ -474,8 +474,19 @@ export class OzonService {
       allAttributes.push(...attrs);
     }
 
-    // Check which SKUs already exist
+    // Fetch prices for all products (batches of 1000 offer_ids)
     const offerIds = allAttributes.map((p) => p.offer_id);
+    const priceMap = new Map<string, number>();
+    const PRICE_BATCH = 1000;
+    for (let i = 0; i < offerIds.length; i += PRICE_BATCH) {
+      const batch = offerIds.slice(i, i + PRICE_BATCH);
+      const batchPrices = await this.ozonApiClient.getProductPrices(batch, storeId);
+      for (const [offerId, price] of batchPrices) {
+        priceMap.set(offerId, price);
+      }
+    }
+
+    // Check which SKUs already exist
     const existing = offerIds.length > 0
       ? await this.bookRepository.find({
           where: offerIds.map((sku) => ({ sku })),
@@ -516,7 +527,7 @@ export class OzonService {
           paperType: data.paperType,
           weightGross: data.weightGross,
           dimensions: data.dimensions || { width: 0, height: 35, depth: 0 },
-          price: DEFAULT_PRICE,
+          price: priceMap.get(ozonProduct.offer_id) ?? DEFAULT_PRICE,
           status: BookStatus.PUBLISHED,
           publishedToOzon: new Date(),
           boxId: importBox.id,
@@ -580,5 +591,76 @@ export class OzonService {
       failed: 'Ошибка публикации',
     };
     return messages[status] || status;
+  }
+
+  /**
+   * Проходит по всем настроенным магазинам Ozon, получает список их товаров
+   * и проставляет storeId в записи ozon_products, где он ещё не заполнен.
+   * Матчинг: offer_id (= book.sku) и ozonProductId (= product_id).
+   */
+  async backfillStoreIds(): Promise<{ updated: number; stores: number }> {
+    const stores = await this.ozonApiClient.getAllStores();
+    if (!stores.length) {
+      return { updated: 0, stores: 0 };
+    }
+
+    // Load all ozon_products that have no storeId yet, join book for sku
+    const untagged = await this.ozonProductRepository
+      .createQueryBuilder('op')
+      .innerJoinAndSelect('op.book', 'book')
+      .where('op.storeId IS NULL')
+      .getMany();
+
+    if (!untagged.length) {
+      return { updated: 0, stores: stores.length };
+    }
+
+    // Build lookup maps: ozonProductId → record, sku → record
+    const byProductId = new Map<string, (typeof untagged)[0]>();
+    const bySku = new Map<string, (typeof untagged)[0]>();
+    for (const op of untagged) {
+      if (op.ozonProductId) byProductId.set(String(op.ozonProductId), op);
+      if (op.book?.sku) bySku.set(op.book.sku, op);
+    }
+
+    let updated = 0;
+
+    for (const store of stores) {
+      const toUpdate: Array<{ id: string; storeId: string }> = [];
+      let lastId = '';
+
+      do {
+        let page: Awaited<ReturnType<typeof this.ozonApiClient.getProductList>>;
+        try {
+          page = await this.ozonApiClient.getProductList(store.id, lastId, 1000);
+        } catch (err) {
+          this.logger.warn(`backfillStoreIds: failed for store ${store.id}: ${err}`);
+          break;
+        }
+
+        for (const item of page.items) {
+          const record = byProductId.get(String(item.product_id)) ?? bySku.get(item.offer_id);
+          if (record) {
+            toUpdate.push({ id: record.id, storeId: store.id });
+            byProductId.delete(String(item.product_id));
+            bySku.delete(item.offer_id);
+          }
+        }
+
+        lastId = page.last_id;
+        if (!lastId || page.items.length < 1000) break;
+      } while (byProductId.size > 0 || bySku.size > 0);
+
+      if (toUpdate.length > 0) {
+        await this.ozonProductRepository.save(
+          toUpdate.map(({ id, storeId }) => ({ id, storeId })),
+        );
+        updated += toUpdate.length;
+      }
+
+      if (byProductId.size === 0 && bySku.size === 0) break;
+    }
+
+    return { updated, stores: stores.length };
   }
 }

@@ -104,6 +104,13 @@ export class OzonController {
     return this.ozonService.importProducts(dto.productIds, user.id, dto.storeId);
   }
 
+  @Post('backfill-store-ids')
+  @Roles(UserRole.ADMIN)
+  @ApiOperation({ summary: 'Привязать магазины к ранее опубликованным карточкам' })
+  backfillStoreIds() {
+    return this.ozonService.backfillStoreIds();
+  }
+
   // ─── Ozon Store Management ───────────────────────────────────────────────
 
   @Get('stores')

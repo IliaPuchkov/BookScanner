@@ -54,6 +54,18 @@ export interface OzonProductAttribute {
   values: Array<{ dictionary_value_id: number; value: string }>;
 }
 
+export interface OzonProductPriceItem {
+  offer_id: string;
+  product_id: number;
+  price: {
+    price: number;
+    old_price: number;
+    marketing_seller_price: number;
+    min_price: number;
+    currency_code: string;
+  };
+}
+
 export interface OzonProductAttributes {
   id: number;
   offer_id: string;
@@ -201,6 +213,16 @@ export class OzonApiClient {
     return response.result.items;
   }
 
+  async getAllStores(): Promise<Array<{ id: string; name: string }>> {
+    if (!this.settingsService) return [];
+    try {
+      const stores = await this.settingsService.getValue<OzonStoreRecord[]>(OZON_STORES_KEY, []);
+      return (stores ?? []).map((s) => ({ id: s.id, name: s.name }));
+    } catch {
+      return [];
+    }
+  }
+
   async getProductList(
     storeId?: string,
     lastId = '',
@@ -237,6 +259,47 @@ export class OzonApiClient {
       credentials,
     );
     return response.result ?? [];
+  }
+
+  async getProductPrices(
+    offerIds: string[],
+    storeId?: string,
+  ): Promise<Map<string, number>> {
+    const credentials = storeId
+      ? await this.getCredentialsForStore(storeId)
+      : await this.getCredentials();
+
+    const priceMap = new Map<string, number>();
+    let cursor = '';
+
+    do {
+      const response = await this.post<{
+        cursor: string;
+        items: OzonProductPriceItem[];
+        total: number;
+      }>(
+        '/v5/product/info/prices',
+        {
+          cursor,
+          filter: { offer_id: offerIds, visibility: 'ALL' },
+          limit: 1000,
+        },
+        credentials,
+      );
+
+      for (const item of response.items ?? []) {
+        const price = item.price?.price ?? item.price?.marketing_seller_price ?? 0;
+        if (price > 0) {
+          priceMap.set(item.offer_id, price);
+        }
+      }
+
+      cursor = response.cursor ?? '';
+      // Stop if we got all items or no cursor to continue
+      if (!cursor || (response.items ?? []).length < 1000) break;
+    } while (true);
+
+    return priceMap;
   }
 
   async getProductInfo(productId: number, offerId?: string): Promise<OzonProductInfo> {

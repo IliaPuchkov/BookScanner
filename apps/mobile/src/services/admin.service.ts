@@ -210,4 +210,9 @@ export const adminService = {
     const { data } = await api.post('/ozon/import', dto);
     return data;
   },
+
+  async backfillStoreIds(): Promise<{ updated: number; stores: number }> {
+    const { data } = await api.post('/ozon/backfill-store-ids', {});
+    return data;
+  },
 };
