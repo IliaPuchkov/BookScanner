@@ -241,6 +241,23 @@ export class OzonApiClient {
     return response.result;
   }
 
+  async findProductByOfferId(
+    offerId: string,
+    storeId?: string,
+  ): Promise<OzonProductListItem | null> {
+    const credentials = storeId
+      ? await this.getCredentialsForStore(storeId)
+      : await this.getCredentials();
+    const response = await this.post<{
+      result: { items: OzonProductListItem[]; total: number };
+    }>(
+      '/v3/product/list',
+      { filter: { offer_id: [offerId], visibility: 'ALL' }, last_id: '', limit: 1 },
+      credentials,
+    );
+    return response.result.items?.[0] ?? null;
+  }
+
   async getProductAttributesList(
     productIds: number[],
     storeId?: string,

@@ -215,4 +215,9 @@ export const adminService = {
     const { data } = await api.post('/ozon/backfill-store-ids', {});
     return data;
   },
+
+  async resetStuckPublications(): Promise<{ checked: number; published: number; failed: number }> {
+    const { data } = await api.post('/ozon/reset-stuck-publications', {});
+    return data;
+  },
 };

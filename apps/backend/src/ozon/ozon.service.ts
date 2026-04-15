@@ -164,6 +164,23 @@ export class OzonService {
         const item = items.find((i) => i.offer_id === ozonProduct.publishPayload?.items?.[0]?.offer_id);
 
         if (!item) {
+          // Task returned but our offer_id not found — treat as expired/stuck
+          const offerId = ozonProduct.publishPayload?.items?.[0]?.offer_id as string | undefined;
+          if (offerId) {
+            try {
+              const found = await this.ozonApiClient.findProductByOfferId(offerId);
+              if (found?.product_id) {
+                ozonProduct.ozonProductId = String(found.product_id);
+                ozonProduct.status = 'published';
+                await this.ozonProductRepository.save(ozonProduct);
+                await this.booksService.updateFromExtraction(bookId, {
+                  status: BookStatus.PUBLISHED,
+                  publishedToOzon: new Date(),
+                });
+                return { status: 'published', message: 'Загружено в Ozon' };
+              }
+            } catch { /* not found */ }
+          }
           return { status: ozonProduct.status, message: 'Импорт в процессе' };
         }
 
@@ -195,6 +212,35 @@ export class OzonService {
           return { status: 'importing', message: 'Импорт в процессе' };
         }
       } catch (error) {
+        // Ozon хранит task только ~24ч. Если task не найден — ищем товар по offer_id
+        if (error instanceof OzonApiError && error.statusCode === 404) {
+          const offerId = ozonProduct.publishPayload?.items?.[0]?.offer_id as string | undefined;
+          if (offerId) {
+            try {
+              const found = await this.ozonApiClient.findProductByOfferId(offerId);
+              if (found?.product_id) {
+                ozonProduct.ozonProductId = String(found.product_id);
+                ozonProduct.status = 'published';
+                await this.ozonProductRepository.save(ozonProduct);
+                await this.booksService.updateFromExtraction(bookId, {
+                  status: BookStatus.PUBLISHED,
+                  publishedToOzon: new Date(),
+                });
+                this.logger.log(`Book ${bookId}: task expired, product found by offer_id=${offerId}, product_id=${found.product_id}`);
+                return { status: 'published', message: 'Загружено в Ozon' };
+              }
+            } catch {
+              // Товар тоже не найден — задача истекла без создания
+            }
+          }
+          ozonProduct.status = 'failed';
+          ozonProduct.errorMessage = `Task ${ozonProduct.taskId} expired: product not found on Ozon`;
+          await this.ozonProductRepository.save(ozonProduct);
+          await this.booksService.updateFromExtraction(bookId, { status: BookStatus.PUBLICATION_FAILED });
+          this.logger.warn(`Book ${bookId}: task ${ozonProduct.taskId} expired, product not found`);
+          return { status: 'failed', message: 'Задача импорта истекла — товар не найден на Ozon' };
+        }
+
         this.logger.error(`Error checking import for book ${bookId}`, error);
         return { status: ozonProduct.status, message: 'Ошибка проверки статуса импорта' };
       }
@@ -208,16 +254,31 @@ export class OzonService {
       where: { status: In(IMPORTABLE_STATUSES) },
     });
 
+    if (pending.length === 0) return;
     this.logger.log(`Checking ${pending.length} pending Ozon products`);
 
+    // Группируем по taskId — один bulk-таск может покрывать много книг,
+    // не делаем дублирующих запросов к Ozon для одного и того же taskId
+    const byTask = new Map<string, typeof pending>();
     for (const product of pending) {
-      try {
-        await this.checkStatus(product.bookId);
-      } catch (error) {
-        this.logger.error(
-          `Error checking status for book ${product.bookId}`,
-          error,
-        );
+      const key = product.taskId != null ? String(product.taskId) : `no-task-${product.bookId}`;
+      if (!byTask.has(key)) byTask.set(key, []);
+      byTask.get(key)!.push(product);
+    }
+
+    for (const [, group] of byTask) {
+      // checkStatus уже обрабатывает каждую книгу индивидуально,
+      // но первый вызов в группе делает реальный запрос к Ozon,
+      // остальные — просто обновляют статус по тем же данным
+      for (const product of group) {
+        try {
+          await this.checkStatus(product.bookId);
+        } catch (error) {
+          this.logger.error(
+            `Error checking status for book ${product.bookId}`,
+            error,
+          );
+        }
       }
     }
   }
@@ -594,9 +655,68 @@ export class OzonService {
   }
 
   /**
+   * Находит книги, зависшие в статусе PENDING_PUBLICATION (ozon_product.status='importing')
+   * дольше 24 часов. Для каждой пытается найти товар на Ozon по offer_id:
+   *   - нашли → помечаем как published
+   *   - не нашли → сбрасываем книгу в PUBLICATION_FAILED
+   */
+  async resetStuckPublications(): Promise<{ checked: number; published: number; failed: number }> {
+    const threshold = new Date(Date.now() - 24 * 60 * 60 * 1000);
+
+    const stuck = await this.ozonProductRepository
+      .createQueryBuilder('op')
+      .where('op.status = :status', { status: 'importing' })
+      .andWhere('op.ozonProductId IS NULL')
+      .andWhere('op.updatedAt < :threshold', { threshold })
+      .getMany();
+
+    if (!stuck.length) {
+      return { checked: 0, published: 0, failed: 0 };
+    }
+
+    let published = 0;
+    let failed = 0;
+
+    for (const op of stuck) {
+      const offerId = op.publishPayload?.items?.[0]?.offer_id as string | undefined;
+      let resolved = false;
+
+      if (offerId) {
+        try {
+          const found = await this.ozonApiClient.findProductByOfferId(offerId, op.storeId);
+          if (found?.product_id) {
+            op.ozonProductId = String(found.product_id);
+            op.status = 'published';
+            await this.ozonProductRepository.save(op);
+            await this.booksService.updateFromExtraction(op.bookId, {
+              status: BookStatus.PUBLISHED,
+              publishedToOzon: new Date(),
+            });
+            published++;
+            resolved = true;
+          }
+        } catch { /* не нашли */ }
+      }
+
+      if (!resolved) {
+        op.status = 'failed';
+        op.errorMessage = 'Publication task expired: product not found on Ozon. Please retry.';
+        await this.ozonProductRepository.save(op);
+        await this.booksService.updateFromExtraction(op.bookId, {
+          status: BookStatus.PUBLICATION_FAILED,
+        });
+        failed++;
+      }
+    }
+
+    this.logger.log(`resetStuckPublications: checked=${stuck.length}, published=${published}, failed=${failed}`);
+    return { checked: stuck.length, published, failed };
+  }
+
+  /**
    * Проходит по всем настроенным магазинам Ozon, получает список их товаров
    * и проставляет storeId в записи ozon_products, где он ещё не заполнен.
-   * Матчинг: offer_id (= book.sku) и ozonProductId (= product_id).
+   * Матчинг только по sku (= offer_id) — ozonProductId бывает null.
    */
   async backfillStoreIds(): Promise<{ updated: number; stores: number }> {
     const stores = await this.ozonApiClient.getAllStores();
@@ -604,22 +724,23 @@ export class OzonService {
       return { updated: 0, stores: 0 };
     }
 
-    // Load all ozon_products that have no storeId yet, join book for sku
+    // Load all ozon_products without storeId that are published on Ozon.
+    // Records with null ozonProductId were never accepted by Ozon (failed/expired),
+    // so they won't appear in getProductList and can't be matched.
     const untagged = await this.ozonProductRepository
       .createQueryBuilder('op')
       .innerJoinAndSelect('op.book', 'book')
       .where('op.storeId IS NULL')
+      .andWhere('op.ozonProductId IS NOT NULL')
       .getMany();
 
     if (!untagged.length) {
       return { updated: 0, stores: stores.length };
     }
 
-    // Build lookup maps: ozonProductId → record, sku → record
-    const byProductId = new Map<string, (typeof untagged)[0]>();
+    // Build lookup map: sku → ozon_product record
     const bySku = new Map<string, (typeof untagged)[0]>();
     for (const op of untagged) {
-      if (op.ozonProductId) byProductId.set(String(op.ozonProductId), op);
       if (op.book?.sku) bySku.set(op.book.sku, op);
     }
 
@@ -639,17 +760,16 @@ export class OzonService {
         }
 
         for (const item of page.items) {
-          const record = byProductId.get(String(item.product_id)) ?? bySku.get(item.offer_id);
+          const record = bySku.get(item.offer_id);
           if (record) {
             toUpdate.push({ id: record.id, storeId: store.id });
-            byProductId.delete(String(item.product_id));
             bySku.delete(item.offer_id);
           }
         }
 
         lastId = page.last_id;
         if (!lastId || page.items.length < 1000) break;
-      } while (byProductId.size > 0 || bySku.size > 0);
+      } while (bySku.size > 0);
 
       if (toUpdate.length > 0) {
         await this.ozonProductRepository.save(
@@ -658,7 +778,7 @@ export class OzonService {
         updated += toUpdate.length;
       }
 
-      if (byProductId.size === 0 && bySku.size === 0) break;
+      if (bySku.size === 0) break;
     }
 
     return { updated, stores: stores.length };

@@ -692,6 +692,57 @@ export function SettingsScreen() {
               </View>
             </TouchableOpacity>
 
+            {/* Reset stuck publications */}
+            <TouchableOpacity
+              style={styles.card}
+              activeOpacity={0.75}
+              disabled={backfilling}
+              onPress={async () => {
+                Alert.alert(
+                  "Сбросить зависшие публикации",
+                  "Книги, которые больше 24 часов висят в статусе «Публикуется в Ozon» без результата, будут проверены. Найденные на Ozon — помечены как опубликованные, остальные — как ошибка публикации.",
+                  [
+                    { text: "Отмена", style: "cancel" },
+                    {
+                      text: "Запустить",
+                      onPress: async () => {
+                        setBackfilling(true);
+                        try {
+                          const res = await adminService.resetStuckPublications();
+                          if (res.checked === 0) {
+                            Alert.alert("Готово", "Зависших публикаций не найдено");
+                          } else {
+                            Alert.alert(
+                              "Готово",
+                              `Проверено: ${res.checked}\nНайдено на Ozon: ${res.published}\nПомечено как ошибка: ${res.failed}`,
+                            );
+                          }
+                        } catch {
+                          Alert.alert("Ошибка", "Не удалось выполнить сброс");
+                        } finally {
+                          setBackfilling(false);
+                        }
+                      },
+                    },
+                  ],
+                );
+              }}
+            >
+              <View style={[styles.sectionHeader, { marginBottom: 0 }]}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.sectionTitle}>Сбросить зависшие публикации</Text>
+                  <Text style={styles.sectionDesc}>
+                    Исправить книги, застрявшие в статусе «Публикуется в Ozon» более 24 часов
+                  </Text>
+                </View>
+                {backfilling ? (
+                  <ActivityIndicator size="small" color="#1976D2" />
+                ) : (
+                  <Text style={{ fontSize: 20, color: "#1976D2" }}>›</Text>
+                )}
+              </View>
+            </TouchableOpacity>
+
             {/* Backfill store IDs */}
             <TouchableOpacity
               style={styles.card}

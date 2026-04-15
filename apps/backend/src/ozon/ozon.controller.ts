@@ -111,6 +111,13 @@ export class OzonController {
     return this.ozonService.backfillStoreIds();
   }
 
+  @Post('reset-stuck-publications')
+  @Roles(UserRole.ADMIN)
+  @ApiOperation({ summary: 'Сбросить книги, зависшие в статусе "Публикуется в Ozon" > 24ч' })
+  resetStuckPublications() {
+    return this.ozonService.resetStuckPublications();
+  }
+
   // ─── Ozon Store Management ───────────────────────────────────────────────
 
   @Get('stores')
