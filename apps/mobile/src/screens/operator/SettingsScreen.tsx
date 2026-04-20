@@ -87,8 +87,10 @@ export function SettingsScreen() {
   const [editingPrice, setEditingPrice] = useState(false);
   const [draftPriceDefault, setDraftPriceDefault] = useState("");
   const [draftPriceMin, setDraftPriceMin] = useState("");
-  const [draftPriceDiscountThreshold, setDraftPriceDiscountThreshold] = useState("");
-  const [draftPriceDiscountPercent, setDraftPriceDiscountPercent] = useState("");
+  const [draftPriceDiscountThreshold, setDraftPriceDiscountThreshold] =
+    useState("");
+  const [draftPriceDiscountPercent, setDraftPriceDiscountPercent] =
+    useState("");
   const [draftPriceAiMultiplier, setDraftPriceAiMultiplier] = useState("");
   const [savingPrice, setSavingPrice] = useState(false);
 
@@ -103,7 +105,8 @@ export function SettingsScreen() {
   const [maintenanceEndAt, setMaintenanceEndAt] = useState("");
   const [maintenanceMessage, setMaintenanceMessage] = useState("");
   const [maintenanceInstructions, setMaintenanceInstructions] = useState("");
-  const [maintenanceWarningMinutes, setMaintenanceWarningMinutes] = useState("30");
+  const [maintenanceWarningMinutes, setMaintenanceWarningMinutes] =
+    useState("30");
   const [savingMaintenance, setSavingMaintenance] = useState(false);
 
   const applySettings = (
@@ -136,7 +139,9 @@ export function SettingsScreen() {
     setMaintenanceMessage(mMsg?.value ?? "");
     const mInstr = settings.find((s) => s.key === MAINTENANCE_INSTRUCTIONS_KEY);
     setMaintenanceInstructions(mInstr?.value ?? "");
-    const mWarn = settings.find((s) => s.key === MAINTENANCE_WARNING_MINUTES_KEY);
+    const mWarn = settings.find(
+      (s) => s.key === MAINTENANCE_WARNING_MINUTES_KEY,
+    );
     setMaintenanceWarningMinutes(mWarn?.value ?? "30");
   };
 
@@ -263,19 +268,60 @@ export function SettingsScreen() {
     const pdt = parseInt(draftPriceDiscountThreshold, 10);
     const pdp = parseInt(draftPriceDiscountPercent, 10);
     const pam = parseFloat(draftPriceAiMultiplier);
-    if (isNaN(pd) || pd <= 0) { Alert.alert("Ошибка", "Некорректная цена по умолчанию"); return; }
-    if (isNaN(pm) || pm <= 0) { Alert.alert("Ошибка", "Некорректная минимальная цена"); return; }
-    if (isNaN(pdt) || pdt <= 0) { Alert.alert("Ошибка", "Некорректный порог скидки"); return; }
-    if (isNaN(pdp) || pdp < 0 || pdp > 100) { Alert.alert("Ошибка", "Процент скидки должен быть от 0 до 100"); return; }
-    if (isNaN(pam) || pam <= 0) { Alert.alert("Ошибка", "Коэффициент ИИ должен быть больше 0"); return; }
+    if (isNaN(pd) || pd <= 0) {
+      Alert.alert("Ошибка", "Некорректная цена по умолчанию");
+      return;
+    }
+    if (isNaN(pm) || pm <= 0) {
+      Alert.alert("Ошибка", "Некорректная минимальная цена");
+      return;
+    }
+    if (isNaN(pdt) || pdt <= 0) {
+      Alert.alert("Ошибка", "Некорректный порог скидки");
+      return;
+    }
+    if (isNaN(pdp) || pdp < 0 || pdp > 100) {
+      Alert.alert("Ошибка", "Процент скидки должен быть от 0 до 100");
+      return;
+    }
+    if (isNaN(pam) || pam <= 0) {
+      Alert.alert("Ошибка", "Коэффициент ИИ должен быть больше 0");
+      return;
+    }
     setSavingPrice(true);
     try {
       await Promise.all([
-        adminService.upsertSetting({ key: PRICE_DEFAULT_KEY, value: String(pd), valueType: "number", description: "Цена книги если ИИ не смог определить цену" }),
-        adminService.upsertSetting({ key: PRICE_MIN_KEY, value: String(pm), valueType: "number", description: "Минимальная цена книги" }),
-        adminService.upsertSetting({ key: PRICE_DISCOUNT_THRESHOLD_KEY, value: String(pdt), valueType: "number", description: "Порог выше которого применяется скидка" }),
-        adminService.upsertSetting({ key: PRICE_DISCOUNT_PERCENT_KEY, value: String(pdp), valueType: "number", description: "Процент скидки от цены ИИ" }),
-        adminService.upsertSetting({ key: PRICE_AI_MULTIPLIER_KEY, value: String(pam), valueType: "number", description: "Коэффициент умножения цены от ИИ (компенсация недооценки)" }),
+        adminService.upsertSetting({
+          key: PRICE_DEFAULT_KEY,
+          value: String(pd),
+          valueType: "number",
+          description: "Цена книги если ИИ не смог определить цену",
+        }),
+        adminService.upsertSetting({
+          key: PRICE_MIN_KEY,
+          value: String(pm),
+          valueType: "number",
+          description: "Минимальная цена книги",
+        }),
+        adminService.upsertSetting({
+          key: PRICE_DISCOUNT_THRESHOLD_KEY,
+          value: String(pdt),
+          valueType: "number",
+          description: "Порог выше которого применяется скидка",
+        }),
+        adminService.upsertSetting({
+          key: PRICE_DISCOUNT_PERCENT_KEY,
+          value: String(pdp),
+          valueType: "number",
+          description: "Процент скидки от цены ИИ",
+        }),
+        adminService.upsertSetting({
+          key: PRICE_AI_MULTIPLIER_KEY,
+          value: String(pam),
+          valueType: "number",
+          description:
+            "Коэффициент умножения цены от ИИ (компенсация недооценки)",
+        }),
       ]);
       setPriceDefault(String(pd));
       setPriceMin(String(pm));
@@ -292,20 +338,31 @@ export function SettingsScreen() {
   };
 
   const handleSaveMaintenance = async () => {
-    const startIso = maintenanceStartAt ? parseRuDateTime(maintenanceStartAt) : null;
+    const startIso = maintenanceStartAt
+      ? parseRuDateTime(maintenanceStartAt)
+      : null;
     const endIso = maintenanceEndAt ? parseRuDateTime(maintenanceEndAt) : null;
 
     if (maintenanceStartAt && !startIso) {
-      Alert.alert("Ошибка", "Неверный формат даты начала. Используйте ДД.ММ.ГГГГ ЧЧ:ММ");
+      Alert.alert(
+        "Ошибка",
+        "Неверный формат даты начала. Используйте ДД.ММ.ГГГГ ЧЧ:ММ",
+      );
       return;
     }
     if (maintenanceEndAt && !endIso) {
-      Alert.alert("Ошибка", "Неверный формат даты окончания. Используйте ДД.ММ.ГГГГ ЧЧ:ММ");
+      Alert.alert(
+        "Ошибка",
+        "Неверный формат даты окончания. Используйте ДД.ММ.ГГГГ ЧЧ:ММ",
+      );
       return;
     }
     const warnMin = parseInt(maintenanceWarningMinutes, 10);
     if (isNaN(warnMin) || warnMin < 0) {
-      Alert.alert("Ошибка", "Укажите корректное количество минут предупреждения");
+      Alert.alert(
+        "Ошибка",
+        "Укажите корректное количество минут предупреждения",
+      );
       return;
     }
 
@@ -328,41 +385,55 @@ export function SettingsScreen() {
 
       // Only save date/text fields if they have a value — backend rejects empty strings
       if (startIso) {
-        calls.push(adminService.upsertSetting({
-          key: MAINTENANCE_START_AT_KEY,
-          value: startIso,
-          valueType: "string",
-          description: "Дата и время начала технических работ (ISO)",
-        }));
+        calls.push(
+          adminService.upsertSetting({
+            key: MAINTENANCE_START_AT_KEY,
+            value: startIso,
+            valueType: "string",
+            description: "Дата и время начала технических работ (ISO)",
+          }),
+        );
       }
       if (endIso) {
-        calls.push(adminService.upsertSetting({
-          key: MAINTENANCE_END_AT_KEY,
-          value: endIso,
-          valueType: "string",
-          description: "Приблизительное время окончания технических работ (ISO)",
-        }));
+        calls.push(
+          adminService.upsertSetting({
+            key: MAINTENANCE_END_AT_KEY,
+            value: endIso,
+            valueType: "string",
+            description:
+              "Приблизительное время окончания технических работ (ISO)",
+          }),
+        );
       }
       if (maintenanceMessage.trim()) {
-        calls.push(adminService.upsertSetting({
-          key: MAINTENANCE_MESSAGE_KEY,
-          value: maintenanceMessage.trim(),
-          valueType: "string",
-          description: "Причина / описание технических работ",
-        }));
+        calls.push(
+          adminService.upsertSetting({
+            key: MAINTENANCE_MESSAGE_KEY,
+            value: maintenanceMessage.trim(),
+            valueType: "string",
+            description: "Причина / описание технических работ",
+          }),
+        );
       }
       if (maintenanceInstructions.trim()) {
-        calls.push(adminService.upsertSetting({
-          key: MAINTENANCE_INSTRUCTIONS_KEY,
-          value: maintenanceInstructions.trim(),
-          valueType: "string",
-          description: "Инструкции для пользователей на время работ",
-        }));
+        calls.push(
+          adminService.upsertSetting({
+            key: MAINTENANCE_INSTRUCTIONS_KEY,
+            value: maintenanceInstructions.trim(),
+            valueType: "string",
+            description: "Инструкции для пользователей на время работ",
+          }),
+        );
       }
 
       await Promise.all(calls);
       await refreshMaintenance();
-      Alert.alert("Готово", maintenanceEnabled ? "Технические работы включены" : "Настройки сохранены");
+      Alert.alert(
+        "Готово",
+        maintenanceEnabled
+          ? "Технические работы включены"
+          : "Настройки сохранены",
+      );
     } catch {
       Alert.alert("Ошибка", "Не удалось сохранить настройки");
     } finally {
@@ -428,7 +499,8 @@ export function SettingsScreen() {
                 <View style={{ flex: 1 }}>
                   <Text style={styles.sectionTitle}>Магазины Ozon</Text>
                   <Text style={styles.sectionDesc}>
-                    Подключённые магазины. Выбор магазина происходит при загрузке товаров.
+                    Подключённые магазины. Выбор магазина происходит при
+                    загрузке товаров.
                   </Text>
                 </View>
                 <Text style={{ fontSize: 20, color: "#1976D2" }}>›</Text>
@@ -436,7 +508,7 @@ export function SettingsScreen() {
             </TouchableOpacity>
 
             {/* Import from Ozon */}
-            <TouchableOpacity
+            {/* <TouchableOpacity
               style={styles.card}
               activeOpacity={0.75}
               onPress={() => navigation.navigate("ImportFromOzon")}
@@ -450,10 +522,10 @@ export function SettingsScreen() {
                 </View>
                 <Text style={{ fontSize: 20, color: "#1976D2" }}>›</Text>
               </View>
-            </TouchableOpacity>
+            </TouchableOpacity> */}
 
             {/* Reset stuck publications */}
-            <TouchableOpacity
+            {/* <TouchableOpacity
               style={styles.card}
               activeOpacity={0.75}
               disabled={backfilling}
@@ -501,10 +573,10 @@ export function SettingsScreen() {
                   <Text style={{ fontSize: 20, color: "#1976D2" }}>›</Text>
                 )}
               </View>
-            </TouchableOpacity>
+            </TouchableOpacity> */}
 
             {/* Backfill store IDs */}
-            <TouchableOpacity
+            {/* <TouchableOpacity
               style={styles.card}
               activeOpacity={0.75}
               disabled={backfilling}
@@ -548,7 +620,7 @@ export function SettingsScreen() {
                   <Text style={{ fontSize: 20, color: "#1976D2" }}>›</Text>
                 )}
               </View>
-            </TouchableOpacity>
+            </TouchableOpacity> */}
 
             {/* Max photos setting */}
             <View style={styles.card}>
@@ -558,8 +630,7 @@ export function SettingsScreen() {
                     Максимальное количество фото
                   </Text>
                   <Text style={styles.sectionDesc}>
-                    Сколько фотографий оператор может загрузить для одной
-                    книги.
+                    Сколько фотографий оператор может загрузить для одной книги.
                   </Text>
                 </View>
               </View>
@@ -623,7 +694,8 @@ export function SettingsScreen() {
                 <View style={{ flex: 1 }}>
                   <Text style={styles.sectionTitle}>Формула расчёта цены</Text>
                   <Text style={styles.sectionDesc}>
-                    Параметры по которым рассчитывается итоговая цена на основе данных от ИИ.
+                    Параметры по которым рассчитывается итоговая цена на основе
+                    данных от ИИ.
                   </Text>
                 </View>
               </View>
@@ -661,7 +733,9 @@ export function SettingsScreen() {
                     />
                   </View>
                   <View style={styles.priceRow}>
-                    <Text style={styles.priceLabel}>Скидка выше порога (%)</Text>
+                    <Text style={styles.priceLabel}>
+                      Скидка выше порога (%)
+                    </Text>
                     <TextInput
                       style={styles.priceInput}
                       value={draftPriceDiscountPercent}
@@ -689,7 +763,11 @@ export function SettingsScreen() {
                       <Text style={styles.cancelBtnText}>Отмена</Text>
                     </TouchableOpacity>
                     <TouchableOpacity
-                      style={[styles.actionBtn, styles.saveBtn, savingPrice && styles.disabledBtn]}
+                      style={[
+                        styles.actionBtn,
+                        styles.saveBtn,
+                        savingPrice && styles.disabledBtn,
+                      ]}
                       onPress={handleSavePrice}
                       disabled={savingPrice}
                     >
@@ -705,22 +783,38 @@ export function SettingsScreen() {
                 <>
                   <View style={styles.priceFormulaBox}>
                     <Text style={styles.priceFormulaLine}>
-                      Цена не найдена → <Text style={styles.priceFormulaValue}>{priceDefault} ₽</Text>
+                      Цена не найдена →{" "}
+                      <Text style={styles.priceFormulaValue}>
+                        {priceDefault} ₽
+                      </Text>
                     </Text>
                     <Text style={styles.priceFormulaLine}>
-                      Цена &lt; {priceMin} ₽ → <Text style={styles.priceFormulaValue}>{priceMin} ₽</Text>
+                      Цена &lt; {priceMin} ₽ →{" "}
+                      <Text style={styles.priceFormulaValue}>{priceMin} ₽</Text>
                     </Text>
                     <Text style={styles.priceFormulaLine}>
-                      Цена &gt; {priceDiscountThreshold} ₽ → <Text style={styles.priceFormulaValue}>цена − {priceDiscountPercent}%</Text>
+                      Цена &gt; {priceDiscountThreshold} ₽ →{" "}
+                      <Text style={styles.priceFormulaValue}>
+                        цена − {priceDiscountPercent}%
+                      </Text>
                     </Text>
                     <Text style={styles.priceFormulaLine}>
-                      Иначе → <Text style={styles.priceFormulaValue}>цена без изменений</Text>
+                      Иначе →{" "}
+                      <Text style={styles.priceFormulaValue}>
+                        цена без изменений
+                      </Text>
                     </Text>
                     <Text style={[styles.priceFormulaLine, { marginTop: 6 }]}>
-                      Коэффициент ИИ → <Text style={styles.priceFormulaValue}>×{priceAiMultiplier}</Text>
+                      Коэффициент ИИ →{" "}
+                      <Text style={styles.priceFormulaValue}>
+                        ×{priceAiMultiplier}
+                      </Text>
                     </Text>
                   </View>
-                  <TouchableOpacity style={styles.editBtn} onPress={handleStartEditPrice}>
+                  <TouchableOpacity
+                    style={styles.editBtn}
+                    onPress={handleStartEditPrice}
+                  >
                     <Text style={styles.editBtnText}>Изменить</Text>
                   </TouchableOpacity>
                 </>
@@ -802,14 +896,22 @@ export function SettingsScreen() {
                 <View style={{ flex: 1 }}>
                   <Text style={styles.sectionTitle}>Технические работы</Text>
                   <Text style={styles.sectionDesc}>
-                    Управление режимом обслуживания сервера. При включении пользователи увидят экран технических работ.
+                    Управление режимом обслуживания сервера. При включении
+                    пользователи увидят экран технических работ.
                   </Text>
                 </View>
               </View>
 
               <View style={styles.maintenanceToggleRow}>
-                <Text style={[styles.maintenanceToggleLabel, maintenanceEnabled && styles.maintenanceToggleLabelActive]}>
-                  {maintenanceEnabled ? "🔴  Технические работы ВКЛЮЧЕНЫ" : "🟢  Технические работы выключены"}
+                <Text
+                  style={[
+                    styles.maintenanceToggleLabel,
+                    maintenanceEnabled && styles.maintenanceToggleLabelActive,
+                  ]}
+                >
+                  {maintenanceEnabled
+                    ? "🔴  Технические работы ВКЛЮЧЕНЫ"
+                    : "🟢  Технические работы выключены"}
                 </Text>
                 <Switch
                   value={maintenanceEnabled}
@@ -819,10 +921,15 @@ export function SettingsScreen() {
                 />
               </View>
 
-              <Text style={styles.maintenanceFieldLabel}>Дата и время начала (ДД.ММ.ГГГГ ЧЧ:ММ)</Text>
+              <Text style={styles.maintenanceFieldLabel}>
+                Дата и время начала (ДД.ММ.ГГГГ ЧЧ:ММ)
+              </Text>
               <View style={styles.maintenanceDateRow}>
                 <TextInput
-                  style={[styles.maintenanceInput, { flex: 1, marginBottom: 0 }]}
+                  style={[
+                    styles.maintenanceInput,
+                    { flex: 1, marginBottom: 0 },
+                  ]}
                   value={maintenanceStartAt}
                   onChangeText={setMaintenanceStartAt}
                   placeholder="напр. 15.04.2026 18:00"
@@ -854,7 +961,9 @@ export function SettingsScreen() {
                 ))}
               </View>
 
-              <Text style={[styles.maintenanceFieldLabel, { marginTop: 8 }]}>Примерное окончание (ДД.ММ.ГГГГ ЧЧ:ММ)</Text>
+              <Text style={[styles.maintenanceFieldLabel, { marginTop: 8 }]}>
+                Примерное окончание (ДД.ММ.ГГГГ ЧЧ:ММ)
+              </Text>
               <TextInput
                 style={styles.maintenanceInput}
                 value={maintenanceEndAt}
@@ -887,7 +996,9 @@ export function SettingsScreen() {
                 ))}
               </View>
 
-              <Text style={styles.maintenanceFieldLabel}>За сколько минут показывать предупреждение</Text>
+              <Text style={styles.maintenanceFieldLabel}>
+                За сколько минут показывать предупреждение
+              </Text>
               <TextInput
                 style={styles.maintenanceInput}
                 value={maintenanceWarningMinutes}
@@ -897,7 +1008,9 @@ export function SettingsScreen() {
                 keyboardType="number-pad"
               />
 
-              <Text style={styles.maintenanceFieldLabel}>Причина / сообщение для пользователей</Text>
+              <Text style={styles.maintenanceFieldLabel}>
+                Причина / сообщение для пользователей
+              </Text>
               <TextInput
                 style={[styles.maintenanceInput, styles.maintenanceTextArea]}
                 value={maintenanceMessage}
@@ -908,19 +1021,26 @@ export function SettingsScreen() {
                 numberOfLines={3}
               />
 
-              <Text style={styles.maintenanceFieldLabel}>Инструкции для пользователей (необязательно)</Text>
+              <Text style={styles.maintenanceFieldLabel}>
+                Инструкции для пользователей (необязательно)
+              </Text>
               <TextInput
                 style={[styles.maintenanceInput, styles.maintenanceTextArea]}
                 value={maintenanceInstructions}
                 onChangeText={setMaintenanceInstructions}
-                placeholder={"• Завершите текущую работу\n• Все сохранённые карточки останутся\n• Несохранённые данные будут потеряны"}
+                placeholder={
+                  "• Завершите текущую работу\n• Все сохранённые карточки останутся\n• Несохранённые данные будут потеряны"
+                }
                 placeholderTextColor="#bbb"
                 multiline
                 numberOfLines={4}
               />
 
               <TouchableOpacity
-                style={[styles.maintenanceSaveBtn, savingMaintenance && styles.maintenanceSaveBtnDisabled]}
+                style={[
+                  styles.maintenanceSaveBtn,
+                  savingMaintenance && styles.maintenanceSaveBtnDisabled,
+                ]}
                 onPress={handleSaveMaintenance}
                 disabled={savingMaintenance}
                 activeOpacity={0.8}
