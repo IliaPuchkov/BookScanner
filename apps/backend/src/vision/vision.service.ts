@@ -1,4 +1,5 @@
 import { Injectable, Logger, Inject } from "@nestjs/common";
+import sharp from 'sharp';
 import { InjectQueue } from "@nestjs/bullmq";
 import { Queue } from "bullmq";
 import { VISION_QUEUE, VISION_JOBS } from "./vision.constants";
@@ -113,10 +114,14 @@ export class VisionService {
 
       const availablePhotos = photos.slice(0, 4).filter(Boolean);
       const imageBuffers = await Promise.all(
-        availablePhotos.map(async (p) => ({
-          buffer: await this.storage.download(p.fileKey),
-          mimeType: p.mimeType as "image/jpeg" | "image/png",
-        })),
+        availablePhotos.map(async (p) => {
+          const raw = await this.storage.download(p.fileKey);
+          const resized = await sharp(raw)
+            .resize(1024, 1024, { fit: 'inside', withoutEnlargement: true })
+            .jpeg({ quality: 85 })
+            .toBuffer();
+          return { buffer: resized, mimeType: 'image/jpeg' as const };
+        }),
       );
 
       const result = await extractor.extractBookData(imageBuffers, prompt);

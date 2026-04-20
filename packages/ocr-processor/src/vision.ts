@@ -112,11 +112,15 @@ export class GeminiVisionExtractor {
           content: [{ type: 'text', text: prompt }, ...imageContents],
         },
       ],
-      max_tokens: 1500,
+      max_tokens: 4000,
     });
 
-    const raw = response.choices[0]?.message?.content ?? '{}';
+    const choice = response.choices[0];
+    const raw = choice?.message?.content ?? '{}';
     const cleaned = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim();
+    if (choice?.finish_reason === 'length') {
+      throw new Error('AI response truncated (max_tokens exceeded). Partial JSON discarded.');
+    }
     return JSON.parse(cleaned) as IExtractionResult;
   }
 }

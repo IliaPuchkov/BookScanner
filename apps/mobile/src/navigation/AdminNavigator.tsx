@@ -15,6 +15,7 @@ import { CreateCardScreen } from "../screens/operator/CreateCard";
 import { CardDetailScreen } from "../screens/operator/CardDetail";
 import { PhotoUploadScreen } from "../screens/operator/PhotoUpload";
 import ImportFromOzonScreen from "../screens/admin/ImportFromOzonScreen";
+import { OzonStoresScreen } from "../screens/admin/OzonStoresScreen";
 
 export type AdminMainStackParamList = {
   Dashboard: undefined;
@@ -189,6 +190,11 @@ function SettingsStackScreen() {
         name="UserManagement"
         component={UserManagementScreen}
         options={{ title: "Управление пользователями" }}
+      />
+      <SettingsStack.Screen
+        name="OzonStores"
+        component={OzonStoresScreen}
+        options={{ title: "Магазины Ozon" }}
       />
       <SettingsStack.Screen
         name="ImportFromOzon"
