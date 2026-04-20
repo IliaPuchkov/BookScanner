@@ -98,7 +98,8 @@ export function mapOzonProductToBook(product: OzonProductAttributes): OzonImport
   const coverType = mapCoverType(attrValue(product, OZON_ATTR_COVER_TYPE));
   const paperType = mapPaperType(attrValue(product, OZON_ATTR_PAPER_TYPE));
 
-  const images = product.images?.length > 0 ? product.images : (product.primary_image ? [product.primary_image] : []);
+  const extra = (product.images ?? []).filter((url) => url && url !== product.primary_image);
+  const images = product.primary_image ? [product.primary_image, ...extra] : extra;
 
   const weightGross = product.weight > 0 ? product.weight : undefined;
 

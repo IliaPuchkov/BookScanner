@@ -166,10 +166,14 @@ export class BooksService {
     };
   }
 
-  async countCreatedSince(since?: Date, until?: Date): Promise<number> {
+  async countCreatedSince(since?: Date, until?: Date, excludeOzonImport = false): Promise<number> {
     const qb = this.booksRepository.createQueryBuilder('book');
+    if (excludeOzonImport) {
+      qb.innerJoin('book.box', 'box')
+        .where('box.boxNumber != :importBox', { importBox: 'OZON_IMPORT' });
+    }
     if (since) {
-      qb.where('book.createdAt >= :since', { since });
+      qb.andWhere('book.createdAt >= :since', { since });
     }
     if (until) {
       qb.andWhere('book.createdAt <= :until', { until });
@@ -181,6 +185,7 @@ export class BooksService {
     const qb = this.booksRepository
       .createQueryBuilder('book')
       .innerJoin('book.createdBy', 'user')
+      .innerJoin('book.box', 'box')
       .leftJoin('book.workSession', 'workSession')
       .select('user.id', 'userId')
       .addSelect('user.fullName', 'fullName')
@@ -192,6 +197,7 @@ export class BooksService {
         "COUNT(CASE WHEN workSession.status != 'completed' AND book.work_session_id IS NOT NULL THEN 1 END)",
         'activeCount',
       )
+      .where('box.boxNumber != :importBox', { importBox: 'OZON_IMPORT' })
       .groupBy('user.id')
       .addGroupBy('user.fullName');
 

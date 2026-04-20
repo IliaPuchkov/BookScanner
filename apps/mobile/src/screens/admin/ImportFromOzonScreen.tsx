@@ -31,6 +31,8 @@ export default function ImportFromOzonScreen() {
   const [loading, setLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [importing, setImporting] = useState(false);
+  const [importProgress, setImportProgress] = useState<{ done: number; total: number } | null>(null);
+  const [selectingAll, setSelectingAll] = useState(false);
   const [selected, setSelected] = useState<Set<number>>(new Set());
 
   const loadStores = useCallback(async () => {
@@ -54,7 +56,11 @@ export default function ImportFromOzonScreen() {
       if (refresh || p === 1) {
         setItems(result.items);
       } else {
-        setItems((prev) => [...prev, ...result.items]);
+        setItems((prev) => {
+          const seen = new Set(prev.map((i) => i.productId));
+          const fresh = result.items.filter((i) => !seen.has(i.productId));
+          return [...prev, ...fresh];
+        });
       }
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Неизвестная ошибка';
@@ -85,12 +91,20 @@ export default function ImportFromOzonScreen() {
     });
   };
 
-  const selectAllNew = () => {
-    const newIds = items
-      .filter((i) => !i.alreadyImported)
-      .map((i) => i.productId);
-    setSelected(new Set(newIds));
+  const selectAllNew = async () => {
+    setSelectingAll(true);
+    try {
+      const result = await adminService.getAllNewOzonProductIds(activeStoreId);
+      setSelected(new Set(result.productIds));
+      setTotal(result.total);
+    } catch {
+      Alert.alert('Ошибка', 'Не удалось загрузить список товаров');
+    } finally {
+      setSelectingAll(false);
+    }
   };
+
+  const IMPORT_BATCH = 200;
 
   const handleImport = async () => {
     if (selected.size === 0) return;
@@ -104,14 +118,27 @@ export default function ImportFromOzonScreen() {
           text: 'Импортировать',
           onPress: async () => {
             setImporting(true);
+            const ids = Array.from(selected);
+            let totalImported = 0;
+            let totalSkipped = 0;
+            let totalFailed = 0;
+            setImportProgress({ done: 0, total: ids.length });
+
             try {
-              const result = await adminService.importOzonProducts({
-                productIds: Array.from(selected),
-                storeId: activeStoreId,
-              });
+              for (let i = 0; i < ids.length; i += IMPORT_BATCH) {
+                const batch = ids.slice(i, i + IMPORT_BATCH);
+                const result = await adminService.importOzonProducts({
+                  productIds: batch,
+                  storeId: activeStoreId,
+                });
+                totalImported += result.imported;
+                totalSkipped += result.skipped;
+                totalFailed += result.failed;
+                setImportProgress({ done: Math.min(i + IMPORT_BATCH, ids.length), total: ids.length });
+              }
               Alert.alert(
                 'Готово',
-                `Импортировано: ${result.imported}\nПропущено (уже в системе): ${result.skipped}\nОшибок: ${result.failed}`,
+                `Импортировано: ${totalImported}\nПропущено: ${totalSkipped}\nОшибок: ${totalFailed}`,
               );
               setSelected(new Set());
               loadItems(1, activeStoreId, true);
@@ -120,6 +147,7 @@ export default function ImportFromOzonScreen() {
               Alert.alert('Ошибка импорта', msg);
             } finally {
               setImporting(false);
+              setImportProgress(null);
             }
           },
         },
@@ -192,11 +220,14 @@ export default function ImportFromOzonScreen() {
       {!loading && (
         <View style={styles.statsRow}>
           <Text style={styles.statsText}>
-            Всего на Озоне: {total} · В системе: {items.filter((i) => i.alreadyImported).length} · Выбрано: {selected.size}
+            Всего на Озоне: {total} · Новых: {items.filter((i) => !i.alreadyImported).length}{items.length < total ? '+' : ''} · Выбрано: {selected.size}
           </Text>
           {items.some((i) => !i.alreadyImported) && (
-            <TouchableOpacity onPress={selectAllNew}>
-              <Text style={styles.selectAllText}>Выбрать все новые</Text>
+            <TouchableOpacity onPress={selectAllNew} disabled={selectingAll}>
+              {selectingAll
+                ? <ActivityIndicator size="small" color="#1976D2" />
+                : <Text style={styles.selectAllText}>Выбрать все новые</Text>
+              }
             </TouchableOpacity>
           )}
         </View>
@@ -239,7 +270,11 @@ export default function ImportFromOzonScreen() {
             disabled={importing}
           >
             {importing ? (
-              <ActivityIndicator color="#fff" />
+              <Text style={styles.importBtnText}>
+                {importProgress
+                  ? `Импорт... ${importProgress.done} / ${importProgress.total}`
+                  : 'Подготовка...'}
+              </Text>
             ) : (
               <Text style={styles.importBtnText}>
                 Импортировать выбранные ({selected.size})

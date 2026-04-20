@@ -176,6 +176,12 @@ export const adminService = {
     return data.expiresAt;
   },
 
+  async getAllNewOzonProductIds(storeId?: string): Promise<{ productIds: number[]; total: number }> {
+    const params = storeId ? `?storeId=${storeId}` : '';
+    const { data } = await api.get(`/ozon/import/new-ids${params}`);
+    return data;
+  },
+
   async getOzonProductsForImport(
     storeId?: string,
     page = 1,

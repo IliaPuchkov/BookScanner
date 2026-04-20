@@ -425,6 +425,41 @@ export class OzonService {
     };
   }
 
+  async getAllNewProductIds(storeId?: string): Promise<{ productIds: number[]; total: number }> {
+    const credentials = storeId
+      ? await this.ozonApiClient.getCredentialsForStore(storeId)
+      : await this.ozonApiClient.getCredentials();
+    if (!credentials) throw new BadRequestException('Ozon API не настроен.');
+
+    // Single full traversal of Ozon product list
+    const allItems: Array<{ product_id: number; offer_id: string }> = [];
+    let lastId = '';
+    do {
+      const result = await this.ozonApiClient.getProductList(storeId, lastId, 1000);
+      allItems.push(...result.items);
+      lastId = result.last_id;
+      if (!lastId || result.items.length < 1000) break;
+    } while (true);
+
+    if (!allItems.length) return { productIds: [], total: 0 };
+
+    // Check which offer_ids already exist in DB
+    const offerIds = [...new Set(allItems.map((i) => i.offer_id))];
+    const existing = await this.bookRepository.find({
+      where: offerIds.map((sku) => ({ sku })),
+      select: ['sku'],
+    });
+    const existingSkus = new Set(existing.map((b) => b.sku));
+
+    const newItems = allItems.filter(
+      (item, idx, arr) =>
+        !existingSkus.has(item.offer_id) &&
+        arr.findIndex((x) => x.offer_id === item.offer_id) === idx, // deduplicate
+    );
+
+    return { productIds: newItems.map((i) => i.product_id), total: allItems.length };
+  }
+
   async listImportableProducts(
     storeId?: string,
     page = 1,
@@ -565,6 +600,8 @@ export class OzonService {
         skipped++;
         continue;
       }
+      // Track within this import run to handle duplicate offer_ids from Ozon pagination
+      existingSkus.add(ozonProduct.offer_id);
 
       try {
         const data = mapOzonProductToBook(ozonProduct);

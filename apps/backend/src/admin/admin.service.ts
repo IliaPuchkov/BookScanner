@@ -49,8 +49,8 @@ export class AdminService {
     miniPagination.limit = 1;
 
     const [cardsToday, cardsPeriod, perUserRaw, usersResult, totalCards, pendingReviewCount, totalAdmins, totalOperators] = await Promise.all([
-      this.booksService.countCreatedSince(startOfToday, endOfToday),
-      this.booksService.countCreatedSince(periodStart, periodEnd),
+      this.booksService.countCreatedSince(startOfToday, endOfToday, true),
+      this.booksService.countCreatedSince(periodStart, periodEnd, true),
       this.booksService.getPerUserBookCounts(periodStart, periodEnd, includeActiveSessions),
       this.usersService.findAll(miniPagination),
       this.booksService.countCreatedSince(),

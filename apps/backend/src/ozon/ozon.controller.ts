@@ -80,6 +80,13 @@ export class OzonController {
 
   // ─── Import from Ozon ─────────────────────────────────────────────────────
 
+  @Get('import/new-ids')
+  @Roles(UserRole.ADMIN)
+  @ApiOperation({ summary: 'Получить все незаимпортированные product_id одним запросом' })
+  getAllNewProductIds(@Query('storeId') storeId?: string) {
+    return this.ozonService.getAllNewProductIds(storeId);
+  }
+
   @Get('import/list')
   @Roles(UserRole.ADMIN)
   @ApiOperation({ summary: 'Список товаров магазина на Ozon для импорта' })
