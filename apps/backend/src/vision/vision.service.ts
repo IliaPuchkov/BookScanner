@@ -1,5 +1,4 @@
 import { Injectable, Logger, Inject } from "@nestjs/common";
-import sharp from 'sharp';
 import { InjectQueue } from "@nestjs/bullmq";
 import { Queue } from "bullmq";
 import { VISION_QUEUE, VISION_JOBS } from "./vision.constants";
@@ -113,18 +112,14 @@ export class VisionService {
       const extractor = new GeminiVisionExtractor(apiKey);
 
       const availablePhotos = photos.slice(0, 4).filter(Boolean);
-      const imageBuffers = await Promise.all(
-        availablePhotos.map(async (p) => {
-          const raw = await this.storage.download(p.fileKey);
-          const resized = await sharp(raw)
-            .resize(1024, 1024, { fit: 'inside', withoutEnlargement: true })
-            .jpeg({ quality: 85 })
-            .toBuffer();
-          return { buffer: resized, mimeType: 'image/jpeg' as const };
-        }),
+      const imageUrls = await Promise.all(
+        availablePhotos.map((p) => this.storage.getSignedUrl(p.fileKey, 300)),
       );
 
-      const result = await extractor.extractBookData(imageBuffers, prompt);
+      const result = await extractor.extractBookData(
+        imageUrls.map((url) => ({ url })),
+        prompt,
+      );
       const extractedData = applyDefaults(result);
 
       ocrResult.photo01Extraction = (availablePhotos[0] ? result : null) as unknown as Record<string, unknown>;
@@ -226,7 +221,7 @@ export class VisionService {
 - paperType (тип бумаги)
 - coverType (тип обложки)
 - pageCount (количество страниц)
-- annotation (аннотация)
+- annotation (аннотация книги — не более 500 символов)
 - price (цена книги в рублях на Озоне (ozon.ru) или на аналогичных маркетплейсах - найди актуальную рыночную цену б/у экземпляра этой книги исходя из isbn, названия и автора; верни число без валюты)
 - hashtags (массив хэштегов для маркетплейса Озон. Правила:
   - язык: русский

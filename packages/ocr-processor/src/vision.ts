@@ -96,12 +96,12 @@ export class GeminiVisionExtractor {
   }
 
   async extractBookData(
-    images: Array<{ buffer: Buffer; mimeType: 'image/jpeg' | 'image/png' }>,
+    images: Array<{ url: string }>,
     prompt: string,
   ): Promise<IExtractionResult> {
-    const imageContents = images.map(({ buffer, mimeType }) => ({
+    const imageContents = images.map(({ url }) => ({
       type: 'image_url' as const,
-      image_url: { url: `data:${mimeType};base64,${buffer.toString('base64')}` },
+      image_url: { url },
     }));
 
     const response = await this.client.chat.completions.create({
@@ -112,7 +112,7 @@ export class GeminiVisionExtractor {
           content: [{ type: 'text', text: prompt }, ...imageContents],
         },
       ],
-      max_tokens: 4000,
+      max_tokens: 6000,
     });
 
     const choice = response.choices[0];
