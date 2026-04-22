@@ -240,7 +240,7 @@ export const adminService = {
 
   async getSyncDiff(storeId?: string): Promise<{
     counts: { ozonActive: number; ozonArchived: number; systemPublished: number; systemArchived: number };
-    onOzonNotInSystem: Array<{ productId: number; offerId: string; name: string; visibility: string }>;
+    onOzonNotInSystem: Array<{ productId: number; offerId: string; name: string; visibility: string; storeId: string | null }>;
     inSystemNotOnOzon: Array<{ bookId: string; sku: string; title: string; status: string }>;
   }> {
     const { data } = await api.get('/ozon/sync-diff', { params: storeId ? { storeId } : {} });

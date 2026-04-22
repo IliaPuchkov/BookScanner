@@ -839,7 +839,7 @@ export class OzonService {
 
   async getSyncDiff(storeId?: string): Promise<{
     counts: { ozonActive: number; ozonArchived: number; systemPublished: number; systemArchived: number };
-    onOzonNotInSystem: Array<{ productId: number; offerId: string; name: string; visibility: string }>;
+    onOzonNotInSystem: Array<{ productId: number; offerId: string; name: string; visibility: string; storeId: string | null }>;
     inSystemNotOnOzon: Array<{ bookId: string; sku: string; title: string; status: string }>;
   }> {
     const stores = storeId
@@ -847,8 +847,8 @@ export class OzonService {
       : await this.ozonApiClient.getAllStores();
     const storeIds: Array<string | null> = stores.length ? stores.map((s: { id: string }) => s.id) : [null];
 
-    const activeMap = new Map<string, { productId: number; offerId: string; name: string }>();
-    const archivedMap = new Map<string, { productId: number; offerId: string; name: string }>();
+    const activeMap = new Map<string, { productId: number; offerId: string; name: string; storeId: string | null }>();
+    const archivedMap = new Map<string, { productId: number; offerId: string; name: string; storeId: string | null }>();
 
     for (const sid of storeIds) {
       for (const visibility of ['ACTIVE', 'ARCHIVED'] as const) {
@@ -858,7 +858,9 @@ export class OzonService {
             const result = await this.ozonApiClient.getProductList(sid ?? undefined, lastId, 1000, visibility);
             for (const item of result.items) {
               const map = visibility === 'ACTIVE' ? activeMap : archivedMap;
-              if (!map.has(item.offer_id)) map.set(item.offer_id, { productId: item.product_id, offerId: item.offer_id, name: item.name });
+              if (!map.has(item.offer_id)) {
+                map.set(item.offer_id, { productId: item.product_id, offerId: item.offer_id, name: item.name, storeId: sid });
+              }
             }
             lastId = result.last_id;
             if (!lastId || result.items.length < 1000) break;
@@ -879,7 +881,7 @@ export class OzonService {
     const systemSkuSet = new Set(systemBooks.map((b) => b.sku));
     const allOzonOfferIds = new Set([...activeMap.keys(), ...archivedMap.keys()]);
 
-    const onOzonNotInSystem: Array<{ productId: number; offerId: string; name: string; visibility: string }> = [];
+    const onOzonNotInSystem: Array<{ productId: number; offerId: string; name: string; visibility: string; storeId: string | null }> = [];
     for (const [offerId, item] of activeMap) {
       if (!systemSkuSet.has(offerId)) onOzonNotInSystem.push({ ...item, visibility: 'ACTIVE' });
     }
