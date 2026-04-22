@@ -97,6 +97,8 @@ export function SettingsScreen() {
   const [loadingSettings, setLoadingSettings] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [backfilling, setBackfilling] = useState(false);
+  const [resettingStuck, setResettingStuck] = useState(false);
+  const [repairing, setRepairing] = useState(false);
 
   // Maintenance settings
   const { refresh: refreshMaintenance } = useMaintenanceContext();
@@ -525,11 +527,11 @@ export function SettingsScreen() {
             </TouchableOpacity> */}
 
             {/* Reset stuck publications */}
-            {/* <TouchableOpacity
+            <TouchableOpacity
               style={styles.card}
               activeOpacity={0.75}
-              disabled={backfilling}
-              onPress={async () => {
+              disabled={resettingStuck}
+              onPress={() => {
                 Alert.alert(
                   "Сбросить зависшие публикации",
                   "Книги, которые больше 24 часов висят в статусе «Публикуется в Ozon» без результата, будут проверены. Найденные на Ozon — помечены как опубликованные, остальные — как ошибка публикации.",
@@ -538,7 +540,7 @@ export function SettingsScreen() {
                     {
                       text: "Запустить",
                       onPress: async () => {
-                        setBackfilling(true);
+                        setResettingStuck(true);
                         try {
                           const res = await adminService.resetStuckPublications();
                           if (res.checked === 0) {
@@ -552,7 +554,7 @@ export function SettingsScreen() {
                         } catch {
                           Alert.alert("Ошибка", "Не удалось выполнить сброс");
                         } finally {
-                          setBackfilling(false);
+                          setResettingStuck(false);
                         }
                       },
                     },
@@ -567,16 +569,61 @@ export function SettingsScreen() {
                     Исправить книги, застрявшие в статусе «Публикуется в Ozon» более 24 часов
                   </Text>
                 </View>
-                {backfilling ? (
+                {resettingStuck ? (
                   <ActivityIndicator size="small" color="#1976D2" />
                 ) : (
                   <Text style={{ fontSize: 20, color: "#1976D2" }}>›</Text>
                 )}
               </View>
-            </TouchableOpacity> */}
+            </TouchableOpacity>
+
+            {/* Repair failed publications */}
+            <TouchableOpacity
+              style={styles.card}
+              activeOpacity={0.75}
+              disabled={repairing}
+              onPress={() => {
+                Alert.alert(
+                  "Восстановить failed карточки",
+                  "Система проверит все карточки с ошибкой публикации и найдёт те, что реально опубликованы на Ozon. Они будут помечены как опубликованные.",
+                  [
+                    { text: "Отмена", style: "cancel" },
+                    {
+                      text: "Запустить",
+                      onPress: async () => {
+                        setRepairing(true);
+                        try {
+                          const res = await adminService.repairFailedPublications();
+                          Alert.alert("Запущено", res.message);
+                        } catch (e: any) {
+                          const msg = e?.response?.data?.message || e?.message || String(e);
+                          Alert.alert("Ошибка", msg);
+                        } finally {
+                          setRepairing(false);
+                        }
+                      },
+                    },
+                  ],
+                );
+              }}
+            >
+              <View style={[styles.sectionHeader, { marginBottom: 0 }]}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.sectionTitle}>Восстановить failed карточки</Text>
+                  <Text style={styles.sectionDesc}>
+                    Найти карточки с ошибкой публикации, которые реально опубликованы на Ozon
+                  </Text>
+                </View>
+                {repairing ? (
+                  <ActivityIndicator size="small" color="#1976D2" />
+                ) : (
+                  <Text style={{ fontSize: 20, color: "#1976D2" }}>›</Text>
+                )}
+              </View>
+            </TouchableOpacity>
 
             {/* Backfill store IDs */}
-            {/* <TouchableOpacity
+            <TouchableOpacity
               style={styles.card}
               activeOpacity={0.75}
               disabled={backfilling}
@@ -597,7 +644,10 @@ export function SettingsScreen() {
                             `Обновлено карточек: ${res.updated}\nПроверено магазинов: ${res.stores}`,
                           );
                         } catch {
-                          Alert.alert("Ошибка", "Не удалось выполнить привязку");
+                          Alert.alert(
+                            "Ошибка",
+                            "Не удалось выполнить привязку",
+                          );
                         } finally {
                           setBackfilling(false);
                         }
@@ -609,9 +659,12 @@ export function SettingsScreen() {
             >
               <View style={[styles.sectionHeader, { marginBottom: 0 }]}>
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.sectionTitle}>Привязать магазины к карточкам</Text>
+                  <Text style={styles.sectionTitle}>
+                    Привязать магазины к карточкам
+                  </Text>
                   <Text style={styles.sectionDesc}>
-                    Проставить магазин для карточек, опубликованных до добавления этой функции
+                    Проставить магазин для карточек, опубликованных до
+                    добавления этой функции
                   </Text>
                 </View>
                 {backfilling ? (
@@ -620,7 +673,7 @@ export function SettingsScreen() {
                   <Text style={{ fontSize: 20, color: "#1976D2" }}>›</Text>
                 )}
               </View>
-            </TouchableOpacity> */}
+            </TouchableOpacity>
 
             {/* Max photos setting */}
             <View style={styles.card}>

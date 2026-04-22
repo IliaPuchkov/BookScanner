@@ -61,14 +61,34 @@ export class VisionService {
     private readonly extractionQueue: Queue,
   ) {}
 
+  private readonly JOB_OPTS = {
+    removeOnComplete: 100,
+    removeOnFail: 200,
+    attempts: 3,
+    backoff: { type: 'exponential' as const, delay: 3000 },
+  };
+
+  async queueExtraction(bookId: string): Promise<{ queued: number }> {
+    let ocrResult = await this.ocrResultRepository.findOne({ where: { bookId } });
+    if (!ocrResult) {
+      ocrResult = this.ocrResultRepository.create({ bookId, status: 'pending' });
+    } else {
+      ocrResult.status = 'pending';
+      ocrResult.errorMessage = null as any;
+    }
+    await this.ocrResultRepository.save(ocrResult);
+
+    await this.extractionQueue.add(VISION_JOBS.EXTRACT_BOOK, { bookId }, this.JOB_OPTS);
+    return { queued: 1 };
+  }
+
   async queueBulkExtraction(bookIds: string[]): Promise<{ queued: number }> {
     const jobs = bookIds.map((bookId) => ({
       name: VISION_JOBS.EXTRACT_BOOK,
       data: { bookId },
-      opts: { removeOnComplete: 100, removeOnFail: 200 },
+      opts: this.JOB_OPTS,
     }));
 
-    // Сбрасываем статус всех книг в 'pending' перед постановкой в очередь
     await this.ocrResultRepository
       .createQueryBuilder()
       .update()
@@ -113,7 +133,7 @@ export class VisionService {
 
       const availablePhotos = photos.slice(0, 4).filter(Boolean);
       const imageUrls = await Promise.all(
-        availablePhotos.map((p) => this.storage.getSignedUrl(p.fileKey, 300)),
+        availablePhotos.map((p) => this.storage.getSignedUrl(p.fileKey, 3600)),
       );
 
       const result = await extractor.extractBookData(

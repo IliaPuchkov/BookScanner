@@ -29,8 +29,8 @@ ssh "$SSH_USER@$SERVER_IP" bash << EOF
   cd $REMOTE_DIR
 
   # Build and restart
-  docker compose -f docker/docker-compose.prod.yml --env-file docker/.env build --no-cache backend
-  docker compose -f docker/docker-compose.prod.yml --env-file docker/.env up -d --force-recreate backend
+  docker compose -f docker/docker-compose.prod.yml --env-file docker/.env build backend
+  docker compose -f docker/docker-compose.prod.yml --env-file docker/.env up -d --force-recreate backend nginx
   docker compose -f docker/docker-compose.prod.yml --env-file docker/.env up -d
 
   echo "==> Done. Containers:"

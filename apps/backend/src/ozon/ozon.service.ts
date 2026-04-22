@@ -168,7 +168,7 @@ export class OzonService {
           const offerId = ozonProduct.publishPayload?.items?.[0]?.offer_id as string | undefined;
           if (offerId) {
             try {
-              const found = await this.ozonApiClient.findProductByOfferId(offerId);
+              const found = await this.ozonApiClient.findProductByOfferId(offerId, ozonProduct.storeId ?? undefined);
               if (found?.product_id) {
                 ozonProduct.ozonProductId = String(found.product_id);
                 ozonProduct.status = 'published';
@@ -217,7 +217,7 @@ export class OzonService {
           const offerId = ozonProduct.publishPayload?.items?.[0]?.offer_id as string | undefined;
           if (offerId) {
             try {
-              const found = await this.ozonApiClient.findProductByOfferId(offerId);
+              const found = await this.ozonApiClient.findProductByOfferId(offerId, ozonProduct.storeId ?? undefined);
               if (found?.product_id) {
                 ozonProduct.ozonProductId = String(found.product_id);
                 ozonProduct.status = 'published';
@@ -229,9 +229,7 @@ export class OzonService {
                 this.logger.log(`Book ${bookId}: task expired, product found by offer_id=${offerId}, product_id=${found.product_id}`);
                 return { status: 'published', message: 'Загружено в Ozon' };
               }
-            } catch {
-              // Товар тоже не найден — задача истекла без создания
-            }
+            } catch { /* not found */ }
           }
           ozonProduct.status = 'failed';
           ozonProduct.errorMessage = `Task ${ozonProduct.taskId} expired: product not found on Ozon`;
@@ -257,8 +255,7 @@ export class OzonService {
     if (pending.length === 0) return;
     this.logger.log(`Checking ${pending.length} pending Ozon products`);
 
-    // Группируем по taskId — один bulk-таск может покрывать много книг,
-    // не делаем дублирующих запросов к Ozon для одного и того же taskId
+    // Group by taskId — one bulk task covers many books, fetch import info once per task
     const byTask = new Map<string, typeof pending>();
     for (const product of pending) {
       const key = product.taskId != null ? String(product.taskId) : `no-task-${product.bookId}`;
@@ -266,18 +263,83 @@ export class OzonService {
       byTask.get(key)!.push(product);
     }
 
-    for (const [, group] of byTask) {
-      // checkStatus уже обрабатывает каждую книгу индивидуально,
-      // но первый вызов в группе делает реальный запрос к Ozon,
-      // остальные — просто обновляют статус по тем же данным
+    for (const [taskKey, group] of byTask) {
+      if (taskKey.startsWith('no-task-')) {
+        for (const product of group) {
+          try { await this.checkStatus(product.bookId); } catch (e) {
+            this.logger.error(`Error checking status for book ${product.bookId}`, e);
+          }
+        }
+        continue;
+      }
+
+      const taskId = Number(taskKey);
+      let items: Awaited<ReturnType<typeof this.ozonApiClient.getImportInfo>> | null = null;
+      let taskExpired = false;
+
+      try {
+        items = await this.ozonApiClient.getImportInfo(taskId);
+      } catch (error) {
+        if (error instanceof OzonApiError && error.statusCode === 404) {
+          taskExpired = true;
+        } else {
+          this.logger.error(`Error fetching import info for task ${taskId}`, error);
+          continue;
+        }
+      }
+
       for (const product of group) {
         try {
-          await this.checkStatus(product.bookId);
+          const offerId = product.publishPayload?.items?.[0]?.offer_id as string | undefined;
+
+          if (taskExpired) {
+            if (offerId) {
+              const found = await this.ozonApiClient.findProductByOfferId(offerId, product.storeId ?? undefined);
+              if (found?.product_id) {
+                product.ozonProductId = String(found.product_id);
+                product.status = 'published';
+                await this.ozonProductRepository.save(product);
+                await this.booksService.updateFromExtraction(product.bookId, { status: BookStatus.PUBLISHED, publishedToOzon: new Date() });
+                this.logger.log(`Book ${product.bookId}: task expired, found on Ozon product_id=${found.product_id}`);
+                continue;
+              }
+            }
+            product.status = 'failed';
+            product.errorMessage = `Task ${taskId} expired: product not found on Ozon`;
+            await this.ozonProductRepository.save(product);
+            await this.booksService.updateFromExtraction(product.bookId, { status: BookStatus.PUBLICATION_FAILED });
+            this.logger.warn(`Book ${product.bookId}: task ${taskId} expired, product not found`);
+            continue;
+          }
+
+          const item = items!.find((i) => i.offer_id === offerId);
+
+          if (!item) {
+            if (offerId) {
+              const found = await this.ozonApiClient.findProductByOfferId(offerId, product.storeId ?? undefined);
+              if (found?.product_id) {
+                product.ozonProductId = String(found.product_id);
+                product.status = 'published';
+                await this.ozonProductRepository.save(product);
+                await this.booksService.updateFromExtraction(product.bookId, { status: BookStatus.PUBLISHED, publishedToOzon: new Date() });
+              }
+            }
+          } else if (item.status === 'imported') {
+            product.ozonProductId = String(item.product_id);
+            product.status = 'published';
+            await this.ozonProductRepository.save(product);
+            await this.booksService.updateFromExtraction(product.bookId, { status: BookStatus.PUBLISHED, publishedToOzon: new Date() });
+            this.logger.log(`Book ${product.bookId}: imported to Ozon, product_id=${item.product_id}`);
+          } else if (item.status === 'failed') {
+            const errorMsg = item.errors?.map((e) => e.message).join('; ') || 'Import failed';
+            product.status = 'failed';
+            product.errorMessage = errorMsg;
+            await this.ozonProductRepository.save(product);
+            await this.booksService.updateFromExtraction(product.bookId, { status: BookStatus.PUBLICATION_FAILED });
+            this.logger.warn(`Book ${product.bookId}: import failed — ${errorMsg}`);
+          }
         } catch (error) {
-          this.logger.error(
-            `Error checking status for book ${product.bookId}`,
-            error,
-          );
+          this.logger.error(`Error processing book ${product.bookId} in task ${taskId}`, error);
         }
       }
     }
@@ -671,6 +733,58 @@ export class OzonService {
     };
   }
 
+  /**
+   * Проходит по всем ozon_products со статусом 'failed' и offer_id в publishPayload.
+   * Если товар найден на Ozon (по любому магазину) — помечает как published.
+   */
+  async repairFailedPublications(): Promise<{ checked: number; published: number; skipped: number }> {
+    this.logger.log('repairFailedPublications: started');
+    const failed = await this.ozonProductRepository
+      .createQueryBuilder('op')
+      .where('op.status = :status', { status: 'failed' })
+      .getMany();
+    this.logger.log(`repairFailedPublications: found ${failed.length} failed records`);
+
+    const withOfferId = failed.filter(
+      (op) => op.publishPayload?.items?.[0]?.offer_id,
+    );
+
+    if (!withOfferId.length) {
+      return { checked: 0, published: 0, skipped: 0 };
+    }
+
+    let published = 0;
+    let skipped = 0;
+
+    const allStores = await this.ozonApiClient.getAllStores();
+
+    for (const op of withOfferId) {
+      const offerId = (op.publishPayload as any).items[0].offer_id as string;
+      try {
+        const found = await this.findProductByOfferIdWithFallback(offerId, op.storeId, allStores);
+        if (found?.product_id) {
+          op.ozonProductId = String(found.product_id);
+          op.status = 'published';
+          if (found.storeId) op.storeId = found.storeId;
+          await this.ozonProductRepository.save(op);
+          await this.booksService.updateFromExtraction(op.bookId, {
+            status: BookStatus.PUBLISHED,
+            publishedToOzon: new Date(),
+          });
+          published++;
+          this.logger.log(`repairFailedPublications: book ${op.bookId} offer_id=${offerId} found on Ozon, product_id=${found.product_id}`);
+        } else {
+          skipped++;
+        }
+      } catch {
+        skipped++;
+      }
+    }
+
+    this.logger.log(`repairFailedPublications: checked=${withOfferId.length}, published=${published}, skipped=${skipped}`);
+    return { checked: withOfferId.length, published, skipped };
+  }
+
   async priceLookup(query: string) {
     this.logger.log(`Price lookup: ${query}`);
     return {
@@ -679,6 +793,33 @@ export class OzonService {
       results: [],
       message: 'Поиск цен будет реализован при интеграции с Ozon API',
     };
+  }
+
+
+  private async findProductByOfferIdWithFallback(
+    offerId: string,
+    storeId: string | null,
+    allStores: Array<{ id: string }>,
+  ): Promise<{ product_id: number; storeId?: string } | null> {
+    const storeIds = storeId
+      ? [storeId, ...allStores.map((s) => s.id).filter((id) => id !== storeId)]
+      : allStores.map((s) => s.id);
+
+    for (const id of storeIds) {
+      try {
+        const found = await this.ozonApiClient.findProductByOfferId(offerId, id);
+        if (found?.product_id) return { product_id: found.product_id, storeId: id };
+      } catch { /* try next */ }
+    }
+
+    if (!storeIds.length) {
+      try {
+        const found = await this.ozonApiClient.findProductByOfferId(offerId);
+        if (found?.product_id) return { product_id: found.product_id };
+      } catch { /* not found */ }
+    }
+
+    return null;
   }
 
   private getStatusMessage(status: string): string {

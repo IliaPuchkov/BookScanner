@@ -105,7 +105,7 @@ export class GeminiVisionExtractor {
     }));
 
     const response = await this.client.chat.completions.create({
-      model: 'google/gemini-2.0-flash-001',
+      model: 'google/gemini-2.0-flash-lite-001',
       messages: [
         {
           role: 'user',
@@ -116,11 +116,20 @@ export class GeminiVisionExtractor {
     });
 
     const choice = response.choices[0];
-    const raw = choice?.message?.content ?? '{}';
+    const raw = choice?.message?.content || '';
     const cleaned = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim();
-    if (choice?.finish_reason === 'length') {
-      throw new Error('AI response truncated (max_tokens exceeded). Partial JSON discarded.');
+    if (!cleaned) {
+      console.error('[GeminiVisionExtractor] Empty response from AI, finish_reason:', choice?.finish_reason);
+      throw new Error('AI returned empty response. Possibly image URL expired or inaccessible.');
     }
-    return JSON.parse(cleaned) as IExtractionResult;
+    try {
+      return JSON.parse(cleaned) as IExtractionResult;
+    } catch (err) {
+      console.error('[GeminiVisionExtractor] JSON parse failed');
+      console.error('[GeminiVisionExtractor] finish_reason:', choice?.finish_reason);
+      console.error('[GeminiVisionExtractor] raw response length:', raw.length);
+      console.error('[GeminiVisionExtractor] raw response:\n', raw);
+      throw err;
+    }
   }
 }

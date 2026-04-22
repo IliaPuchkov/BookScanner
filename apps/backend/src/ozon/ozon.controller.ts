@@ -125,6 +125,17 @@ export class OzonController {
     return this.ozonService.resetStuckPublications();
   }
 
+  @Post('repair-failed-publications')
+  @Roles(UserRole.ADMIN)
+  @ApiOperation({ summary: 'Найти на Ozon карточки, помеченные как ошибка, но реально опубликованные' })
+  repairFailedPublications() {
+    // Fire-and-forget — may take minutes for large datasets
+    this.ozonService.repairFailedPublications().catch((e) =>
+      this.ozonApiClient['logger']?.error('repairFailedPublications background error', e),
+    );
+    return { message: 'Запущено в фоне. Результат появится в логах сервера.' };
+  }
+
   // ─── Ozon Store Management ───────────────────────────────────────────────
 
   @Get('stores')

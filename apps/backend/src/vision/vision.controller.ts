@@ -16,7 +16,7 @@ export class VisionController {
   @Post('extract')
   @ApiOperation({ summary: 'Извлечь данные из фотографий книги' })
   extract(@Body() dto: ExtractDto) {
-    return this.visionService.extractBookData(dto.bookId);
+    return this.visionService.queueExtraction(dto.bookId);
   }
 
   @Get('result/:bookId')
