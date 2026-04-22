@@ -27,6 +27,8 @@ function getStatusConfig(status: BookStatus): { color: string; label: string } {
       return { color: "#1976D2", label: "Загружается в Ozon" };
     case BookStatus.PUBLICATION_FAILED:
       return { color: "#E53935", label: "Ошибка публикации" };
+    case BookStatus.ARCHIVED:
+      return { color: "#757575", label: "В архиве" };
     case BookStatus.PENDING_REVIEW:
     default:
       return { color: "#FB8C00", label: "Ожидает проверки администратора" };

@@ -83,8 +83,13 @@ export class OzonController {
   @Get('import/new-ids')
   @Roles(UserRole.ADMIN)
   @ApiOperation({ summary: 'Получить все незаимпортированные product_id одним запросом' })
-  getAllNewProductIds(@Query('storeId') storeId?: string) {
-    return this.ozonService.getAllNewProductIds(storeId);
+  @ApiQuery({ name: 'storeId', required: false })
+  @ApiQuery({ name: 'visibility', required: false })
+  getAllNewProductIds(
+    @Query('storeId') storeId?: string,
+    @Query('visibility') visibility?: string,
+  ) {
+    return this.ozonService.getAllNewProductIds(storeId, visibility);
   }
 
   @Get('import/list')
@@ -93,12 +98,14 @@ export class OzonController {
   @ApiQuery({ name: 'storeId', required: false })
   @ApiQuery({ name: 'page', required: false, type: Number })
   @ApiQuery({ name: 'limit', required: false, type: Number })
+  @ApiQuery({ name: 'visibility', required: false })
   listImportableProducts(
     @Query('storeId') storeId?: string,
     @Query('page', new DefaultValuePipe(1), ParseIntPipe) page = 1,
     @Query('limit', new DefaultValuePipe(50), ParseIntPipe) limit = 50,
+    @Query('visibility') visibility?: string,
   ) {
-    return this.ozonService.listImportableProducts(storeId, page, limit);
+    return this.ozonService.listImportableProducts(storeId, page, limit, visibility);
   }
 
   @Post('import')
@@ -108,7 +115,7 @@ export class OzonController {
     @Body() dto: ImportOzonDto,
     @CurrentUser() user: { id: string },
   ) {
-    return this.ozonService.importProducts(dto.productIds, user.id, dto.storeId);
+    return this.ozonService.importProducts(dto.productIds, user.id, dto.storeId, dto.isArchived);
   }
 
   @Post('backfill-store-ids')
@@ -123,6 +130,24 @@ export class OzonController {
   @ApiOperation({ summary: 'Сбросить книги, зависшие в статусе "Публикуется в Ozon" > 24ч' })
   resetStuckPublications() {
     return this.ozonService.resetStuckPublications();
+  }
+
+  @Post('sync-archived-status')
+  @Roles(UserRole.ADMIN)
+  @ApiOperation({ summary: 'Синхронизировать статус архивации товаров на Ozon' })
+  syncArchivedStatus() {
+    this.ozonService.syncArchivedStatus().catch((e) =>
+      this.ozonApiClient['logger']?.error('syncArchivedStatus background error', e),
+    );
+    return { message: 'Запущено в фоне. Результат появится в логах сервера.' };
+  }
+
+  @Get('sync-diff')
+  @Roles(UserRole.ADMIN)
+  @ApiOperation({ summary: 'Сравнить товары на Ozon с книгами в системе' })
+  @ApiQuery({ name: 'storeId', required: false })
+  getSyncDiff(@Query('storeId') storeId?: string) {
+    return this.ozonService.getSyncDiff(storeId);
   }
 
   @Post('repair-failed-publications')

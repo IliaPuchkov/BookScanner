@@ -48,6 +48,13 @@ export interface OzonProductListItem {
   name: string;
 }
 
+export interface OzonProductArchiveInfo {
+  id: number;
+  offer_id: string;
+  is_archived: boolean;
+  is_autoarchived: boolean;
+}
+
 export interface OzonProductAttribute {
   id: number;
   complex_id: number;
@@ -227,6 +234,7 @@ export class OzonApiClient {
     storeId?: string,
     lastId = '',
     limit = 100,
+    visibility?: string,
   ): Promise<{ items: OzonProductListItem[]; last_id: string; total: number }> {
     const credentials = storeId
       ? await this.getCredentialsForStore(storeId)
@@ -235,10 +243,27 @@ export class OzonApiClient {
       result: { items: OzonProductListItem[]; last_id: string; total: number };
     }>(
       '/v3/product/list',
-      { filter: {}, last_id: lastId, limit },
+      { filter: visibility ? { visibility } : {}, last_id: lastId, limit },
       credentials,
     );
     return response.result;
+  }
+
+  async getProductInfoList(
+    productIds: number[],
+    storeId?: string,
+  ): Promise<OzonProductArchiveInfo[]> {
+    const credentials = storeId
+      ? await this.getCredentialsForStore(storeId)
+      : await this.getCredentials();
+    const response = await this.post<{
+      result: { items: OzonProductArchiveInfo[] };
+    }>(
+      '/v3/product/info/list',
+      { product_id: productIds },
+      credentials,
+    );
+    return response.result?.items ?? [];
   }
 
   async findProductByOfferId(

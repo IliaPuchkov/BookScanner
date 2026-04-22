@@ -13,4 +13,10 @@ export class OzonStatusCron {
     this.logger.debug('Running Ozon status check cron');
     await this.ozonService.checkAllPendingStatuses();
   }
+
+  @Cron(CronExpression.EVERY_DAY_AT_2AM)
+  async handleArchivedSync() {
+    this.logger.debug('Running Ozon archived status sync cron');
+    await this.ozonService.syncArchivedStatus();
+  }
 }

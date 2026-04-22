@@ -99,6 +99,7 @@ export function SettingsScreen() {
   const [backfilling, setBackfilling] = useState(false);
   const [resettingStuck, setResettingStuck] = useState(false);
   const [repairing, setRepairing] = useState(false);
+  const [syncingArchived, setSyncingArchived] = useState(false);
 
   // Maintenance settings
   const { refresh: refreshMaintenance } = useMaintenanceContext();
@@ -509,6 +510,24 @@ export function SettingsScreen() {
               </View>
             </TouchableOpacity>
 
+            {/* Ozon sync diff */}
+            <TouchableOpacity
+              style={styles.card}
+              activeOpacity={0.75}
+              onPress={() => navigation.navigate("OzonSync")}
+            >
+              <View style={[styles.sectionHeader, { marginBottom: 0 }]}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.sectionTitle}>Сверка с Озоном</Text>
+                  <Text style={styles.sectionDesc}>
+                    Сравнение количества товаров на Ozon и в системе. Показывает
+                    расхождения по конкретным SKU.
+                  </Text>
+                </View>
+                <Text style={{ fontSize: 20, color: "#1976D2" }}>›</Text>
+              </View>
+            </TouchableOpacity>
+
             {/* Import from Ozon */}
             {/* <TouchableOpacity
               style={styles.card}
@@ -519,7 +538,8 @@ export function SettingsScreen() {
                 <View style={{ flex: 1 }}>
                   <Text style={styles.sectionTitle}>Импорт с Озона</Text>
                   <Text style={styles.sectionDesc}>
-                    Загрузить в систему товары, уже опубликованные в магазине на Озоне
+                    Загрузить в систему товары, уже опубликованные в магазине на
+                    Озоне
                   </Text>
                 </View>
                 <Text style={{ fontSize: 20, color: "#1976D2" }}>›</Text>
@@ -527,7 +547,7 @@ export function SettingsScreen() {
             </TouchableOpacity> */}
 
             {/* Reset stuck publications */}
-            <TouchableOpacity
+            {/* <TouchableOpacity
               style={styles.card}
               activeOpacity={0.75}
               disabled={resettingStuck}
@@ -542,9 +562,13 @@ export function SettingsScreen() {
                       onPress: async () => {
                         setResettingStuck(true);
                         try {
-                          const res = await adminService.resetStuckPublications();
+                          const res =
+                            await adminService.resetStuckPublications();
                           if (res.checked === 0) {
-                            Alert.alert("Готово", "Зависших публикаций не найдено");
+                            Alert.alert(
+                              "Готово",
+                              "Зависших публикаций не найдено",
+                            );
                           } else {
                             Alert.alert(
                               "Готово",
@@ -564,9 +588,12 @@ export function SettingsScreen() {
             >
               <View style={[styles.sectionHeader, { marginBottom: 0 }]}>
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.sectionTitle}>Сбросить зависшие публикации</Text>
+                  <Text style={styles.sectionTitle}>
+                    Сбросить зависшие публикации
+                  </Text>
                   <Text style={styles.sectionDesc}>
-                    Исправить книги, застрявшие в статусе «Публикуется в Ozon» более 24 часов
+                    Исправить книги, застрявшие в статусе «Публикуется в Ozon»
+                    более 24 часов
                   </Text>
                 </View>
                 {resettingStuck ? (
@@ -575,10 +602,10 @@ export function SettingsScreen() {
                   <Text style={{ fontSize: 20, color: "#1976D2" }}>›</Text>
                 )}
               </View>
-            </TouchableOpacity>
+            </TouchableOpacity> */}
 
             {/* Repair failed publications */}
-            <TouchableOpacity
+            {/* <TouchableOpacity
               style={styles.card}
               activeOpacity={0.75}
               disabled={repairing}
@@ -593,10 +620,14 @@ export function SettingsScreen() {
                       onPress: async () => {
                         setRepairing(true);
                         try {
-                          const res = await adminService.repairFailedPublications();
+                          const res =
+                            await adminService.repairFailedPublications();
                           Alert.alert("Запущено", res.message);
                         } catch (e: any) {
-                          const msg = e?.response?.data?.message || e?.message || String(e);
+                          const msg =
+                            e?.response?.data?.message ||
+                            e?.message ||
+                            String(e);
                           Alert.alert("Ошибка", msg);
                         } finally {
                           setRepairing(false);
@@ -609,9 +640,12 @@ export function SettingsScreen() {
             >
               <View style={[styles.sectionHeader, { marginBottom: 0 }]}>
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.sectionTitle}>Восстановить failed карточки</Text>
+                  <Text style={styles.sectionTitle}>
+                    Восстановить failed карточки
+                  </Text>
                   <Text style={styles.sectionDesc}>
-                    Найти карточки с ошибкой публикации, которые реально опубликованы на Ozon
+                    Найти карточки с ошибкой публикации, которые реально
+                    опубликованы на Ozon
                   </Text>
                 </View>
                 {repairing ? (
@@ -620,10 +654,10 @@ export function SettingsScreen() {
                   <Text style={{ fontSize: 20, color: "#1976D2" }}>›</Text>
                 )}
               </View>
-            </TouchableOpacity>
+            </TouchableOpacity> */}
 
             {/* Backfill store IDs */}
-            <TouchableOpacity
+            {/* <TouchableOpacity
               style={styles.card}
               activeOpacity={0.75}
               disabled={backfilling}
@@ -673,7 +707,56 @@ export function SettingsScreen() {
                   <Text style={{ fontSize: 20, color: "#1976D2" }}>›</Text>
                 )}
               </View>
-            </TouchableOpacity>
+            </TouchableOpacity> */}
+
+            {/* Sync archived status */}
+            {/* <TouchableOpacity
+              style={styles.card}
+              activeOpacity={0.75}
+              disabled={syncingArchived}
+              onPress={() => {
+                Alert.alert(
+                  "Синхронизировать архив Ozon",
+                  "Система проверит все опубликованные книги и отметит те, которые были заархивированы на Ozon.",
+                  [
+                    { text: "Отмена", style: "cancel" },
+                    {
+                      text: "Запустить",
+                      onPress: async () => {
+                        setSyncingArchived(true);
+                        try {
+                          const res = await adminService.syncArchivedStatus();
+                          Alert.alert("Запущено", res.message);
+                        } catch {
+                          Alert.alert(
+                            "Ошибка",
+                            "Не удалось запустить синхронизацию",
+                          );
+                        } finally {
+                          setSyncingArchived(false);
+                        }
+                      },
+                    },
+                  ],
+                );
+              }}
+            >
+              <View style={[styles.sectionHeader, { marginBottom: 0 }]}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.sectionTitle}>
+                    Синхронизировать архив Ozon
+                  </Text>
+                  <Text style={styles.sectionDesc}>
+                    Отметить книги, заархивированные на Ozon
+                  </Text>
+                </View>
+                {syncingArchived ? (
+                  <ActivityIndicator size="small" color="#1976D2" />
+                ) : (
+                  <Text style={{ fontSize: 20, color: "#1976D2" }}>›</Text>
+                )}
+              </View>
+            </TouchableOpacity> */}
 
             {/* Max photos setting */}
             <View style={styles.card}>

@@ -1,4 +1,4 @@
-import { IsArray, IsNumber, IsOptional, IsString } from 'class-validator';
+import { IsArray, IsBoolean, IsNumber, IsOptional, IsString } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class ImportOzonDto {
@@ -11,4 +11,9 @@ export class ImportOzonDto {
   @IsOptional()
   @IsString()
   storeId?: string;
+
+  @ApiPropertyOptional({ description: 'Импортировать как архивные (статус ARCHIVED вместо PUBLISHED)' })
+  @IsOptional()
+  @IsBoolean()
+  isArchived?: boolean;
 }

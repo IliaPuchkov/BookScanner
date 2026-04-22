@@ -487,7 +487,7 @@ export class OzonService {
     };
   }
 
-  async getAllNewProductIds(storeId?: string): Promise<{ productIds: number[]; total: number }> {
+  async getAllNewProductIds(storeId?: string, visibility?: string): Promise<{ productIds: number[]; total: number }> {
     const credentials = storeId
       ? await this.ozonApiClient.getCredentialsForStore(storeId)
       : await this.ozonApiClient.getCredentials();
@@ -497,7 +497,7 @@ export class OzonService {
     const allItems: Array<{ product_id: number; offer_id: string }> = [];
     let lastId = '';
     do {
-      const result = await this.ozonApiClient.getProductList(storeId, lastId, 1000);
+      const result = await this.ozonApiClient.getProductList(storeId, lastId, 1000, visibility);
       allItems.push(...result.items);
       lastId = result.last_id;
       if (!lastId || result.items.length < 1000) break;
@@ -526,6 +526,7 @@ export class OzonService {
     storeId?: string,
     page = 1,
     limit = 50,
+    visibility?: string,
   ): Promise<{
     items: Array<{
       productId: number;
@@ -556,7 +557,7 @@ export class OzonService {
 
     while (accumulated < skip + pageSize) {
       const batchSize = Math.min(100, skip + pageSize - accumulated);
-      const result = await this.ozonApiClient.getProductList(storeId, lastId, batchSize);
+      const result = await this.ozonApiClient.getProductList(storeId, lastId, batchSize, visibility);
       total = result.total;
 
       if (!result.items || result.items.length === 0) break;
@@ -599,6 +600,7 @@ export class OzonService {
     productIds: number[],
     adminUserId: string,
     storeId?: string,
+    isArchived = false,
   ): Promise<{
     total: number;
     imported: number;
@@ -688,7 +690,7 @@ export class OzonService {
           weightGross: data.weightGross,
           dimensions: data.dimensions || { width: 0, height: 35, depth: 0 },
           price: priceMap.get(ozonProduct.offer_id) ?? DEFAULT_PRICE,
-          status: BookStatus.PUBLISHED,
+          status: isArchived ? BookStatus.ARCHIVED : BookStatus.PUBLISHED,
           publishedToOzon: new Date(),
           boxId: importBox.id,
           createdById: adminUserId,
@@ -731,6 +733,56 @@ export class OzonService {
       failed: failedItems.length,
       failedItems,
     };
+  }
+
+  async syncArchivedStatus(): Promise<{ checked: number; archived: number }> {
+    this.logger.log('syncArchivedStatus: started');
+
+    const stores = await this.ozonApiClient.getAllStores();
+    const storeIds: Array<string | null> = stores.length ? stores.map((s) => s.id) : [null];
+
+    const archivedOfferIds = new Set<string>();
+    for (const storeId of storeIds) {
+      let lastId = '';
+      try {
+        do {
+          const result = await this.ozonApiClient.getProductList(storeId ?? undefined, lastId, 1000, 'ARCHIVED');
+          for (const item of result.items) archivedOfferIds.add(item.offer_id);
+          lastId = result.last_id;
+          if (!lastId || result.items.length < 1000) break;
+        } while (true);
+        this.logger.log(`syncArchivedStatus: store=${storeId} — ${archivedOfferIds.size} archived offer_ids total`);
+      } catch (err) {
+        this.logger.error(`syncArchivedStatus: failed to fetch archive for store ${storeId}`, err);
+      }
+    }
+
+    if (!archivedOfferIds.size) {
+      this.logger.log('syncArchivedStatus: no archived products found on Ozon');
+      return { checked: 0, archived: 0 };
+    }
+
+    const published = await this.ozonProductRepository
+      .createQueryBuilder('op')
+      .innerJoinAndSelect('op.book', 'book')
+      .where('op.status = :status', { status: 'published' })
+      .getMany();
+
+    this.logger.log(`syncArchivedStatus: checking ${published.length} published records against ${archivedOfferIds.size} archived offer_ids`);
+
+    let archived = 0;
+    for (const op of published) {
+      if (op.book?.sku && archivedOfferIds.has(op.book.sku)) {
+        op.status = 'archived';
+        await this.ozonProductRepository.save(op);
+        await this.booksService.updateFromExtraction(op.bookId, { status: BookStatus.ARCHIVED });
+        archived++;
+        this.logger.log(`syncArchivedStatus: book ${op.bookId} sku=${op.book.sku} archived`);
+      }
+    }
+
+    this.logger.log(`syncArchivedStatus: checked=${published.length}, archived=${archived}`);
+    return { checked: published.length, archived };
   }
 
   /**
@@ -783,6 +835,72 @@ export class OzonService {
 
     this.logger.log(`repairFailedPublications: checked=${withOfferId.length}, published=${published}, skipped=${skipped}`);
     return { checked: withOfferId.length, published, skipped };
+  }
+
+  async getSyncDiff(storeId?: string): Promise<{
+    counts: { ozonActive: number; ozonArchived: number; systemPublished: number; systemArchived: number };
+    onOzonNotInSystem: Array<{ productId: number; offerId: string; name: string; visibility: string }>;
+    inSystemNotOnOzon: Array<{ bookId: string; sku: string; title: string; status: string }>;
+  }> {
+    const stores = storeId
+      ? [{ id: storeId }]
+      : await this.ozonApiClient.getAllStores();
+    const storeIds: Array<string | null> = stores.length ? stores.map((s: { id: string }) => s.id) : [null];
+
+    const activeMap = new Map<string, { productId: number; offerId: string; name: string }>();
+    const archivedMap = new Map<string, { productId: number; offerId: string; name: string }>();
+
+    for (const sid of storeIds) {
+      for (const visibility of ['ACTIVE', 'ARCHIVED'] as const) {
+        let lastId = '';
+        try {
+          do {
+            const result = await this.ozonApiClient.getProductList(sid ?? undefined, lastId, 1000, visibility);
+            for (const item of result.items) {
+              const map = visibility === 'ACTIVE' ? activeMap : archivedMap;
+              if (!map.has(item.offer_id)) map.set(item.offer_id, { productId: item.product_id, offerId: item.offer_id, name: item.name });
+            }
+            lastId = result.last_id;
+            if (!lastId || result.items.length < 1000) break;
+          } while (true);
+        } catch (err) {
+          this.logger.warn(`getSyncDiff: failed to fetch ${visibility} for store ${sid}`, err);
+        }
+      }
+    }
+
+    const systemBooks = await this.bookRepository
+      .createQueryBuilder('book')
+      .where('book.status IN (:...statuses)', { statuses: [BookStatus.PUBLISHED, BookStatus.ARCHIVED] })
+      .andWhere('book.sku IS NOT NULL')
+      .select(['book.id', 'book.sku', 'book.title', 'book.status'])
+      .getMany();
+
+    const systemSkuSet = new Set(systemBooks.map((b) => b.sku));
+    const allOzonOfferIds = new Set([...activeMap.keys(), ...archivedMap.keys()]);
+
+    const onOzonNotInSystem: Array<{ productId: number; offerId: string; name: string; visibility: string }> = [];
+    for (const [offerId, item] of activeMap) {
+      if (!systemSkuSet.has(offerId)) onOzonNotInSystem.push({ ...item, visibility: 'ACTIVE' });
+    }
+    for (const [offerId, item] of archivedMap) {
+      if (!systemSkuSet.has(offerId)) onOzonNotInSystem.push({ ...item, visibility: 'ARCHIVED' });
+    }
+
+    const inSystemNotOnOzon = systemBooks
+      .filter((b) => !allOzonOfferIds.has(b.sku))
+      .map((b) => ({ bookId: b.id, sku: b.sku, title: b.title, status: b.status }));
+
+    return {
+      counts: {
+        ozonActive: activeMap.size,
+        ozonArchived: archivedMap.size,
+        systemPublished: systemBooks.filter((b) => b.status === BookStatus.PUBLISHED).length,
+        systemArchived: systemBooks.filter((b) => b.status === BookStatus.ARCHIVED).length,
+      },
+      onOzonNotInSystem,
+      inSystemNotOnOzon,
+    };
   }
 
   async priceLookup(query: string) {

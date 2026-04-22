@@ -29,6 +29,7 @@ export enum BookStatus {
   PENDING_PUBLICATION = "pending_publication",
   PUBLISHED = "published",
   PUBLICATION_FAILED = "publication_failed",
+  ARCHIVED = "archived",
 }
 
 export interface IBookCard {

@@ -176,9 +176,8 @@ export const adminService = {
     return data.expiresAt;
   },
 
-  async getAllNewOzonProductIds(storeId?: string): Promise<{ productIds: number[]; total: number }> {
-    const params = storeId ? `?storeId=${storeId}` : '';
-    const { data } = await api.get(`/ozon/import/new-ids${params}`);
+  async getAllNewOzonProductIds(storeId?: string, visibility?: string): Promise<{ productIds: number[]; total: number }> {
+    const { data } = await api.get('/ozon/import/new-ids', { params: { storeId, visibility } });
     return data;
   },
 
@@ -186,6 +185,7 @@ export const adminService = {
     storeId?: string,
     page = 1,
     limit = 50,
+    visibility?: string,
   ): Promise<{
     items: Array<{
       productId: number;
@@ -198,7 +198,7 @@ export const adminService = {
     page: number;
   }> {
     const { data } = await api.get('/ozon/import/list', {
-      params: { storeId, page, limit },
+      params: { storeId, page, limit, visibility },
     });
     return data;
   },
@@ -206,6 +206,7 @@ export const adminService = {
   async importOzonProducts(dto: {
     productIds: number[];
     storeId?: string;
+    isArchived?: boolean;
   }): Promise<{
     total: number;
     imported: number;
@@ -229,6 +230,20 @@ export const adminService = {
 
   async repairFailedPublications(): Promise<{ message: string }> {
     const { data } = await api.post('/ozon/repair-failed-publications', {});
+    return data;
+  },
+
+  async syncArchivedStatus(): Promise<{ message: string }> {
+    const { data } = await api.post('/ozon/sync-archived-status', {});
+    return data;
+  },
+
+  async getSyncDiff(storeId?: string): Promise<{
+    counts: { ozonActive: number; ozonArchived: number; systemPublished: number; systemArchived: number };
+    onOzonNotInSystem: Array<{ productId: number; offerId: string; name: string; visibility: string }>;
+    inSystemNotOnOzon: Array<{ bookId: string; sku: string; title: string; status: string }>;
+  }> {
+    const { data } = await api.get('/ozon/sync-diff', { params: storeId ? { storeId } : {} });
     return data;
   },
 };

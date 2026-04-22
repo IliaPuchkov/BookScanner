@@ -25,6 +25,7 @@ const PAGE_LIMIT = 50;
 export default function ImportFromOzonScreen() {
   const [stores, setStores] = useState<OzonStore[]>([]);
   const [activeStoreId, setActiveStoreId] = useState<string | undefined>();
+  const [showArchived, setShowArchived] = useState(false);
   const [items, setItems] = useState<OzonImportItem[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -45,12 +46,13 @@ export default function ImportFromOzonScreen() {
     }
   }, []);
 
-  const loadItems = useCallback(async (p: number, storeId?: string, refresh = false) => {
+  const loadItems = useCallback(async (p: number, storeId?: string, archived = false, refresh = false) => {
     if (p === 1) setLoading(true);
     else setLoadingMore(true);
 
+    const visibility = archived ? 'ARCHIVED' : 'ACTIVE';
     try {
-      const result = await adminService.getOzonProductsForImport(storeId, p, PAGE_LIMIT);
+      const result = await adminService.getOzonProductsForImport(storeId, p, PAGE_LIMIT, visibility);
       setTotal(result.total);
       setPage(p);
       if (refresh || p === 1) {
@@ -78,9 +80,9 @@ export default function ImportFromOzonScreen() {
   useEffect(() => {
     if (activeStoreId !== undefined) {
       setSelected(new Set());
-      loadItems(1, activeStoreId, true);
+      loadItems(1, activeStoreId, showArchived, true);
     }
-  }, [activeStoreId, loadItems]);
+  }, [activeStoreId, showArchived, loadItems]);
 
   const toggleSelect = (productId: number) => {
     setSelected((prev) => {
@@ -93,8 +95,9 @@ export default function ImportFromOzonScreen() {
 
   const selectAllNew = async () => {
     setSelectingAll(true);
+    const visibility = showArchived ? 'ARCHIVED' : 'ACTIVE';
     try {
-      const result = await adminService.getAllNewOzonProductIds(activeStoreId);
+      const result = await adminService.getAllNewOzonProductIds(activeStoreId, visibility);
       setSelected(new Set(result.productIds));
       setTotal(result.total);
     } catch {
@@ -130,6 +133,7 @@ export default function ImportFromOzonScreen() {
                 const result = await adminService.importOzonProducts({
                   productIds: batch,
                   storeId: activeStoreId,
+                  isArchived: showArchived,
                 });
                 totalImported += result.imported;
                 totalSkipped += result.skipped;
@@ -216,6 +220,26 @@ export default function ImportFromOzonScreen() {
         </View>
       )}
 
+      {/* Visibility toggle */}
+      <View style={styles.visibilityRow}>
+        <TouchableOpacity
+          style={[styles.visibilityBtn, !showArchived && styles.visibilityBtnActive]}
+          onPress={() => setShowArchived(false)}
+        >
+          <Text style={[styles.visibilityBtnText, !showArchived && styles.visibilityBtnTextActive]}>
+            Активные
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.visibilityBtn, showArchived && styles.visibilityBtnActive]}
+          onPress={() => setShowArchived(true)}
+        >
+          <Text style={[styles.visibilityBtnText, showArchived && styles.visibilityBtnTextActive]}>
+            В архиве
+          </Text>
+        </TouchableOpacity>
+      </View>
+
       {/* Stats row */}
       {!loading && (
         <View style={styles.statsRow}>
@@ -243,12 +267,12 @@ export default function ImportFromOzonScreen() {
           refreshControl={
             <RefreshControl
               refreshing={loading}
-              onRefresh={() => loadItems(1, activeStoreId, true)}
+              onRefresh={() => loadItems(1, activeStoreId, showArchived, true)}
               colors={['#1976D2']}
             />
           }
           onEndReached={() => {
-            if (hasMore && !loadingMore) loadItems(page + 1, activeStoreId);
+            if (hasMore && !loadingMore) loadItems(page + 1, activeStoreId, showArchived);
           }}
           onEndReachedThreshold={0.3}
           ListFooterComponent={
@@ -309,6 +333,24 @@ const styles = StyleSheet.create({
   storeChipActive: { backgroundColor: '#1976D2' },
   storeChipText: { fontSize: 13, color: '#1976D2' },
   storeChipTextActive: { color: '#fff' },
+  visibilityRow: {
+    flexDirection: 'row',
+    backgroundColor: '#fff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#e0e0e0',
+    padding: 8,
+    gap: 8,
+  },
+  visibilityBtn: {
+    flex: 1,
+    paddingVertical: 7,
+    borderRadius: 8,
+    alignItems: 'center',
+    backgroundColor: '#f5f5f5',
+  },
+  visibilityBtnActive: { backgroundColor: '#1976D2' },
+  visibilityBtnText: { fontSize: 13, fontWeight: '600', color: '#555' },
+  visibilityBtnTextActive: { color: '#fff' },
   statsRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
