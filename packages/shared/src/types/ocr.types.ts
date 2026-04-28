@@ -12,6 +12,7 @@ export interface IExtractionResult {
   paperType?: string;
   coverType?: string;
   pageCount?: number;
+  printRun?: number;
   annotation?: string;
   language?: string;
   price?: number;

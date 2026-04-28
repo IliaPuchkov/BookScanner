@@ -47,6 +47,7 @@ export interface IBookCard {
   paperType: PaperType;
   coverType: CoverType;
   pageCount: number | null;
+  printRun: number | null;
   language: string;
   price: number;
   annotation: string | null;

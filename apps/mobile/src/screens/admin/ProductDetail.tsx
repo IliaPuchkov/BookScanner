@@ -142,6 +142,7 @@ export function ProductDetailScreen() {
   const [editPublisher, setEditPublisher] = useState("");
   const [editYear, setEditYear] = useState("");
   const [editPages, setEditPages] = useState("");
+  const [editPrintRun, setEditPrintRun] = useState("");
   const [editPrice, setEditPrice] = useState("");
   const [editWeight, setEditWeight] = useState("");
   const [editWidth, setEditWidth] = useState("");
@@ -201,6 +202,7 @@ export function ProductDetailScreen() {
     setEditPublisher(b.publisher ?? "");
     setEditYear(b.yearPublished?.toString() ?? "");
     setEditPages(b.pageCount?.toString() ?? "");
+    setEditPrintRun(b.printRun?.toString() ?? "");
     setEditPrice(b.price?.toString() ?? "");
     setEditWeight(b.weightGross?.toString() ?? "");
     setEditWidth(b.dimensions?.width?.toString() ?? "");
@@ -224,6 +226,7 @@ export function ProductDetailScreen() {
         publisher: editPublisher || undefined,
         yearPublished: editYear ? parseInt(editYear, 10) : undefined,
         pageCount: editPages ? parseInt(editPages, 10) : undefined,
+        printRun: editPrintRun ? parseInt(editPrintRun, 10) : undefined,
         price: editPrice ? parseFloat(editPrice) : undefined,
         weightGross: editWeight ? parseFloat(editWeight) : undefined,
         dimensions:
@@ -506,6 +509,12 @@ export function ProductDetailScreen() {
                 keyboardType="numeric"
               />
               <EditField
+                label="Тираж"
+                value={editPrintRun}
+                onChangeText={setEditPrintRun}
+                keyboardType="numeric"
+              />
+              <EditField
                 label="Страниц"
                 value={editPages}
                 onChangeText={setEditPages}
@@ -612,6 +621,7 @@ export function ProductDetailScreen() {
                 <InfoRow label="ISBN" value={book.isbn} />
                 <InfoRow label="Издательство" value={book.publisher} />
                 <InfoRow label="Год" value={book.yearPublished?.toString()} />
+                <InfoRow label="Тираж" value={book.printRun?.toString()} />
                 <InfoRow label="Тип обложки" value={book.coverType} />
                 <InfoRow label="Тип бумаги" value={book.paperType} />
                 <InfoRow label="Страниц" value={book.pageCount?.toString()} />

@@ -58,6 +58,9 @@ export class Book {
   @Column({ nullable: true })
   pageCount: number;
 
+  @Column({ nullable: true })
+  printRun: number;
+
   @Column({ default: 'русский' })
   language: string;
 

@@ -70,6 +70,7 @@ export interface Book {
   paperType: PaperType;
   coverType: CoverType;
   pageCount?: number;
+  printRun?: number;
   language: string;
   price: number;
   annotation?: string;
@@ -139,6 +140,7 @@ export interface CreateBookDto {
   paperType?: PaperType;
   coverType?: CoverType;
   pageCount?: number;
+  printRun?: number;
   language?: string;
   price?: number;
   annotation?: string;

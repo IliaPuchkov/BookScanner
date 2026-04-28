@@ -53,4 +53,14 @@ export class SearchBooksDto extends PaginationDto {
   @IsOptional()
   @IsNumberString()
   yearTo?: string;
+
+  @ApiPropertyOptional({ description: 'Тираж от' })
+  @IsOptional()
+  @IsNumberString()
+  printRunMin?: string;
+
+  @ApiPropertyOptional({ description: 'Тираж до' })
+  @IsOptional()
+  @IsNumberString()
+  printRunMax?: string;
 }

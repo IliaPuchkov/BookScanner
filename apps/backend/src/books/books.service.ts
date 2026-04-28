@@ -73,6 +73,8 @@ export class BooksService {
     priceMax?: string,
     yearFrom?: string,
     yearTo?: string,
+    printRunMin?: string,
+    printRunMax?: string,
   ) {
     const qb = this.booksRepository
       .createQueryBuilder('book')
@@ -140,6 +142,14 @@ export class BooksService {
 
     if (yearTo !== undefined) {
       qb.andWhere('book.yearPublished <= :yearTo', { yearTo: parseInt(yearTo, 10) });
+    }
+
+    if (printRunMin !== undefined) {
+      qb.andWhere('book.printRun >= :printRunMin', { printRunMin: parseInt(printRunMin, 10) });
+    }
+
+    if (printRunMax !== undefined) {
+      qb.andWhere('book.printRun <= :printRunMax', { printRunMax: parseInt(printRunMax, 10) });
     }
 
     // For admin queries (no session filter), sort by box first so all books

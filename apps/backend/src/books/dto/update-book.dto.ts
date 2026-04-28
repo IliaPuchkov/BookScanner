@@ -65,6 +65,11 @@ export class UpdateBookDto {
 
   @ApiPropertyOptional()
   @IsOptional()
+  @IsNumber()
+  printRun?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
   @IsString()
   language?: string;
 

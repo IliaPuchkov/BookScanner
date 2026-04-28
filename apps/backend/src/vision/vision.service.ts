@@ -65,20 +65,29 @@ export class VisionService {
     removeOnComplete: 100,
     removeOnFail: 200,
     attempts: 3,
-    backoff: { type: 'exponential' as const, delay: 3000 },
+    backoff: { type: "exponential" as const, delay: 3000 },
   };
 
   async queueExtraction(bookId: string): Promise<{ queued: number }> {
-    let ocrResult = await this.ocrResultRepository.findOne({ where: { bookId } });
+    let ocrResult = await this.ocrResultRepository.findOne({
+      where: { bookId },
+    });
     if (!ocrResult) {
-      ocrResult = this.ocrResultRepository.create({ bookId, status: 'pending' });
+      ocrResult = this.ocrResultRepository.create({
+        bookId,
+        status: "pending",
+      });
     } else {
-      ocrResult.status = 'pending';
+      ocrResult.status = "pending";
       ocrResult.errorMessage = null as any;
     }
     await this.ocrResultRepository.save(ocrResult);
 
-    await this.extractionQueue.add(VISION_JOBS.EXTRACT_BOOK, { bookId }, this.JOB_OPTS);
+    await this.extractionQueue.add(
+      VISION_JOBS.EXTRACT_BOOK,
+      { bookId },
+      this.JOB_OPTS,
+    );
     return { queued: 1 };
   }
 
@@ -92,8 +101,8 @@ export class VisionService {
     await this.ocrResultRepository
       .createQueryBuilder()
       .update()
-      .set({ status: 'pending', errorMessage: null as any })
-      .where('book_id IN (:...bookIds)', { bookIds })
+      .set({ status: "pending", errorMessage: null as any })
+      .where("book_id IN (:...bookIds)", { bookIds })
       .execute();
 
     await this.extractionQueue.addBulk(jobs);
@@ -142,7 +151,9 @@ export class VisionService {
       );
       const extractedData = applyDefaults(result);
 
-      ocrResult.photo01Extraction = (availablePhotos[0] ? result : null) as unknown as Record<string, unknown>;
+      ocrResult.photo01Extraction = (availablePhotos[0]
+        ? result
+        : null) as unknown as Record<string, unknown>;
       ocrResult.photo02Extraction = null as unknown as Record<string, unknown>;
       ocrResult.extractedData = extractedData as unknown as Record<
         string,
@@ -169,6 +180,7 @@ export class VisionService {
         paperType: normalizePaperType(extractedData.paperType),
         coverType: normalizeCoverType(extractedData.coverType),
         pageCount: extractedData.pageCount,
+        printRun: extractedData.printRun,
         price: await this.calculatePrice(extractedData.price ?? undefined),
         annotation: extractedData.annotation
           ? `${ANNOTATION_PREFIX}${extractedData.annotation}`
@@ -196,14 +208,19 @@ export class VisionService {
   private async calculatePrice(
     aiPrice: number | undefined | null,
   ): Promise<number> {
-    const [priceDefault, priceMin, discountThreshold, discountPercent, multiplier] =
-      await Promise.all([
-        this.settingsService.getValue<number>("price_default", DEFAULT_PRICE),
-        this.settingsService.getValue<number>("price_min", DEFAULT_LOWER_PRICE),
-        this.settingsService.getValue<number>("price_discount_threshold", 1200),
-        this.settingsService.getValue<number>("price_discount_percent", 15),
-        this.settingsService.getValue<number>("price_ai_multiplier", 9),
-      ]);
+    const [
+      priceDefault,
+      priceMin,
+      discountThreshold,
+      discountPercent,
+      multiplier,
+    ] = await Promise.all([
+      this.settingsService.getValue<number>("price_default", DEFAULT_PRICE),
+      this.settingsService.getValue<number>("price_min", DEFAULT_LOWER_PRICE),
+      this.settingsService.getValue<number>("price_discount_threshold", 1200),
+      this.settingsService.getValue<number>("price_discount_percent", 15),
+      this.settingsService.getValue<number>("price_ai_multiplier", 9),
+    ]);
 
     if (!aiPrice || aiPrice <= 0) return priceDefault;
     const adjusted = aiPrice * multiplier;
@@ -229,9 +246,9 @@ export class VisionService {
   private getDefaultPrompt(): string {
     return `Извлеки из фотографии книги следующую информацию в формате JSON:
 
-- title (название)
-- author (автор)
-- isbn
+- title (название книги)
+- author (автор книги)
+- isbn (Если их два и более, то выбери один наиболее подходящий)
 - publisher (издательство)
 - yearPublished (год издания)
 - width (ширина в мм)
@@ -241,19 +258,21 @@ export class VisionService {
 - paperType (тип бумаги)
 - coverType (тип обложки)
 - pageCount (количество страниц)
-- annotation (аннотация книги — не более 500 символов)
-- price (цена книги в рублях на Озоне (ozon.ru) или на аналогичных маркетплейсах - найди актуальную рыночную цену б/у экземпляра этой книги исходя из isbn, названия и автора; верни число без валюты)
+- printRun (тираж книги — число экземпляров, обычно указано на странице с выходными данными)
+- annotation (аннотация книги - НЕ БОЛЕЕ 500 СИМВОЛОВ)
+- price (выполни поиск по title на Ozon.ru, найди цену; верни число без валюты. Если цену не удается найти, то оцени книгу сам исходя из похожих книг. Укажи цену в рублях, только число без валюты и запятых)
 - hashtags (массив хэштегов для маркетплейса Озон. Правила:
-  - язык: русский
-  - каждый хэштег начинается с # и содержит только буквы и цифры
-  - если из 2+ слов — соединить нижним подчеркиванием _
-  - длина каждого не более 30 символов
-  - НЕ добавлять бренды, параметры или название товара
-  - сгенерируй как можно больше релевантных хэштегов (до 30)
-  - включи: жанр, тематику, эпоху, настроение, аудиторию, ключевые темы книги, литературное направление, похожие авторы/жанры
-  - примеры: #классика, #русская_литература, #проза, #детектив, #советская_книга)
+    - язык: русский
+    - каждый хэштег начинается с # и содержит только буквы и цифры
+    - если хэштег состоит из 2+ слов — соединить  слова нижним подчеркиванием _
+    - длина каждого хэштега должна быть не более 29 символов!!!!
+    - НЕ добавлять бренды, параметры или название товара, никаких рекламных выражений или названий маркетинговых акций
+    - НИКАКОГО упоминания политики, военных действий или запрещенных веществ
+    - сгенерируй как можно больше релевантных хэштегов (до 30)
+    - включи: жанр, тематику, эпоху, настроение, аудиторию, ключевые темы книги, литературное направление, похожие авторы/жанры
+    - примеры: #классика, #русская_литература, #проза, #детектив, #советская_книга, #приключения)
 
-Если не найдешь название выполни поиск названия по isbn.
+Если не найдешь какую-то информацию, то выполни поиск книги по isbn. 
 
 Если какое-то поле не удается определить, верни null для этого поля.`;
   }

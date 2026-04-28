@@ -82,13 +82,13 @@ export class AdminService {
   }
 
   async searchBooks(dto: SearchBooksDto) {
-    const { search, boxId, createdById, dateFrom, dateTo, status, priceMin, priceMax, yearFrom, yearTo } = dto;
-    return this.booksService.findAll('', UserRole.ADMIN, dto, boxId, search, createdById, dateFrom, dateTo, undefined, status, priceMin, priceMax, yearFrom, yearTo);
+    const { search, boxId, createdById, dateFrom, dateTo, status, priceMin, priceMax, yearFrom, yearTo, printRunMin, printRunMax } = dto;
+    return this.booksService.findAll('', UserRole.ADMIN, dto, boxId, search, createdById, dateFrom, dateTo, undefined, status, priceMin, priceMax, yearFrom, yearTo, printRunMin, printRunMax);
   }
 
   async getPendingReviewBooks(dto: SearchBooksDto) {
-    const { boxId, createdById, dateFrom, dateTo, search, priceMin, priceMax, yearFrom, yearTo } = dto;
-    return this.booksService.findAll('', UserRole.ADMIN, dto, boxId, search, createdById, dateFrom, dateTo, undefined, BookStatus.PENDING_REVIEW, priceMin, priceMax, yearFrom, yearTo);
+    const { boxId, createdById, dateFrom, dateTo, search, priceMin, priceMax, yearFrom, yearTo, printRunMin, printRunMax } = dto;
+    return this.booksService.findAll('', UserRole.ADMIN, dto, boxId, search, createdById, dateFrom, dateTo, undefined, BookStatus.PENDING_REVIEW, priceMin, priceMax, yearFrom, yearTo, printRunMin, printRunMax);
   }
 
   async getPendingReviewCountsByBox() {

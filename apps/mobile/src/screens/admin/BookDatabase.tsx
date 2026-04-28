@@ -177,6 +177,8 @@ interface Filters {
   priceMax?: string;
   yearFrom?: string;
   yearTo?: string;
+  printRunMin?: string;
+  printRunMax?: string;
 }
 
 export function BookDatabaseScreen() {
@@ -214,6 +216,10 @@ export function BookDatabaseScreen() {
   const [tempPriceMax, setTempPriceMax] = useState("");
   const [tempYearFrom, setTempYearFrom] = useState("");
   const [tempYearTo, setTempYearTo] = useState("");
+  const [printRunMin, setPrintRunMin] = useState("");
+  const [printRunMax, setPrintRunMax] = useState("");
+  const [tempPrintRunMin, setTempPrintRunMin] = useState("");
+  const [tempPrintRunMax, setTempPrintRunMax] = useState("");
 
   // Filter options
   const [boxes, setBoxes] = useState<Box[]>([]);
@@ -280,6 +286,8 @@ export function BookDatabaseScreen() {
         if (currentFilters.priceMax) params.priceMax = currentFilters.priceMax;
         if (currentFilters.yearFrom) params.yearFrom = currentFilters.yearFrom;
         if (currentFilters.yearTo) params.yearTo = currentFilters.yearTo;
+        if (currentFilters.printRunMin) params.printRunMin = currentFilters.printRunMin;
+        if (currentFilters.printRunMax) params.printRunMax = currentFilters.printRunMax;
 
         const res = await adminService.getBookDatabase(
           p,
@@ -358,11 +366,15 @@ export function BookDatabaseScreen() {
       setTempYearFrom(yearFrom);
       setTempYearTo(yearTo);
     }
+    if (key === "printRun") {
+      setTempPrintRunMin(printRunMin);
+      setTempPrintRunMax(printRunMax);
+    }
     setPickerSearch("");
     setActivePickerFilter(key);
   };
 
-  const applyRangeFilter = (key: "date" | "price" | "year") => {
+  const applyRangeFilter = (key: "date" | "price" | "year" | "printRun") => {
     if (key === "price") {
       if (
         tempPriceMin &&
@@ -404,6 +416,17 @@ export function BookDatabaseScreen() {
       setFilters(newF);
       setActivePickerFilter(null);
       fetchBooks(1, search, newF, "initial");
+    } else if (key === "printRun") {
+      setPrintRunMin(tempPrintRunMin);
+      setPrintRunMax(tempPrintRunMax);
+      const newF = { ...filters };
+      if (tempPrintRunMin) newF.printRunMin = tempPrintRunMin;
+      else delete newF.printRunMin;
+      if (tempPrintRunMax) newF.printRunMax = tempPrintRunMax;
+      else delete newF.printRunMax;
+      setFilters(newF);
+      setActivePickerFilter(null);
+      fetchBooks(1, search, newF, "initial");
     } else {
       setDateFrom(tempDateFrom);
       setDateTo(tempDateTo);
@@ -427,12 +450,14 @@ export function BookDatabaseScreen() {
     setPriceMax("");
     setYearFrom("");
     setYearTo("");
+    setPrintRunMin("");
+    setPrintRunMax("");
     setShowFilters(false);
     fetchBooks(1, search, empty, "initial");
   };
 
   const removeFilter = (
-    key: "status" | "boxId" | "createdById" | "date" | "price" | "year",
+    key: "status" | "boxId" | "createdById" | "date" | "price" | "year" | "printRun",
   ) => {
     const newFilters = { ...filters };
     if (key === "date") {
@@ -450,6 +475,11 @@ export function BookDatabaseScreen() {
       delete newFilters.yearTo;
       setYearFrom("");
       setYearTo("");
+    } else if (key === "printRun") {
+      delete newFilters.printRunMin;
+      delete newFilters.printRunMax;
+      setPrintRunMin("");
+      setPrintRunMax("");
     } else {
       delete newFilters[key];
     }
@@ -463,7 +493,8 @@ export function BookDatabaseScreen() {
     (filters.dateFrom || filters.dateTo ? 1 : 0) +
     (filters.status ? 1 : 0) +
     (filters.priceMin || filters.priceMax ? 1 : 0) +
-    (filters.yearFrom || filters.yearTo ? 1 : 0);
+    (filters.yearFrom || filters.yearTo ? 1 : 0) +
+    (filters.printRunMin || filters.printRunMax ? 1 : 0);
 
   return (
     <View style={styles.container}>
@@ -567,6 +598,17 @@ export function BookDatabaseScreen() {
             onOpen={() => openPicker("year")}
             onClear={() => removeFilter("year")}
           />
+          {/* Print run */}
+          <FilterRow
+            label="Тираж"
+            value={
+              filters.printRunMin || filters.printRunMax
+                ? `${filters.printRunMin || "..."} — ${filters.printRunMax || "..."}`
+                : undefined
+            }
+            onOpen={() => openPicker("printRun")}
+            onClear={() => removeFilter("printRun")}
+          />
           {activeFilterCount > 0 && (
             <TouchableOpacity style={styles.resetBtn} onPress={resetFilters}>
               <Text style={styles.resetBtnText}>Сбросить фильтры</Text>
@@ -602,7 +644,9 @@ export function BookDatabaseScreen() {
                             ? "Период создания"
                             : activePickerFilter === "price"
                               ? "Цена (₽)"
-                              : "Год издания"}
+                              : activePickerFilter === "year"
+                                ? "Год издания"
+                                : "Тираж"}
                   </Text>
                   <TouchableOpacity onPress={() => setActivePickerFilter(null)}>
                     <Text style={styles.pickerDoneBtn}>Закрыть</Text>
@@ -872,6 +916,41 @@ export function BookDatabaseScreen() {
                     <TouchableOpacity
                       style={[styles.applyBtn, { marginTop: 16 }]}
                       onPress={() => applyRangeFilter("year")}
+                    >
+                      <Text style={styles.applyBtnText}>Применить</Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
+
+                {/* Print run range */}
+                {activePickerFilter === "printRun" && (
+                  <View style={styles.pickerBody}>
+                    <View style={styles.rangeRow}>
+                      <View style={{ flex: 1 }}>
+                        <Input
+                          label=""
+                          placeholder="от"
+                          value={tempPrintRunMin}
+                          onChangeText={setTempPrintRunMin}
+                          keyboardType="numeric"
+                          style={{ marginBottom: 0 }}
+                        />
+                      </View>
+                      <Text style={styles.rangeSep}>—</Text>
+                      <View style={{ flex: 1 }}>
+                        <Input
+                          label=""
+                          placeholder="до"
+                          value={tempPrintRunMax}
+                          onChangeText={setTempPrintRunMax}
+                          keyboardType="numeric"
+                          style={{ marginBottom: 0 }}
+                        />
+                      </View>
+                    </View>
+                    <TouchableOpacity
+                      style={[styles.applyBtn, { marginTop: 16 }]}
+                      onPress={() => applyRangeFilter("printRun")}
                     >
                       <Text style={styles.applyBtnText}>Применить</Text>
                     </TouchableOpacity>

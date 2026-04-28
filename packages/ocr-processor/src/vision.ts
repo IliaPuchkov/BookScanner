@@ -1,5 +1,5 @@
-import OpenAI from 'openai';
-import { IExtractionResult } from '@bookscanner/shared';
+import OpenAI from "openai";
+import { IExtractionResult } from "@bookscanner/shared";
 
 export class OpenAIVisionExtractor {
   private readonly client: OpenAI;
@@ -11,32 +11,32 @@ export class OpenAIVisionExtractor {
   async extractBookData(
     imageBuffer: Buffer,
     prompt: string,
-    mimeType: 'image/jpeg' | 'image/png' = 'image/jpeg',
+    mimeType: "image/jpeg" | "image/png" = "image/jpeg",
   ): Promise<IExtractionResult> {
-    const base64 = imageBuffer.toString('base64');
+    const base64 = imageBuffer.toString("base64");
 
     const response = await this.client.chat.completions.create({
-      model: 'gpt-4.1-mini',
+      model: "gpt-4.1-mini",
       messages: [
         {
-          role: 'user',
+          role: "user",
           content: [
-            { type: 'text', text: prompt },
+            { type: "text", text: prompt },
             {
-              type: 'image_url',
+              type: "image_url",
               image_url: {
                 url: `data:${mimeType};base64,${base64}`,
-                detail: 'high',
+                detail: "high",
               },
             },
           ],
         },
       ],
-      response_format: { type: 'json_object' },
-      max_tokens: 1500,
+      response_format: { type: "json_object" },
+      max_tokens: 4000,
     });
 
-    const raw = response.choices[0]?.message?.content ?? '{}';
+    const raw = response.choices[0]?.message?.content ?? "{}";
     return JSON.parse(raw) as IExtractionResult;
   }
 }
@@ -48,7 +48,7 @@ export class YandexVisionExtractor {
   constructor(apiKey: string, folderId: string) {
     this.client = new OpenAI({
       apiKey,
-      baseURL: 'https://llm.api.cloud.yandex.net/v1',
+      baseURL: "https://llm.api.cloud.yandex.net/v1",
     });
     this.modelUri = `gpt://${folderId}/qwen2.5-vl-32b-instruct/latest`;
   }
@@ -56,19 +56,19 @@ export class YandexVisionExtractor {
   async extractBookData(
     imageBuffer: Buffer,
     prompt: string,
-    mimeType: 'image/jpeg' | 'image/png' = 'image/jpeg',
+    mimeType: "image/jpeg" | "image/png" = "image/jpeg",
   ): Promise<IExtractionResult> {
-    const base64 = imageBuffer.toString('base64');
+    const base64 = imageBuffer.toString("base64");
 
     const response = await this.client.chat.completions.create({
       model: this.modelUri,
       messages: [
         {
-          role: 'user',
+          role: "user",
           content: [
-            { type: 'text', text: prompt },
+            { type: "text", text: prompt },
             {
-              type: 'image_url',
+              type: "image_url",
               image_url: {
                 url: `data:${mimeType};base64,${base64}`,
               },
@@ -76,11 +76,14 @@ export class YandexVisionExtractor {
           ],
         },
       ],
-      max_tokens: 1500,
+      max_tokens: 4000,
     });
 
-    const raw = response.choices[0]?.message?.content ?? '{}';
-    const cleaned = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim();
+    const raw = response.choices[0]?.message?.content ?? "{}";
+    const cleaned = raw
+      .replace(/^```(?:json)?\s*/i, "")
+      .replace(/\s*```$/, "")
+      .trim();
     return JSON.parse(cleaned) as IExtractionResult;
   }
 }
@@ -91,7 +94,7 @@ export class GeminiVisionExtractor {
   constructor(apiKey: string) {
     this.client = new OpenAI({
       apiKey,
-      baseURL: 'https://polza.ai/api/v1',
+      baseURL: "https://polza.ai/api/v1",
     });
   }
 
@@ -100,35 +103,46 @@ export class GeminiVisionExtractor {
     prompt: string,
   ): Promise<IExtractionResult> {
     const imageContents = images.map(({ url }) => ({
-      type: 'image_url' as const,
+      type: "image_url" as const,
       image_url: { url },
     }));
 
     const response = await this.client.chat.completions.create({
-      model: 'google/gemini-2.0-flash-lite-001',
+      model: "google/gemini-2.0-flash-lite-001",
       messages: [
         {
-          role: 'user',
-          content: [{ type: 'text', text: prompt }, ...imageContents],
+          role: "user",
+          content: [{ type: "text", text: prompt }, ...imageContents],
         },
       ],
-      max_tokens: 6000,
+      max_tokens: 3000,
     });
 
     const choice = response.choices[0];
-    const raw = choice?.message?.content || '';
-    const cleaned = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim();
+    const raw = choice?.message?.content || "";
+    const cleaned = raw
+      .replace(/^```(?:json)?\s*/i, "")
+      .replace(/\s*```$/, "")
+      .trim();
     if (!cleaned) {
-      console.error('[GeminiVisionExtractor] Empty response from AI, finish_reason:', choice?.finish_reason);
-      throw new Error('AI returned empty response. Possibly image URL expired or inaccessible.');
+      console.error(
+        "[GeminiVisionExtractor] Empty response from AI, finish_reason:",
+        choice?.finish_reason,
+      );
+      throw new Error(
+        "AI returned empty response. Possibly image URL expired or inaccessible.",
+      );
     }
     try {
       return JSON.parse(cleaned) as IExtractionResult;
     } catch (err) {
-      console.error('[GeminiVisionExtractor] JSON parse failed');
-      console.error('[GeminiVisionExtractor] finish_reason:', choice?.finish_reason);
-      console.error('[GeminiVisionExtractor] raw response length:', raw.length);
-      console.error('[GeminiVisionExtractor] raw response:\n', raw);
+      console.error("[GeminiVisionExtractor] JSON parse failed");
+      console.error(
+        "[GeminiVisionExtractor] finish_reason:",
+        choice?.finish_reason,
+      );
+      console.error("[GeminiVisionExtractor] raw response length:", raw.length);
+      console.error("[GeminiVisionExtractor] raw response:\n", raw);
       throw err;
     }
   }
