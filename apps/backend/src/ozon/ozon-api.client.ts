@@ -412,14 +412,17 @@ export class OzonApiClient {
       return this.dictCache.get(cacheKey) ?? undefined;
     }
 
-    // Для авторов Ozon хранит "Фамилия Имя", пробуем оба порядка слов
+    // Для авторов Ozon хранит "Фамилия Имя" или "Фамилия И.", пробуем несколько вариантов
     const variants = [searchValue];
     const words = searchValue.trim().split(/\s+/);
     if (words.length === 2) {
-      variants.push(`${words[1]} ${words[0]}`);
+      variants.push(`${words[1]} ${words[0]}`);              // "Воронин Андрей"
+      variants.push(`${words[1]} ${words[0][0]}.`);          // "Воронин А."
+      variants.push(`${words[0]} ${words[1][0]}.`);          // "Андрей В." (на случай другого порядка)
     } else if (words.length === 3) {
       // "Имя Отчество Фамилия" → "Фамилия Имя Отчество"
       variants.push(`${words[2]} ${words[0]} ${words[1]}`);
+      variants.push(`${words[2]} ${words[0][0]}.`);          // "Фамилия И."
     }
 
     for (const variant of variants) {

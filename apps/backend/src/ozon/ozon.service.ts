@@ -14,10 +14,61 @@ import { BooksService } from '../books/books.service';
 import { OzonApiClient, OzonApiError } from './ozon-api.client';
 import { buildOzonImportPayload } from './ozon-payload.builder';
 import { mapOzonProductToBook } from './ozon-import.mapper';
-import { BookStatus, OZON_ATTR_BRAND, OZON_ATTR_AUTHOR, DEFAULT_PRICE } from '@bookscanner/shared';
+import { BookStatus, OZON_ATTR_BRAND, OZON_ATTR_AUTHOR, OZON_ATTR_PUBLISHER, DEFAULT_PRICE } from '@bookscanner/shared';
+import type { ResolvedOzonData } from './ozon-payload.builder';
 
 const IMPORTABLE_STATUSES = ['importing'];
 const OZON_IMPORT_BOX_NUMBER = 'OZON_IMPORT';
+
+async function resolveBrand(
+  publisher: string | null,
+  client: OzonApiClient,
+): Promise<{ id: number | undefined; name: string }> {
+  if (publisher) {
+    const id = await client.findDictionaryValue(OZON_ATTR_BRAND, publisher);
+    if (id) return { id, name: publisher };
+
+    const stripped = publisher.replace(/^издательство\s+/i, '').trim();
+    if (stripped !== publisher) {
+      const strippedId = await client.findDictionaryValue(OZON_ATTR_BRAND, stripped);
+      if (strippedId) return { id: strippedId, name: stripped };
+    }
+  }
+  const noId = await client.findDictionaryValue(OZON_ATTR_BRAND, 'Нет бренда');
+  return { id: noId, name: 'Нет бренда' };
+}
+
+async function resolvePublisher(
+  publisher: string | null,
+  client: OzonApiClient,
+): Promise<{ id: number; name: string } | undefined> {
+  if (!publisher) return undefined;
+
+  const id = await client.findDictionaryValue(OZON_ATTR_PUBLISHER, publisher);
+  if (id) return { id, name: publisher };
+
+  const stripped = publisher.replace(/^издательство\s+/i, '').trim();
+  if (stripped !== publisher) {
+    const strippedId = await client.findDictionaryValue(OZON_ATTR_PUBLISHER, stripped);
+    if (strippedId) return { id: strippedId, name: stripped };
+  }
+
+  return undefined;
+}
+
+async function resolveAuthors(
+  author: string | null,
+  client: OzonApiClient,
+): Promise<ResolvedOzonData['authors']> {
+  if (!author) return [];
+  const names = author.split(';').map((s) => s.trim()).filter(Boolean);
+  return Promise.all(
+    names.map(async (name) => {
+      const dictValueId = await client.findDictionaryValue(OZON_ATTR_AUTHOR, name);
+      return { value: name, dictValueId };
+    }),
+  );
+}
 
 @Injectable()
 export class OzonService {
@@ -78,22 +129,23 @@ export class OzonService {
       this.logger.warn(`Failed to check limits before publish: ${error}`);
     }
 
-    const [brandDictValueId, authorDictValueId] = await Promise.all([
-      this.ozonApiClient.findDictionaryValue(
-        OZON_ATTR_BRAND,
-        book.publisher || 'Нет бренда',
-      ),
-      this.ozonApiClient.findDictionaryValue(
-        OZON_ATTR_AUTHOR,
-        book.author || 'Не указан',
-      ),
+    const [brand, publisher, authors] = await Promise.all([
+      resolveBrand(book.publisher, this.ozonApiClient),
+      resolvePublisher(book.publisher, this.ozonApiClient),
+      resolveAuthors(book.author, this.ozonApiClient),
     ]);
 
     this.logger.log(
-      `Dictionary lookup: brand="${book.publisher}" → ${brandDictValueId}, author="${book.author}" → ${authorDictValueId}`,
+      `Dictionary lookup: brand="${book.publisher}" → id=${brand.id} name="${brand.name}", publisher → ${JSON.stringify(publisher)}, authors="${book.author}" → ${JSON.stringify(authors)}`,
     );
 
-    const payload = buildOzonImportPayload(book, { brandDictValueId, authorDictValueId });
+    const payload = buildOzonImportPayload(book, {
+      brandDictValueId: brand.id,
+      resolvedBrandName: brand.name,
+      publisherDictValueId: publisher?.id,
+      resolvedPublisherName: publisher?.name,
+      authors,
+    });
 
     // Create or update OzonProduct entry
     let ozonProduct = await this.ozonProductRepository.findOne({
@@ -391,21 +443,20 @@ export class OzonService {
     // 3. Fetch all books
     const books = await Promise.all(bookIds.map((id) => this.booksService.findOne(id)));
 
-    // 4. Dictionary lookups for unique publishers/authors (results are cached in OzonApiClient)
+    // 4. Dictionary lookups — brand and authors per book.
+    // OzonApiClient caches results, so duplicate publisher/author lookups are free after the first.
     const validForLookup = books.filter((b) => b.title && b.photos?.length >= 2);
-    const uniquePublishers = [...new Set(validForLookup.map((b) => b.publisher || 'Нет бренда'))];
-    const uniqueAuthors = [...new Set(validForLookup.map((b) => b.author || 'Не указан'))];
-
-    const [brandEntries, authorEntries] = await Promise.all([
-      Promise.all(
-        uniquePublishers.map(async (p) => [p, await this.ozonApiClient.findDictionaryValue(OZON_ATTR_BRAND, p)] as const),
-      ),
-      Promise.all(
-        uniqueAuthors.map(async (a) => [a, await this.ozonApiClient.findDictionaryValue(OZON_ATTR_AUTHOR, a)] as const),
-      ),
-    ]);
-    const brandLookup = Object.fromEntries(brandEntries);
-    const authorLookup = Object.fromEntries(authorEntries);
+    const resolvedMap = new Map<string, { brand: { id: number | undefined; name: string }; publisher: { id: number; name: string } | undefined; authors: ResolvedOzonData['authors'] }>();
+    await Promise.all(
+      validForLookup.map(async (book) => {
+        const [brand, publisher, authors] = await Promise.all([
+          resolveBrand(book.publisher, this.ozonApiClient),
+          resolvePublisher(book.publisher, this.ozonApiClient),
+          resolveAuthors(book.author, this.ozonApiClient),
+        ]);
+        resolvedMap.set(book.id, { brand, publisher, authors });
+      }),
+    );
 
     // 5. Split into valid and skipped
     type BatchEntry = { book: (typeof books)[0]; payload: Record<string, unknown>; item: unknown };
@@ -421,9 +472,13 @@ export class OzonService {
         failed.push({ id: book.id, title: book.title, error: 'Необходимо минимум 2 фото' });
         continue;
       }
+      const r = resolvedMap.get(book.id);
       const payload = buildOzonImportPayload(book, {
-        brandDictValueId: brandLookup[book.publisher || 'Нет бренда'],
-        authorDictValueId: authorLookup[book.author || 'Не указан'],
+        brandDictValueId: r?.brand.id,
+        resolvedBrandName: r?.brand.name,
+        publisherDictValueId: r?.publisher?.id,
+        resolvedPublisherName: r?.publisher?.name,
+        authors: r?.authors,
       });
       validEntries.push({ book, payload, item: (payload.items as unknown[])[0] });
     }

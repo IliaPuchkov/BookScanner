@@ -45,6 +45,31 @@ function attr(
   return { complex_id: 0, id, values: [val] };
 }
 
+function multiAttr(
+  id: number,
+  values: Array<{ value: string; dictValueId?: number }>,
+): OzonAttribute {
+  return {
+    complex_id: 0,
+    id,
+    values: values.map(({ value, dictValueId }) => {
+      const v: { value: string; dictionary_value_id?: number } = { value };
+      if (dictValueId) v.dictionary_value_id = dictValueId;
+      return v;
+    }),
+  };
+}
+
+const FORBIDDEN_HASHTAG_PATTERNS = [
+  /полити/i, /выбор/i, /война/i, /нарко/i, /оруж/i, /терро/i, /экстрем/i,
+];
+
+function sanitizeHashtags(tags: string[]): string[] {
+  return tags
+    .filter((t) => t.length <= 30)
+    .filter((t) => !FORBIDDEN_HASHTAG_PATTERNS.some((p) => p.test(t)));
+}
+
 const COVER_TYPE_MAP: Record<string, string> = {
   "мягкий переплет": "Мягкая обложка",
   "твердый переплет": "Твердый переплет",
@@ -61,9 +86,17 @@ const DEFAULT_WIDTH_MM = 100; // ширина
 const DEFAULT_LENGTH_MM = 100; // длина (= height в модели книги)
 const DEFAULT_THICKNESS_MM = 35; // толщина (= depth в модели книги)
 
+export interface ResolvedOzonData {
+  brandDictValueId?: number;
+  resolvedBrandName?: string;
+  publisherDictValueId?: number;
+  resolvedPublisherName?: string;
+  authors?: Array<{ value: string; dictValueId?: number }>;
+}
+
 export function buildOzonImportPayload(
   book: Book,
-  resolved: { brandDictValueId?: number; authorDictValueId?: number } = {},
+  resolved: ResolvedOzonData = {},
 ): Record<string, unknown> {
   const raw = book.dimensions || { width: 0, height: 0, depth: 0 };
   const dimensions = {
@@ -73,18 +106,24 @@ export function buildOzonImportPayload(
   };
   const annotation = book.annotation || "";
 
+  // Author cover: all authors joined by ";" without spaces
+  const authorCoverText = resolved.authors?.length
+    ? resolved.authors.map((a) => a.value).join(";")
+    : book.author || "Не указан";
+
   const attributes: OzonAttribute[] = [
     // Required
     attr(OZON_ATTR_NAME, book.title),
-    attr(OZON_ATTR_AUTHOR_COVER, book.author || "Не указан"),
-    attr(OZON_ATTR_BRAND, book.publisher || "Нет бренда", resolved.brandDictValueId),
+    attr(OZON_ATTR_AUTHOR_COVER, authorCoverText),
+    attr(OZON_ATTR_BRAND, resolved.resolvedBrandName ?? "Нет бренда", resolved.brandDictValueId),
     attr(OZON_ATTR_TYPE, book.bookType || DEFAULT_BOOK_TYPE),
     attr(OZON_ATTR_DIRECTION, book.direction || DEFAULT_DIRECTION),
   ];
 
-  // OZON_ATTR_AUTHOR — строгий словарный атрибут, отправляем только если нашли dictionary_value_id
-  if (resolved.authorDictValueId) {
-    attributes.push(attr(OZON_ATTR_AUTHOR, book.author!, resolved.authorDictValueId));
+  // OZON_ATTR_AUTHOR — строгий словарный атрибут, отправляем только авторов с найденным dict value id
+  const foundAuthors = resolved.authors?.filter((a) => a.dictValueId);
+  if (foundAuthors?.length) {
+    attributes.push(multiAttr(OZON_ATTR_AUTHOR, foundAuthors));
   }
 
   // Optional attributes
@@ -92,8 +131,8 @@ export function buildOzonImportPayload(
   if (book.isbn) {
     attributes.push(attr(OZON_ATTR_ISBN, book.isbn));
   }
-  if (book.publisher) {
-    attributes.push(attr(OZON_ATTR_PUBLISHER, book.publisher));
+  if (resolved.resolvedPublisherName && resolved.publisherDictValueId) {
+    attributes.push(attr(OZON_ATTR_PUBLISHER, resolved.resolvedPublisherName, resolved.publisherDictValueId));
   }
   if (book.yearPublished) {
     attributes.push(attr(OZON_ATTR_YEAR, book.yearPublished));
@@ -131,7 +170,10 @@ export function buildOzonImportPayload(
   attributes.push(attr(OZON_ATTR_WEIGHT, weight));
 
   if (book.hashtags && book.hashtags.length > 0) {
-    attributes.push(attr(OZON_ATTR_HASHTAGS, book.hashtags.join(" ")));
+    const cleanTags = sanitizeHashtags(book.hashtags);
+    if (cleanTags.length > 0) {
+      attributes.push(multiAttr(OZON_ATTR_HASHTAGS, cleanTags.map((t) => ({ value: t }))));
+    }
   }
 
   const images =
