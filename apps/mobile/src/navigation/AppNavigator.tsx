@@ -20,7 +20,6 @@ import { AuthNavigator } from './AuthNavigator';
 import { OperatorNavigator } from './OperatorNavigator';
 import { AdminNavigator } from './AdminNavigator';
 import { MaintenanceScreen } from '../screens/MaintenanceScreen';
-import { ServerErrorScreen } from '../screens/ServerErrorScreen';
 
 export type RootStackParamList = {
   Auth: undefined;
@@ -79,9 +78,11 @@ export function AppNavigator() {
         </View>
       )}
 
-      {/* Server unreachable screen — shown only when maintenance is not active */}
-      {!isActive && serverUnreachable && user?.role !== UserRole.ADMIN && (
-        <ServerErrorScreen onRetry={refreshMaintenance} />
+      {/* No-connection banner — shown for all roles when server is unreachable and no maintenance */}
+      {!isActive && serverUnreachable && isAuthenticated && (
+        <View style={[styles.offlineBanner, { top: insets.top }]} pointerEvents="none">
+          <Text style={styles.offlineBannerText}>Нет подключения к серверу</Text>
+        </View>
       )}
 
       {/* Pre-maintenance warning modal */}
@@ -245,5 +246,21 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
     textAlign: 'center',
+  },
+  offlineBanner: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    backgroundColor: '#B71C1C',
+    paddingVertical: 6,
+    paddingHorizontal: 16,
+    zIndex: 200,
+    alignItems: 'center',
+  },
+  offlineBannerText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '600',
+    letterSpacing: 0.2,
   },
 });

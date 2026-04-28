@@ -172,7 +172,7 @@ export function buildOzonImportPayload(
   if (book.hashtags && book.hashtags.length > 0) {
     const cleanTags = sanitizeHashtags(book.hashtags);
     if (cleanTags.length > 0) {
-      attributes.push(multiAttr(OZON_ATTR_HASHTAGS, cleanTags.map((t) => ({ value: t }))));
+      attributes.push(attr(OZON_ATTR_HASHTAGS, cleanTags.join(",")));
     }
   }
 

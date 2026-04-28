@@ -106,6 +106,11 @@ function _notifyServerStatus(reachable: boolean) {
   _serverStatusListeners.forEach((l) => l(reachable));
 }
 
+export function notifyServerUnreachable() {
+  _consecutiveNetworkFailures = NETWORK_FAILURE_THRESHOLD;
+  _notifyServerStatus(false);
+}
+
 api.interceptors.response.use(
   (response) => {
     if (_consecutiveNetworkFailures >= NETWORK_FAILURE_THRESHOLD) {
@@ -128,6 +133,21 @@ api.interceptors.response.use(
     return Promise.reject(error);
   },
 );
+
+export function decodeJwtPayload(token: string): Record<string, unknown> | null {
+  try {
+    const base64 = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+    const json = decodeURIComponent(
+      atob(base64)
+        .split('')
+        .map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
+        .join(''),
+    );
+    return JSON.parse(json);
+  } catch {
+    return null;
+  }
+}
 
 export { STORAGE_KEYS };
 export default api;

@@ -1,8 +1,9 @@
 import React, { createContext, useState, useEffect, useCallback } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { STORAGE_KEYS } from '../services/api';
+import { STORAGE_KEYS, decodeJwtPayload, notifyServerUnreachable } from '../services/api';
 import { authService } from '../services/auth.service';
 import type { User } from '../types';
+import { UserRole } from '../types';
 
 interface AuthState {
   user: User | null;
@@ -42,7 +43,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         } else {
           setState({ user: null, isLoading: false, isAuthenticated: false });
         }
-      } catch {
+      } catch (error: unknown) {
+        const hasResponse = !!(error as { response?: unknown })?.response;
+        if (!hasResponse) {
+          // Network error — server unreachable, keep user logged in using JWT payload
+          notifyServerUnreachable();
+          const token = await AsyncStorage.getItem(STORAGE_KEYS.ACCESS_TOKEN);
+          const payload = token ? decodeJwtPayload(token) : null;
+          if (payload?.sub) {
+            const offlineUser: User = {
+              id: payload.sub as string,
+              role: payload.role as UserRole,
+              fullName: '',
+              phone: '',
+              email: '',
+              isApproved: true,
+            };
+            setState({ user: offlineUser, isLoading: false, isAuthenticated: true });
+            return;
+          }
+        }
+        // Real auth failure (401) or no valid token — log out
         await AsyncStorage.multiRemove([STORAGE_KEYS.ACCESS_TOKEN, STORAGE_KEYS.REFRESH_TOKEN]);
         setState({ user: null, isLoading: false, isAuthenticated: false });
       }
