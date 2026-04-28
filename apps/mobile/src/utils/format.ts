@@ -1,3 +1,8 @@
+export function formatPrintRun(n: number | undefined | null): string | undefined {
+  if (n == null) return undefined;
+  return n.toLocaleString('ru-RU');
+}
+
 export function formatPrice(price: number | undefined | null): string {
   if (price == null) return '—';
   return `${Number(price).toFixed(2)} ₽`;

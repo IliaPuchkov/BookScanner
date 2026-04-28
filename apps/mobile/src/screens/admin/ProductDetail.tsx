@@ -29,7 +29,7 @@ import type { OzonStore, OzonStoreLimits } from "../../services/admin.service";
 import type { Book, UpdateBookDto } from "../../types";
 import { BookStatus, PaperType, CoverType } from "../../types";
 import type { AdminCardCreationParamList } from "../../navigation/AdminNavigator";
-import { formatPrice, formatDate } from "../../utils/format";
+import { formatPrice, formatDate, formatPrintRun } from "../../utils/format";
 import { bookEvents } from "../../utils/bookEvents";
 
 type Route = RouteProp<AdminCardCreationParamList, "ProductDetail">;
@@ -621,7 +621,7 @@ export function ProductDetailScreen() {
                 <InfoRow label="ISBN" value={book.isbn} />
                 <InfoRow label="Издательство" value={book.publisher} />
                 <InfoRow label="Год" value={book.yearPublished?.toString()} />
-                <InfoRow label="Тираж" value={book.printRun?.toString()} />
+                <InfoRow label="Тираж" value={formatPrintRun(book.printRun)} />
                 <InfoRow label="Тип обложки" value={book.coverType} />
                 <InfoRow label="Тип бумаги" value={book.paperType} />
                 <InfoRow label="Страниц" value={book.pageCount?.toString()} />
