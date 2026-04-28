@@ -65,7 +65,7 @@ export const booksService = {
     bookIds: string[],
     storeId?: string,
   ): Promise<{ total: number; succeeded: number; failed: number; failedBooks: { id: string; title?: string; error: string }[] }> {
-    const { data } = await api.post('/ozon/publish/bulk', { bookIds, storeId });
+    const { data } = await api.post('/ozon/publish/bulk', { bookIds, storeId }, { timeout: 300_000 });
     return data;
   },
 

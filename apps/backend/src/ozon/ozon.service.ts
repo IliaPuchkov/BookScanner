@@ -445,18 +445,22 @@ export class OzonService {
 
     // 4. Dictionary lookups — brand and authors per book.
     // OzonApiClient caches results, so duplicate publisher/author lookups are free after the first.
+    // Process in concurrency-limited batches to avoid flooding Ozon API with hundreds of parallel requests.
     const validForLookup = books.filter((b) => b.title && b.photos?.length >= 2);
     const resolvedMap = new Map<string, { brand: { id: number | undefined; name: string }; publisher: { id: number; name: string } | undefined; authors: ResolvedOzonData['authors'] }>();
-    await Promise.all(
-      validForLookup.map(async (book) => {
-        const [brand, publisher, authors] = await Promise.all([
-          resolveBrand(book.publisher, this.ozonApiClient),
-          resolvePublisher(book.publisher, this.ozonApiClient),
-          resolveAuthors(book.author, this.ozonApiClient),
-        ]);
-        resolvedMap.set(book.id, { brand, publisher, authors });
-      }),
-    );
+    const LOOKUP_CONCURRENCY = 5;
+    for (let i = 0; i < validForLookup.length; i += LOOKUP_CONCURRENCY) {
+      await Promise.all(
+        validForLookup.slice(i, i + LOOKUP_CONCURRENCY).map(async (book) => {
+          const [brand, publisher, authors] = await Promise.all([
+            resolveBrand(book.publisher, this.ozonApiClient),
+            resolvePublisher(book.publisher, this.ozonApiClient),
+            resolveAuthors(book.author, this.ozonApiClient),
+          ]);
+          resolvedMap.set(book.id, { brand, publisher, authors });
+        }),
+      );
+    }
 
     // 5. Split into valid and skipped
     type BatchEntry = { book: (typeof books)[0]; payload: Record<string, unknown>; item: unknown };
