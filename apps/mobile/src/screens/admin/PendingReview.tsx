@@ -417,6 +417,9 @@ export function PendingReviewScreen() {
   const searchTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   const activeParamsRef = useRef({ search: "", filters: {} as Filters });
   const loadingMoreRef = useRef(false);
+  const fetchGenRef = useRef(0);
+  const searchRef = useRef("");
+  const filtersRef = useRef<Filters>({});
 
   const fetchFailedBooks = useCallback(async () => {
     setLoadingFailed(true);
@@ -459,6 +462,9 @@ export function PendingReviewScreen() {
     null,
   );
   const isReturningRef = useRef(false);
+
+  useEffect(() => { searchRef.current = search; }, [search]);
+  useEffect(() => { filtersRef.current = filters; }, [filters]);
 
   useEffect(() => {
     return bookEvents.onBookUpdated((updatedBook) => {
@@ -611,6 +617,10 @@ export function PendingReviewScreen() {
       currentFilters: Filters,
       mode: "initial" | "refresh" | "more",
     ) => {
+      // For non-"more" requests, bump the generation so any older in-flight
+      // "initial"/"refresh" response is ignored when it arrives.
+      const gen = mode !== "more" ? ++fetchGenRef.current : fetchGenRef.current;
+
       if (mode === "initial") setLoading(true);
       if (mode === "more") setLoadingMore(true);
 
@@ -639,6 +649,9 @@ export function PendingReviewScreen() {
           Object.keys(params).length > 0 ? params : undefined,
         );
 
+        // Discard stale non-"more" responses that arrived after a newer fetch started
+        if (mode !== "more" && gen !== fetchGenRef.current) return;
+
         if (mode === "more") {
           setBooks((prev) => [...prev, ...res.data]);
         } else {
@@ -650,6 +663,7 @@ export function PendingReviewScreen() {
         console.error("PendingReview fetch error");
       } finally {
         loadingMoreRef.current = false;
+        if (mode !== "more" && gen !== fetchGenRef.current) return;
         setLoading(false);
         setRefreshing(false);
         setLoadingMore(false);
@@ -664,7 +678,7 @@ export function PendingReviewScreen() {
         isReturningRef.current = false;
         return;
       }
-      fetchBooks(1, search, filters, "initial");
+      fetchBooks(1, searchRef.current, filtersRef.current, "initial");
       fetchFailedBooks();
       adminService
         .getPendingReviewCountsByBox()

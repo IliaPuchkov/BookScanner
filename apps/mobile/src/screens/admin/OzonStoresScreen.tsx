@@ -12,12 +12,20 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from "react-native";
-import { adminService, type OzonStore, type OzonStoreLimits } from "../../services/admin.service";
+import {
+  adminService,
+  type OzonStore,
+  type OzonStoreLimits,
+} from "../../services/admin.service";
 
 export function OzonStoresScreen() {
   const [ozonStores, setOzonStores] = useState<OzonStore[]>([]);
-  const [storeLimits, setStoreLimits] = useState<Record<string, OzonStoreLimits | null>>({});
-  const [storeKeyExpiry, setStoreKeyExpiry] = useState<Record<string, string | null>>({});
+  const [storeLimits, setStoreLimits] = useState<
+    Record<string, OzonStoreLimits | null>
+  >({});
+  const [storeKeyExpiry, setStoreKeyExpiry] = useState<
+    Record<string, string | null>
+  >({});
   const [loadingStores, setLoadingStores] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [addingStore, setAddingStore] = useState(false);
@@ -76,25 +84,21 @@ export function OzonStoresScreen() {
   }, [loadStores]);
 
   const handleDeleteStore = (store: OzonStore) => {
-    Alert.alert(
-      "Удалить магазин",
-      `Удалить "${store.name}"?`,
-      [
-        { text: "Отмена", style: "cancel" },
-        {
-          text: "Удалить",
-          style: "destructive",
-          onPress: async () => {
-            try {
-              await adminService.removeOzonStore(store.id);
-              setOzonStores((prev) => prev.filter((s) => s.id !== store.id));
-            } catch {
-              Alert.alert("Ошибка", "Не удалось удалить магазин");
-            }
-          },
+    Alert.alert("Удалить магазин", `Удалить "${store.name}"?`, [
+      { text: "Отмена", style: "cancel" },
+      {
+        text: "Удалить",
+        style: "destructive",
+        onPress: async () => {
+          try {
+            await adminService.removeOzonStore(store.id);
+            setOzonStores((prev) => prev.filter((s) => s.id !== store.id));
+          } catch {
+            Alert.alert("Ошибка", "Не удалось удалить магазин");
+          }
         },
-      ],
-    );
+      },
+    ]);
   };
 
   const handleCancelAddStore = () => {
@@ -184,24 +188,61 @@ export function OzonStoresScreen() {
                         ID: {store.clientId} · Key: {store.apiKeyMasked}
                       </Text>
                       {expiryDate !== null && (
-                        <Text style={[styles.storeExpiry, isExpired && styles.storeExpiryExpired]}>
+                        <Text
+                          style={[
+                            styles.storeExpiry,
+                            isExpired && styles.storeExpiryExpired,
+                          ]}
+                        >
                           {isExpired
-                            ? "Просрочен"
-                            : `Активен до ${expiryDate.toLocaleDateString("ru-RU", { day: "2-digit", month: "2-digit", year: "numeric" })}`}
+                            ? "Ключ просрочен. Обновите его в личном кабинете Ozon."
+                            : `Ключ активен до ${expiryDate.toLocaleDateString("ru-RU", { day: "2-digit", month: "2-digit", year: "numeric" })}`}
                         </Text>
                       )}
                       {limits === undefined ? null : limits === null ? (
-                        <Text style={styles.limitsError}>Лимиты недоступны</Text>
+                        <Text style={styles.limitsError}>
+                          Лимиты недоступны
+                        </Text>
                       ) : (
                         <View style={styles.limitsBlock}>
-                          <Text style={[styles.limitsRow, createExhausted && styles.limitsExhausted]}>
-                            Создание: {limits.daily_create.usage}/{limits.daily_create.limit > 0 ? limits.daily_create.limit : "∞"} сегодня
+                          <Text
+                            style={[
+                              styles.limitsRow,
+                              totalExhausted && styles.limitsExhausted,
+                            ]}
+                          >
+                            Доступно пустых мест в магазине:{" "}
+                            {limits.total.limit}
+                          </Text>
+                          <Text
+                            style={[
+                              styles.limitsRow,
+                              createExhausted && styles.limitsExhausted,
+                            ]}
+                          >
+                            Можно создать товаров сегодня:{" "}
+                            {limits.daily_create.usage}/
+                            {limits.daily_create.limit > 0
+                              ? limits.daily_create.limit
+                              : "∞"}{" "}
+                            сегодня
                           </Text>
                           <Text style={styles.limitsRow}>
-                            Обновление: {limits.daily_update.usage}/{limits.daily_update.limit > 0 ? limits.daily_update.limit : "∞"} сегодня
+                            Можно обновить товаров сегодня:{" "}
+                            {limits.daily_update.usage}/
+                            {limits.daily_update.limit > 0
+                              ? limits.daily_update.limit
+                              : "∞"}{" "}
+                            сегодня
                           </Text>
-                          <Text style={[styles.limitsRow, totalExhausted && styles.limitsExhausted]}>
-                            Ассортимент: {limits.total.usage}/{limits.total.limit > 0 ? limits.total.limit : "∞"}
+                          <Text
+                            style={[
+                              styles.limitsRow,
+                              totalExhausted && styles.limitsExhausted,
+                            ]}
+                          >
+                            Всего товаров на Озоне: {limits.total.usage}/
+                            {limits.total.limit > 0 ? limits.total.limit : "∞"}
                           </Text>
                         </View>
                       )}
