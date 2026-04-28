@@ -212,7 +212,7 @@ export function OzonStoresScreen() {
                             ]}
                           >
                             Доступно пустых мест в магазине:{" "}
-                            {limits.total.limit}
+                            {limits.total.limit - limits.total.usage}
                           </Text>
                           <Text
                             style={[
@@ -221,18 +221,14 @@ export function OzonStoresScreen() {
                             ]}
                           >
                             Можно создать товаров сегодня:{" "}
-                            {limits.daily_create.usage}/
-                            {limits.daily_create.limit > 0
-                              ? limits.daily_create.limit
-                              : "∞"}{" "}
+                            {limits.daily_create.limit -
+                              limits.daily_create.usage}{" "}
                             сегодня
                           </Text>
                           <Text style={styles.limitsRow}>
                             Можно обновить товаров сегодня:{" "}
-                            {limits.daily_update.usage}/
-                            {limits.daily_update.limit > 0
-                              ? limits.daily_update.limit
-                              : "∞"}{" "}
+                            {limits.daily_update.limit -
+                              limits.daily_update.usage}{" "}
                             сегодня
                           </Text>
                           <Text
@@ -241,7 +237,7 @@ export function OzonStoresScreen() {
                               totalExhausted && styles.limitsExhausted,
                             ]}
                           >
-                            Всего товаров на Озоне: {limits.total.usage}/
+                            Занято/всего мест в магазине: {limits.total.usage}/
                             {limits.total.limit > 0 ? limits.total.limit : "∞"}
                           </Text>
                         </View>
