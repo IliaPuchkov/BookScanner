@@ -100,9 +100,9 @@ export function buildOzonImportPayload(
 ): Record<string, unknown> {
   const raw = book.dimensions || { width: 0, height: 0, depth: 0 };
   const dimensions = {
-    width: raw.width || DEFAULT_WIDTH_MM, // ширина
-    height: raw.height || DEFAULT_LENGTH_MM, // длина
-    depth: raw.depth || DEFAULT_THICKNESS_MM, // толщина
+    width: Math.round(raw.width || DEFAULT_WIDTH_MM), // ширина
+    height: Math.round(raw.height || DEFAULT_LENGTH_MM), // длина
+    depth: Math.round(raw.depth || DEFAULT_THICKNESS_MM), // толщина
   };
   const annotation = book.annotation || "";
 
@@ -166,7 +166,7 @@ export function buildOzonImportPayload(
   );
   attributes.push(attr(OZON_ATTR_DIMENSIONS, dimStr));
 
-  const weight = book.weightGross || DEFAULT_WEIGHT_G;
+  const weight = Math.round(book.weightGross || DEFAULT_WEIGHT_G);
   attributes.push(attr(OZON_ATTR_WEIGHT, weight));
 
   if (book.hashtags && book.hashtags.length > 0) {

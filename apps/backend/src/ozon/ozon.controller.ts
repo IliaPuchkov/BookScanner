@@ -86,14 +86,6 @@ export class OzonController {
     return this.ozonService.checkStatus(dto.bookId);
   }
 
-  @Get("price-lookup")
-  @Roles(UserRole.ADMIN)
-  @ApiOperation({ summary: "Поиск средней цены на Ozon" })
-  @ApiQuery({ name: "query", description: "ISBN, название или автор" })
-  priceLookup(@Query("query") query: string) {
-    return this.ozonService.priceLookup(query);
-  }
-
   // ─── Import from Ozon ─────────────────────────────────────────────────────
 
   @Get("import/new-ids")
