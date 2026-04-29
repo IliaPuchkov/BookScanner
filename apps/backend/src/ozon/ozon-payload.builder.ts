@@ -72,9 +72,8 @@ const FORBIDDEN_HASHTAG_PATTERNS = [
 function sanitizeHashtags(tags: string[]): string[] {
   return tags
     .map((t) => {
-      // Ensure starts with #
-      const withHash = t.startsWith("#") ? t : `#${t}`;
-      // Replace internal spaces with underscore, then strip anything not in [#a-zA-Zа-яА-ЯёЁ0-9_]
+      const trimmed = t.trim();
+      const withHash = trimmed.startsWith("#") ? trimmed : `#${trimmed}`;
       return withHash.replace(/\s+/g, "_").replace(/[^#a-zA-Zа-яА-ЯёЁ0-9_]/g, "");
     })
     .filter((t) => t.length >= 2 && t.length <= 30)
