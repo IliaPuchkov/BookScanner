@@ -30,6 +30,8 @@ export const OZON_ATTR_BOOK_TYPE = 9236;      // Тип книги
 export const OZON_ATTR_DIMENSIONS = 4382;     // Размеры, мм
 export const OZON_ATTR_WEIGHT = 4383;         // Вес товара, г
 export const OZON_ATTR_HASHTAGS = 23171;      // #Хештеги
+export const OZON_ATTR_TNVED = 22232;         // ТН ВЭД коды ЕАЭС (required)
+export const OZON_TNVED_BOOKS_VALUE_ID = 971398243; // 4901990000 - Прочие книги, брошюры...
 
 export const ANNOTATION_PREFIX =
   "ВНИМАНИЕ! Книга не новая! Состояние - на фото.\n\nПри необходимости мы можем добавить больше фотографий для оценки состояния экземпляра.\n\n";

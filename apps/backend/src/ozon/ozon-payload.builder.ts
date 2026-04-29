@@ -21,6 +21,8 @@ import {
   OZON_ATTR_DIMENSIONS,
   OZON_ATTR_WEIGHT,
   OZON_ATTR_HASHTAGS,
+  OZON_ATTR_TNVED,
+  OZON_TNVED_BOOKS_VALUE_ID,
   DEFAULT_WEIGHT_G,
   DEFAULT_BOOK_TYPE,
   DEFAULT_DIRECTION,
@@ -66,7 +68,13 @@ const FORBIDDEN_HASHTAG_PATTERNS = [
 
 function sanitizeHashtags(tags: string[]): string[] {
   return tags
-    .filter((t) => t.length <= 30)
+    .map((t) => {
+      // Ensure starts with #
+      const withHash = t.startsWith("#") ? t : `#${t}`;
+      // Replace internal spaces with underscore, then strip anything not in [#a-zA-Zа-яА-ЯёЁ0-9_]
+      return withHash.replace(/\s+/g, "_").replace(/[^#a-zA-Zа-яА-ЯёЁ0-9_]/g, "");
+    })
+    .filter((t) => t.length >= 2 && t.length <= 30)
     .filter((t) => !FORBIDDEN_HASHTAG_PATTERNS.some((p) => p.test(t)));
 }
 
@@ -118,6 +126,7 @@ export function buildOzonImportPayload(
     attr(OZON_ATTR_BRAND, resolved.resolvedBrandName ?? "Нет бренда", resolved.brandDictValueId),
     attr(OZON_ATTR_TYPE, book.bookType || DEFAULT_BOOK_TYPE),
     attr(OZON_ATTR_DIRECTION, book.direction || DEFAULT_DIRECTION),
+    attr(OZON_ATTR_TNVED, "4901990000 - Прочие книги, брошюры, листовки, аналогичные печатные издания, сброшюрованные", OZON_TNVED_BOOKS_VALUE_ID),
   ];
 
   // OZON_ATTR_AUTHOR — строгий словарный атрибут, отправляем только авторов с найденным dict value id
@@ -172,7 +181,7 @@ export function buildOzonImportPayload(
   if (book.hashtags && book.hashtags.length > 0) {
     const cleanTags = sanitizeHashtags(book.hashtags);
     if (cleanTags.length > 0) {
-      attributes.push(attr(OZON_ATTR_HASHTAGS, cleanTags.join(",")));
+      attributes.push(attr(OZON_ATTR_HASHTAGS, cleanTags.join(" ")));
     }
   }
 
