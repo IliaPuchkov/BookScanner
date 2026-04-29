@@ -22,12 +22,26 @@ type Route = RouteProp<OperatorStackParamList, "PhotoUpload">;
 
 const DEFAULT_MAX_PHOTOS = 10;
 const MAX_PHOTOS_KEY = "max_photo_count";
+const OZON_MIN_PX = 200;
+
+function warnIfSmallPhotos(items: Array<{ width: number; height: number }>) {
+const small = items.filter(
+    (i) => i.width < OZON_MIN_PX || i.height < OZON_MIN_PX,
+  );
+  if (small.length > 0) {
+    Alert.alert(
+      "Маленькое разрешение фото",
+      `${small.length === 1 ? "1 фото" : `${small.length} фото`} имеют разрешение меньше 200×200 пикселей. Ozon не примет такие фото — сделайте снимок с большего расстояния.`,
+      [{ text: "Понятно" }],
+    );
+  }
+}
 
 export function PhotoUploadScreen() {
   const route = useRoute<Route>();
   const { bookId } = route.params;
 
-  const [photos, setPhotos] = useState<Array<{ uri: string; id?: string }>>([]);
+  const [photos, setPhotos] = useState<Array<{ uri: string; id?: string; isSmall?: boolean }>>([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [maxPhotos, setMaxPhotos] = useState(DEFAULT_MAX_PHOTOS);
@@ -60,13 +74,22 @@ export function PhotoUploadScreen() {
     init();
   }, [bookId]);
 
-  const uploadUris = async (uris: string[]) => {
+  const uploadPhotos = async (
+    items: Array<{ path: string; isSmall: boolean }>,
+  ) => {
     setUploading(true);
     try {
-      const uploaded = await photosService.uploadPhotos(bookId, uris);
+      const uploaded = await photosService.uploadPhotos(
+        bookId,
+        items.map((i) => i.path),
+      );
       setPhotos((prev) => [
         ...prev,
-        ...uploaded.map((p) => ({ uri: p.fileUrl, id: p.id })),
+        ...uploaded.map((p, i) => ({
+          uri: p.fileUrl,
+          id: p.id,
+          isSmall: items[i]?.isSmall ?? false,
+        })),
       ]);
     } catch {
       Alert.alert("Ошибка", "Не удалось загрузить фото");
@@ -84,7 +107,12 @@ export function PhotoUploadScreen() {
         mediaType: "photo",
         compressImageQuality: 0.8,
       });
-      await uploadUris(results.map((r) => r.path));
+      const items = results.map((r) => ({
+        path: r.path,
+        isSmall: r.width < OZON_MIN_PX || r.height < OZON_MIN_PX,
+      }));
+      warnIfSmallPhotos(results);
+      await uploadPhotos(items);
     } catch (err: any) {
       if (err?.code !== "E_PICKER_CANCELLED") {
         Alert.alert("Ошибка", "Не удалось выбрать фото");
@@ -98,7 +126,12 @@ export function PhotoUploadScreen() {
       quality: 0.8,
     });
     if (!result.canceled) {
-      await uploadUris([result.assets[0].uri]);
+      const asset = result.assets[0];
+      warnIfSmallPhotos(result.assets);
+      await uploadPhotos([{
+        path: asset.uri,
+        isSmall: asset.width < OZON_MIN_PX || asset.height < OZON_MIN_PX,
+      }]);
     }
   };
 
@@ -120,26 +153,25 @@ export function PhotoUploadScreen() {
       quality: 0.8,
     });
     if (!result.canceled) {
+      const asset = result.assets[0];
+      const isSmall = asset.width < OZON_MIN_PX || asset.height < OZON_MIN_PX;
+      warnIfSmallPhotos(result.assets);
       setUploading(true);
       try {
         const photo = photos[index];
-        const newUri = result.assets[0].uri;
+        const newUri = asset.uri;
         if (photo.id) {
-          const updated = await photosService.replacePhoto(
-            bookId,
-            photo.id,
-            newUri,
-          );
+          const updated = await photosService.replacePhoto(bookId, photo.id, newUri);
           setPhotos((prev) =>
             prev.map((p, i) =>
               i === index
-                ? { uri: `${updated.fileUrl}?v=${Date.now()}`, id: updated.id }
+                ? { uri: `${updated.fileUrl}?v=${Date.now()}`, id: updated.id, isSmall }
                 : p,
             ),
           );
         } else {
           setPhotos((prev) =>
-            prev.map((p, i) => (i === index ? { ...p, uri: newUri } : p)),
+            prev.map((p, i) => (i === index ? { ...p, uri: newUri, isSmall } : p)),
           );
         }
       } catch {
@@ -205,26 +237,25 @@ export function PhotoUploadScreen() {
       quality: 0.8,
     });
     if (!result.canceled) {
+      const asset = result.assets[0];
+      const isSmall = asset.width < OZON_MIN_PX || asset.height < OZON_MIN_PX;
+      warnIfSmallPhotos(result.assets);
       setUploading(true);
       try {
         const photo = photos[index];
-        const newUri = result.assets[0].uri;
+        const newUri = asset.uri;
         if (photo.id) {
-          const updated = await photosService.replacePhoto(
-            bookId,
-            photo.id,
-            newUri,
-          );
+          const updated = await photosService.replacePhoto(bookId, photo.id, newUri);
           setPhotos((prev) =>
             prev.map((p, i) =>
               i === index
-                ? { uri: `${updated.fileUrl}?v=${Date.now()}`, id: updated.id }
+                ? { uri: `${updated.fileUrl}?v=${Date.now()}`, id: updated.id, isSmall }
                 : p,
             ),
           );
         } else {
           setPhotos((prev) =>
-            prev.map((p, i) => (i === index ? { ...p, uri: newUri } : p)),
+            prev.map((p, i) => (i === index ? { ...p, uri: newUri, isSmall } : p)),
           );
         }
       } catch {

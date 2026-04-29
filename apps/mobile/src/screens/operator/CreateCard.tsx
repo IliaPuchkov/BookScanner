@@ -28,6 +28,20 @@ type Route = RouteProp<OperatorStackParamList, "CreateCard">;
 interface PhotoItem {
   uri: string;
   id?: string;
+  isSmall?: boolean;
+}
+
+const OZON_MIN_PX = 200;
+
+function warnIfSmallPhotos(items: Array<{ width: number; height: number }>) {
+const small = items.filter((i) => i.width < OZON_MIN_PX || i.height < OZON_MIN_PX);
+  if (small.length > 0) {
+    Alert.alert(
+      "Маленькое разрешение фото",
+      `${small.length === 1 ? "1 фото" : `${small.length} фото`} имеют разрешение меньше 200×200 пикселей. Ozon не примет такие фото — сделайте снимок с большего расстояния.`,
+      [{ text: "Понятно" }],
+    );
+  }
 }
 
 export function CreateCardScreen() {
@@ -98,7 +112,14 @@ export function CreateCardScreen() {
         mediaType: "photo",
         compressImageQuality: 0.8,
       });
-      setPhotos((prev) => [...prev, ...results.map((r) => ({ uri: r.path }))]);
+      warnIfSmallPhotos(results);
+      setPhotos((prev) => [
+        ...prev,
+        ...results.map((r) => ({
+          uri: r.path,
+          isSmall: r.width < OZON_MIN_PX || r.height < OZON_MIN_PX,
+        })),
+      ]);
     } catch (err: any) {
       if (err?.code !== "E_PICKER_CANCELLED") {
         Alert.alert("Ошибка", "Не удалось выбрать фото");
@@ -112,7 +133,12 @@ export function CreateCardScreen() {
     });
 
     if (!result.canceled) {
-      setPhotos((prev) => [...prev, { uri: result.assets[0].uri }]);
+      const asset = result.assets[0];
+      warnIfSmallPhotos(result.assets);
+      setPhotos((prev) => [
+        ...prev,
+        { uri: asset.uri, isSmall: asset.width < OZON_MIN_PX || asset.height < OZON_MIN_PX },
+      ]);
     }
   };
 
@@ -142,8 +168,14 @@ export function CreateCardScreen() {
   const handleRetakePhoto = async (index: number) => {
     const result = await ImagePicker.launchCameraAsync({ quality: 0.8 });
     if (!result.canceled) {
+      const asset = result.assets[0];
+      warnIfSmallPhotos(result.assets);
       setPhotos((prev) =>
-        prev.map((p, i) => (i === index ? { uri: result.assets[0].uri } : p)),
+        prev.map((p, i) =>
+          i === index
+            ? { uri: asset.uri, isSmall: asset.width < OZON_MIN_PX || asset.height < OZON_MIN_PX }
+            : p,
+        ),
       );
     }
   };

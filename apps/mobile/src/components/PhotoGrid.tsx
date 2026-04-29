@@ -18,6 +18,7 @@ const COLS = 3;
 interface PhotoItem {
   uri: string;
   id?: string;
+  isSmall?: boolean;
 }
 
 interface Props {
@@ -211,6 +212,11 @@ export function PhotoGrid({
                 </Text>
               </View>
             )}
+            {photo.isSmall && (
+              <View style={styles.smallWarning} pointerEvents="none">
+                <Text style={styles.smallWarningText}>⚠ Мало пикселей</Text>
+              </View>
+            )}
             {onRemove && !isDragging && (
               <TouchableOpacity
                 style={styles.removeBtn}
@@ -399,5 +405,19 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: "#999",
     marginTop: 2,
+  },
+  smallWarning: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: "rgba(255,152,0,0.85)",
+    paddingVertical: 3,
+    alignItems: "center",
+  },
+  smallWarningText: {
+    color: "#fff",
+    fontSize: 9,
+    fontWeight: "700",
   },
 });
