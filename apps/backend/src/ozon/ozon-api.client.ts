@@ -394,17 +394,20 @@ export class OzonApiClient {
     this.lastRequestTime = Date.now();
   }
 
-  // Кэш: `${attributeId}:${normalizedValue}` → dictionary_value_id (или null если не найдено)
-  private readonly dictCache = new Map<string, number | null>();
+  // Кэш: `${attributeId}:${normalizedValue}` → { id, value } (или null если не найдено)
+  private readonly dictCache = new Map<string, { id: number; value: string } | null>();
 
   private normalize(s: string): string {
     return s.toLowerCase().replace(/\s+/g, ' ').trim();
   }
 
+  // Regex for "initials-first" format: "А.Ф." or "А."
+  private readonly INITIALS_RE = /^([А-ЯA-Zа-яa-z]\.)+$/;
+
   async findDictionaryValue(
     attributeId: number,
     searchValue: string,
-  ): Promise<number | undefined> {
+  ): Promise<{ id: number; value: string } | undefined> {
     const needle = this.normalize(searchValue);
     const cacheKey = `${attributeId}:${needle}`;
 
@@ -416,9 +419,16 @@ export class OzonApiClient {
     const variants = [searchValue];
     const words = searchValue.trim().split(/\s+/);
     if (words.length === 2) {
-      variants.push(`${words[1]} ${words[0]}`);              // "Воронин Андрей"
-      variants.push(`${words[1]} ${words[0][0]}.`);          // "Воронин А."
-      variants.push(`${words[0]} ${words[1][0]}.`);          // "Андрей В." (на случай другого порядка)
+      if (this.INITIALS_RE.test(words[0])) {
+        // "А.Ф. Галкин" → "Галкин А. Ф." and "Галкин А."
+        const initials = words[0].replace(/\.$/, '').split('.').join('. ') + '.';
+        variants.push(`${words[1]} ${initials}`);           // "Галкин А. Ф."
+        variants.push(`${words[1]} ${words[0][0]}.`);       // "Галкин А."
+      } else {
+        variants.push(`${words[1]} ${words[0]}`);              // "Воронин Андрей"
+        variants.push(`${words[1]} ${words[0][0]}.`);          // "Воронин А."
+        variants.push(`${words[0]} ${words[1][0]}.`);          // "Андрей В." (на случай другого порядка)
+      }
     } else if (words.length === 3) {
       // "Имя Отчество Фамилия" → "Фамилия Имя Отчество"
       variants.push(`${words[2]} ${words[0]} ${words[1]}`);
@@ -440,15 +450,16 @@ export class OzonApiClient {
         const items = response.result ?? [];
         const variantNeedle = this.normalize(variant);
 
-        let partialMatch: number | undefined;
+        let partialMatch: { id: number; value: string } | undefined;
         for (const item of items) {
           const norm = this.normalize(item.value);
           if (norm === needle || norm === variantNeedle) {
-            this.dictCache.set(cacheKey, item.id);
-            return item.id;
+            const entry = { id: item.id, value: item.value };
+            this.dictCache.set(cacheKey, entry);
+            return entry;
           }
           if (!partialMatch && (norm.includes(needle) || norm.includes(variantNeedle))) {
-            partialMatch = item.id;
+            partialMatch = { id: item.id, value: item.value };
           }
         }
 

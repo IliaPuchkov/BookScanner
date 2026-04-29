@@ -2,7 +2,7 @@
   "expo": {
     "name": "Jolly Book",
     "slug": "bookscanner",
-    "version": "1.6.0",
+    "version": "1.6.1",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -13,12 +13,12 @@
       "backgroundColor": "#ffffff"
     },
     "ios": {
-      "buildNumber": "8",
+      "buildNumber": "9",
       "supportsTablet": false,
       "bundleIdentifier": "com.bookscanner.app"
     },
     "android": {
-      "versionCode": 8,
+      "versionCode": 9,
       "softwareKeyboardLayoutMode": "pan",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",

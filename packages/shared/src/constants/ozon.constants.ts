@@ -8,6 +8,10 @@ export const OZON_CATEGORY_PATH = [
 export const OZON_DESCRIPTION_CATEGORY_ID = 200001485;
 export const OZON_TYPE_ID = 971445087;
 
+// Современные печатные издания (с 2011 г.)
+export const OZON_MODERN_DESCRIPTION_CATEGORY_ID = 200001483;
+export const OZON_MODERN_TYPE_ID = 971445087;
+
 // Required attributes
 export const OZON_ATTR_NAME = 4180;           // Название
 export const OZON_ATTR_AUTHOR_COVER = 4182;   // Автор на обложке (required)

@@ -25,17 +25,17 @@ async function resolveBrand(
   client: OzonApiClient,
 ): Promise<{ id: number | undefined; name: string }> {
   if (publisher) {
-    const id = await client.findDictionaryValue(OZON_ATTR_BRAND, publisher);
-    if (id) return { id, name: publisher };
+    const entry = await client.findDictionaryValue(OZON_ATTR_BRAND, publisher);
+    if (entry) return { id: entry.id, name: entry.value };
 
     const stripped = publisher.replace(/^издательство\s+/i, '').trim();
     if (stripped !== publisher) {
-      const strippedId = await client.findDictionaryValue(OZON_ATTR_BRAND, stripped);
-      if (strippedId) return { id: strippedId, name: stripped };
+      const e2 = await client.findDictionaryValue(OZON_ATTR_BRAND, stripped);
+      if (e2) return { id: e2.id, name: e2.value };
     }
   }
-  const noId = await client.findDictionaryValue(OZON_ATTR_BRAND, 'Нет бренда');
-  return { id: noId, name: 'Нет бренда' };
+  const fallback = await client.findDictionaryValue(OZON_ATTR_BRAND, 'Нет бренда');
+  return { id: fallback?.id, name: fallback?.value ?? 'Нет бренда' };
 }
 
 async function resolvePublisher(
@@ -44,13 +44,13 @@ async function resolvePublisher(
 ): Promise<{ id: number; name: string } | undefined> {
   if (!publisher) return undefined;
 
-  const id = await client.findDictionaryValue(OZON_ATTR_PUBLISHER, publisher);
-  if (id) return { id, name: publisher };
+  const entry = await client.findDictionaryValue(OZON_ATTR_PUBLISHER, publisher);
+  if (entry) return { id: entry.id, name: entry.value };
 
   const stripped = publisher.replace(/^издательство\s+/i, '').trim();
   if (stripped !== publisher) {
-    const strippedId = await client.findDictionaryValue(OZON_ATTR_PUBLISHER, stripped);
-    if (strippedId) return { id: strippedId, name: stripped };
+    const e2 = await client.findDictionaryValue(OZON_ATTR_PUBLISHER, stripped);
+    if (e2) return { id: e2.id, name: e2.value };
   }
 
   return undefined;
@@ -64,8 +64,8 @@ async function resolveAuthors(
   const names = author.split(';').map((s) => s.trim()).filter(Boolean);
   return Promise.all(
     names.map(async (name) => {
-      const dictValueId = await client.findDictionaryValue(OZON_ATTR_AUTHOR, name);
-      return { value: name, dictValueId };
+      const entry = await client.findDictionaryValue(OZON_ATTR_AUTHOR, name);
+      return { value: entry?.value ?? name, dictValueId: entry?.id };
     }),
   );
 }

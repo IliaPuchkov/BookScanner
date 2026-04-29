@@ -2,6 +2,8 @@ import { Book } from "../books/entities/book.entity";
 import {
   OZON_DESCRIPTION_CATEGORY_ID,
   OZON_TYPE_ID,
+  OZON_MODERN_DESCRIPTION_CATEGORY_ID,
+  OZON_MODERN_TYPE_ID,
   OZON_ATTR_NAME,
   OZON_ATTR_AUTHOR_COVER,
   OZON_ATTR_BRAND,
@@ -64,6 +66,7 @@ function multiAttr(
 
 const FORBIDDEN_HASHTAG_PATTERNS = [
   /полити/i, /выбор/i, /война/i, /нарко/i, /оруж/i, /терро/i, /экстрем/i,
+  /власт/i, /идеолог/i,
 ];
 
 function sanitizeHashtags(tags: string[]): string[] {
@@ -112,7 +115,14 @@ export function buildOzonImportPayload(
     height: Math.round(raw.height || DEFAULT_LENGTH_MM), // длина
     depth: Math.round(raw.depth || DEFAULT_THICKNESS_MM), // толщина
   };
-  const annotation = book.annotation || "";
+  const annotation = (book.annotation || '')
+    .replace(/(https?:\/\/\S+|www\.\S+)/gi, '')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+
+  const isModern = (book.yearPublished ?? 0) >= 2011;
+  const descCategoryId = isModern ? OZON_MODERN_DESCRIPTION_CATEGORY_ID : OZON_DESCRIPTION_CATEGORY_ID;
+  const typeId = isModern ? OZON_MODERN_TYPE_ID : OZON_TYPE_ID;
 
   // Author cover: all authors joined by ";" without spaces
   const authorCoverText = resolved.authors?.length
@@ -193,8 +203,8 @@ export function buildOzonImportPayload(
   return {
     items: [
       {
-        description_category_id: OZON_DESCRIPTION_CATEGORY_ID,
-        type_id: OZON_TYPE_ID,
+        description_category_id: descCategoryId,
+        type_id: typeId,
         name: book.title,
         offer_id: book.sku,
         price: String(book.price || 0),
