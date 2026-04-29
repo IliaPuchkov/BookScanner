@@ -227,6 +227,14 @@ export function CreateCardScreen() {
       );
       return;
     }
+    if (photos.some((p) => p.isSmall)) {
+      Alert.alert(
+        "Маленькое разрешение",
+        "Одно или несколько фото имеют разрешение меньше 200×200 пикселей. Замените их перед отправкой.",
+        [{ text: "Понятно" }],
+      );
+      return;
+    }
 
     setLoading(true);
     setLoadingMessage("Создание карточки и загрузка фотографий...");

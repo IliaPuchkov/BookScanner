@@ -32,8 +32,9 @@ ssh "$SSH_USER@$SERVER_IP" bash << EOF
   docker compose -f docker/docker-compose.prod.yml --env-file docker/.env build backend
   docker compose -f docker/docker-compose.prod.yml --env-file docker/.env up -d --force-recreate backend
   docker compose -f docker/docker-compose.prod.yml --env-file docker/.env up -d
-  # Ensure backend is on the web network with proper alias (docker-compose sometimes misses it on recreate)
+  # Ensure backend is on both networks (docker-compose sometimes misses one on recreate)
   docker network connect --alias backend docker_web bookscanner-backend 2>/dev/null || true
+  docker network connect docker_internal bookscanner-backend 2>/dev/null || true
   docker exec bookscanner-nginx nginx -s reload
 
   echo "==> Done. Containers:"
