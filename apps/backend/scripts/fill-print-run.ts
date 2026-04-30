@@ -2,16 +2,18 @@
  * One-time script to fill printRun (тираж) for books that have NULL in that field.
  * Uses Gemini 2.0 Flash Lite via Polza.AI to determine the print run from book metadata + photos.
  *
- * Usage (from project root):
- *   npx ts-node --transpile-only apps/backend/scripts/fill-print-run.ts [--limit N] [--delay N] [--dry-run]
- *
- * Note: if ts-node can't find the script, use an absolute path:
- *   npx ts-node --transpile-only /absolute/path/to/apps/backend/scripts/fill-print-run.ts --limit 20
+ * Usage:
+ *   docker exec -it bookscanner-backend npx ts-node --transpile-only /app/apps/backend/scripts/fill-print-run.ts --limit 20
  *
  * Parameters:
- *   --limit N    How many books to process per run (default: 10)
- *   --delay N    Milliseconds between AI requests to avoid rate limiting (default: 2000)
- *   --dry-run    List matching books without making AI calls or writing to DB
+ *   --limit N        How many books to process per run (default: 10)
+ *   --delay N        Milliseconds between AI requests to avoid rate limiting (default: 2000)
+ *   --dry-run        List matching books without making AI calls or writing to DB
+ *   --retry-unknown  Retry books where AI previously could not find the print run
+ *
+ * Books where AI could not determine the print run are saved to fill-print-run-skipped.json
+ * so they are not retried on subsequent runs (unless --retry-unknown is passed).
+ * printRun field is never written with 0 — 0 is reserved for genuinely rare books.
  */
 
 import * as fs from "fs";
@@ -46,6 +48,7 @@ function parseArgs() {
   let limit = 10;
   let delay = 2000;
   let dryRun = false;
+  let retryUnknown = false;
 
   for (let i = 0; i < args.length; i++) {
     if (args[i] === "--limit" && args[i + 1]) {
@@ -56,10 +59,33 @@ function parseArgs() {
       if (!isNaN(parsed) && parsed >= 0) delay = parsed;
     } else if (args[i] === "--dry-run") {
       dryRun = true;
+    } else if (args[i] === "--retry-unknown") {
+      retryUnknown = true;
     }
   }
 
-  return { limit, delay, dryRun };
+  return { limit, delay, dryRun, retryUnknown };
+}
+
+// ---------------------------------------------------------------------------
+// Skipped IDs file — tracks books where AI could not find the print run.
+// printRun stays NULL in DB; these IDs are excluded from future runs.
+// ---------------------------------------------------------------------------
+
+const SKIPPED_FILE = path.resolve(__dirname, "fill-print-run-skipped.json");
+
+function loadSkippedIds(): Set<string> {
+  if (!fs.existsSync(SKIPPED_FILE)) return new Set();
+  try {
+    const data = JSON.parse(fs.readFileSync(SKIPPED_FILE, "utf-8"));
+    return new Set(Array.isArray(data) ? data : []);
+  } catch {
+    return new Set();
+  }
+}
+
+function saveSkippedIds(ids: Set<string>): void {
+  fs.writeFileSync(SKIPPED_FILE, JSON.stringify([...ids], null, 2));
 }
 
 // ---------------------------------------------------------------------------
@@ -116,7 +142,7 @@ async function askAiForPrintRun(
 
   const imageContents = book.photos
     .sort((a, b) => a.sortOrder - b.sortOrder)
-    .slice(1, 3) // Include up to 2 photos (skip the first one which is usually the cover)
+    .slice(1, 3) // Skip cover (photo 0), use info pages
     .map((p) => ({
       type: "image_url" as const,
       image_url: { url: p.fileUrl },
@@ -146,16 +172,18 @@ function sleep(ms: number): Promise<void> {
 }
 
 async function main() {
-  const { limit, delay, dryRun } = parseArgs();
+  const { limit, delay, dryRun, retryUnknown } = parseArgs();
 
   if (!process.env.POLZA_AI_API_KEY && !dryRun) {
-    console.error(
-      "ERROR: POLZA_AI_API_KEY is not set in environment or .env file",
-    );
+    console.error("ERROR: POLZA_AI_API_KEY is not set in environment or .env file");
     process.exit(1);
   }
 
-  // Minimal DataSource — no entity scanning, raw SQL only
+  const skippedIds = retryUnknown ? new Set<string>() : loadSkippedIds();
+  if (skippedIds.size > 0) {
+    console.log(`Loaded ${skippedIds.size} previously skipped book(s) from ${path.basename(SKIPPED_FILE)}`);
+  }
+
   const db = new DataSource({
     type: "postgres",
     host: process.env.DB_HOST || "localhost",
@@ -169,7 +197,6 @@ async function main() {
   await db.initialize();
   console.log("Connected to database");
 
-  // Fetch books with missing printRun, joined with their photos
   const rows: any[] = await db.query(
     `
     SELECT
@@ -194,21 +221,20 @@ async function main() {
     ORDER BY b."createdAt" ASC
     LIMIT $1
     `,
-    [limit],
+    [limit + skippedIds.size], // fetch extra to compensate for skipped
   );
 
-  const books: BookRow[] = rows;
+  // Filter out previously skipped books (done in JS to keep SQL simple)
+  const books: BookRow[] = rows
+    .filter((b) => !skippedIds.has(b.id))
+    .slice(0, limit);
 
-  console.log(
-    `Found ${books.length} books with missing printRun (limit: ${limit})`,
-  );
+  console.log(`Found ${books.length} books to process (limit: ${limit})`);
 
   if (dryRun) {
     console.log("\n[DRY RUN] Books that would be processed:");
     books.forEach((b, i) => {
-      console.log(
-        `  ${i + 1}. [${b.sku}] "${b.title}" — ${b.photos.length} photo(s)`,
-      );
+      console.log(`  ${i + 1}. [${b.sku}] "${b.title}" — ${b.photos.length} photo(s)`);
     });
     await db.destroy();
     return;
@@ -226,24 +252,21 @@ async function main() {
 
   for (const book of books) {
     processed++;
-    console.log(
-      `\n[${processed}/${books.length}] [${book.sku}] "${book.title}"`,
-    );
+    console.log(`\n[${processed}/${books.length}] [${book.sku}] "${book.title}"`);
 
     try {
       const printRun = await askAiForPrintRun(client, book);
 
       if (printRun === null) {
-        console.warn("  WARNING: AI returned non-numeric response — skipping");
+        skippedIds.add(book.id);
+        console.warn("  WARNING: AI returned non-numeric response — added to skipped list");
         failed++;
       } else if (printRun === 0) {
-        console.log("  INFO: AI could not determine print run — skipping");
+        skippedIds.add(book.id);
+        console.log("  INFO: AI could not determine print run — added to skipped list");
         skipped++;
       } else {
-        await db.query(`UPDATE books SET "printRun" = $1 WHERE id = $2`, [
-          printRun,
-          book.id,
-        ]);
+        await db.query(`UPDATE books SET "printRun" = $1 WHERE id = $2`, [printRun, book.id]);
         console.log(`  OK: printRun = ${printRun}`);
         updated++;
       }
@@ -258,19 +281,19 @@ async function main() {
     }
   }
 
+  saveSkippedIds(skippedIds);
+
   console.log("\n--- Summary ---");
   console.log(`Processed: ${processed}`);
   console.log(`Updated:   ${updated}`);
-  console.log(`Skipped:   ${skipped}  (AI returned 0 — unknown)`);
-  console.log(`Failed:    ${failed}  (error or non-numeric AI response)`);
+  console.log(`Skipped:   ${skipped}  (AI could not determine — saved to ${path.basename(SKIPPED_FILE)})`);
+  console.log(`Failed:    ${failed}  (error or non-numeric response — saved to ${path.basename(SKIPPED_FILE)})`);
+  console.log(`\nTo retry skipped books: add --retry-unknown flag`);
 
   await db.destroy();
 }
 
 main().catch((err) => {
-  console.error(
-    "Fatal error:",
-    err instanceof Error ? err.message : String(err),
-  );
+  console.error("Fatal error:", err instanceof Error ? err.message : String(err));
   process.exit(1);
 });
