@@ -4,6 +4,7 @@ import { VisionService } from './vision.service';
 import { ExtractDto } from './dto/extract.dto';
 import { ExtractBulkDto } from './dto/extract-bulk.dto';
 import { IsbnLookupDto } from './dto/isbn-lookup.dto';
+import { ExtractPreviewDto } from './dto/extract-preview.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
 @ApiTags('Vision & OCR')
@@ -17,6 +18,12 @@ export class VisionController {
   @ApiOperation({ summary: 'Извлечь данные из фотографий книги' })
   extract(@Body() dto: ExtractDto) {
     return this.visionService.queueExtraction(dto.bookId);
+  }
+
+  @Post('extract-preview')
+  @ApiOperation({ summary: 'Предпросмотр распознавания без записи в книгу' })
+  extractPreview(@Body() dto: ExtractPreviewDto) {
+    return this.visionService.extractBookDataPreview(dto.bookId);
   }
 
   @Get('result/:bookId')

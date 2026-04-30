@@ -230,6 +230,63 @@ export class VisionService {
     return Math.round(adjusted);
   }
 
+  async extractBookDataPreview(bookId: string): Promise<{
+    extractedData: Record<string, unknown>;
+    calculatedPrice: number;
+  }> {
+    const photos = await this.photosService.findByBookId(bookId);
+
+    let ocrResult = await this.ocrResultRepository.findOne({ where: { bookId } });
+    if (!ocrResult) {
+      ocrResult = this.ocrResultRepository.create({ bookId, status: 'processing' });
+    } else {
+      ocrResult.status = 'processing';
+    }
+
+    try {
+      ocrResult = await this.ocrResultRepository.save(ocrResult);
+      const apiKey = this.configService.get<string>('POLZA_AI_API_KEY');
+      if (!apiKey) throw new Error('POLZA_AI_API_KEY не настроен в переменных окружения');
+
+      const prompt = await this.settingsService.getValue<string>('vision_ai_prompt', this.getDefaultPrompt());
+      const extractor = new GeminiVisionExtractor(apiKey);
+      const availablePhotos = photos.slice(0, 4).filter(Boolean);
+      const imageUrls = await Promise.all(
+        availablePhotos.map((p) => this.storage.getSignedUrl(p.fileKey, 3600)),
+      );
+
+      let result;
+      for (let attempt = 1; attempt <= 3; attempt++) {
+        try {
+          result = await extractor.extractBookData(imageUrls.map((url) => ({ url })), prompt);
+          break;
+        } catch (err) {
+          if (attempt === 3) throw err;
+          this.logger.warn(`extractBookDataPreview attempt ${attempt} failed, retrying in ${3 * attempt}s...`);
+          await new Promise((resolve) => setTimeout(resolve, 3000 * attempt));
+        }
+      }
+      const extractedData = applyDefaults(result!);
+
+      ocrResult.photo01Extraction = (availablePhotos[0] ? result : null) as unknown as Record<string, unknown>;
+      ocrResult.photo02Extraction = null as unknown as Record<string, unknown>;
+      ocrResult.extractedData = extractedData as unknown as Record<string, unknown>;
+      ocrResult.status = 'completed';
+      await this.ocrResultRepository.save(ocrResult);
+
+      const calculatedPrice = await this.calculatePrice(extractedData.price ?? undefined);
+
+      return { extractedData: extractedData as unknown as Record<string, unknown>, calculatedPrice };
+    } catch (error) {
+      if (ocrResult.id) {
+        ocrResult.status = 'failed';
+        ocrResult.errorMessage = error instanceof Error ? error.message : 'Неизвестная ошибка';
+        await this.ocrResultRepository.save(ocrResult).catch(() => {});
+      }
+      throw error;
+    }
+  }
+
   async getOcrResult(bookId: string) {
     return this.ocrResultRepository.findOne({ where: { bookId } });
   }

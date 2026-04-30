@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   View,
   ScrollView,
@@ -24,6 +24,7 @@ import { type NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { Button } from "../../components/Button";
 import { booksService } from "../../services/books.service";
 import { visionService } from "../../services/vision.service";
+import type { ExtractPreviewResult } from "../../services/vision.service";
 import { adminService } from "../../services/admin.service";
 import type { OzonStore, OzonStoreLimits } from "../../services/admin.service";
 import type { Book, UpdateBookDto } from "../../types";
@@ -33,9 +34,145 @@ import { formatPrice, formatDate, formatPrintRun } from "../../utils/format";
 import { bookEvents } from "../../utils/bookEvents";
 
 type Route = RouteProp<AdminCardCreationParamList, "ProductDetail">;
-type Nav = NativeStackNavigationProp<AdminCardCreationParamList, "ProductDetail">;
+type Nav = NativeStackNavigationProp<
+  AdminCardCreationParamList,
+  "ProductDetail"
+>;
 
 const SCREEN_WIDTH = Dimensions.get("window").width;
+const SCREEN_HEIGHT = Dimensions.get("window").height;
+
+function normalizeCoverType(
+  value: string | null | undefined,
+): CoverType | undefined {
+  if (!value) return undefined;
+  return value.toLowerCase().includes("мягк")
+    ? CoverType.SOFTCOVER
+    : CoverType.HARDCOVER;
+}
+
+function normalizePaperType(
+  value: string | null | undefined,
+): PaperType | undefined {
+  if (!value) return undefined;
+  const v = value.toLowerCase();
+  if (v.includes("глянц")) return PaperType.GLOSSY;
+  if (v.includes("матов")) return PaperType.MATTE;
+  return PaperType.OFFSET;
+}
+
+// Mirrored from @bookscanner/shared ANNOTATION_PREFIX
+const ANNOTATION_PREFIX_MOBILE =
+  "ВНИМАНИЕ! Книга не новая! Состояние - на фото.\n\nПри необходимости мы можем добавить больше фотографий для оценки состояния экземпляра.\n\n";
+const DEFAULT_ANNOTATION = ANNOTATION_PREFIX_MOBILE.trim();
+
+interface DiffField {
+  key: string;
+  label: string;
+  current: (b: Book) => string;
+  suggested: (p: ExtractPreviewResult, b: Book) => string;
+}
+
+const DIFF_FIELDS: DiffField[] = [
+  {
+    key: "title",
+    label: "Название",
+    current: (b) => b.title ?? "",
+    suggested: (p) => p.extractedData.title ?? "",
+  },
+  {
+    key: "author",
+    label: "Автор",
+    current: (b) => b.author ?? "",
+    suggested: (p) => p.extractedData.author ?? "",
+  },
+  {
+    key: "isbn",
+    label: "ISBN",
+    current: (b) => b.isbn ?? "",
+    suggested: (p) => p.extractedData.isbn ?? "",
+  },
+  {
+    key: "publisher",
+    label: "Издательство",
+    current: (b) => b.publisher ?? "",
+    suggested: (p) => p.extractedData.publisher ?? "",
+  },
+  {
+    key: "year",
+    label: "Год",
+    current: (b) => b.yearPublished?.toString() ?? "",
+    suggested: (p) => p.extractedData.yearPublished?.toString() ?? "",
+  },
+  {
+    key: "pages",
+    label: "Страниц",
+    current: (b) => b.pageCount?.toString() ?? "",
+    suggested: (p) => p.extractedData.pageCount?.toString() ?? "",
+  },
+  {
+    key: "printRun",
+    label: "Тираж",
+    current: (b) => formatPrintRun(b.printRun) ?? "",
+    suggested: (p) =>
+      formatPrintRun(p.extractedData.printRun ?? undefined) ?? "",
+  },
+  {
+    key: "price",
+    label: "Цена",
+    current: (b) => formatPrice(b.price),
+    suggested: (p) => formatPrice(p.calculatedPrice),
+  },
+  {
+    key: "weight",
+    label: "Вес (г)",
+    current: (b) => b.weightGross?.toString() ?? "",
+    suggested: (p) => p.extractedData.weightGross?.toString() ?? "",
+  },
+  {
+    key: "dimensions",
+    label: "Размеры (мм)",
+    current: (b) =>
+      b.dimensions
+        ? `${b.dimensions.height}×${b.dimensions.width}×${b.dimensions.depth}`
+        : "",
+    suggested: (p, b) => {
+      const d = p.extractedData;
+      if (d.width != null)
+        return `${d.height ?? DEFAULT_THICKNESS_MM}×${d.width}×${d.depth ?? DEFAULT_THICKNESS_MM}`;
+      return b.dimensions
+        ? `${b.dimensions.height}×${b.dimensions.width}×${b.dimensions.depth}`
+        : "";
+    },
+  },
+  {
+    key: "cover",
+    label: "Переплёт",
+    current: (b) => b.coverType ?? "",
+    suggested: (p) => p.extractedData.coverType ?? "",
+  },
+  {
+    key: "paper",
+    label: "Бумага",
+    current: (b) => b.paperType ?? "",
+    suggested: (p) => p.extractedData.paperType ?? "",
+  },
+  {
+    key: "annotation",
+    label: "Аннотация",
+    current: (b) => b.annotation ?? "",
+    suggested: (p) =>
+      p.extractedData.annotation
+        ? ANNOTATION_PREFIX_MOBILE + p.extractedData.annotation
+        : DEFAULT_ANNOTATION,
+  },
+  {
+    key: "hashtags",
+    label: "Хэштеги",
+    current: (b) => (b.hashtags ?? []).join(" "),
+    suggested: (p) => (p.extractedData.hashtags ?? []).join(" "),
+  },
+];
 
 // Ozon defaults (mirrored from @bookscanner/shared ozon.constants)
 const DEFAULT_WIDTH_MM = 100;
@@ -129,11 +266,20 @@ export function ProductDetailScreen() {
   const [publishing, setPublishing] = useState(false);
   const [checkingStatus, setCheckingStatus] = useState(false);
   const [reExtracting, setReExtracting] = useState(false);
+  const [previewData, setPreviewData] = useState<ExtractPreviewResult | null>(
+    null,
+  );
+  const [previewModalVisible, setPreviewModalVisible] = useState(false);
   const [stores, setStores] = useState<OzonStore[]>([]);
   const [storeLimits, setStoreLimits] = useState<
     Record<string, OzonStoreLimits | null | undefined>
   >({});
   const [storePickerVisible, setStorePickerVisible] = useState(false);
+  const [lightboxVisible, setLightboxVisible] = useState(false);
+  const [lightboxIndex, setLightboxIndex] = useState(0);
+  const lightboxScrollRef = useRef<ScrollView>(null);
+  const [previewLightboxIndex, setPreviewLightboxIndex] = useState<number | null>(null);
+  const previewLightboxScrollRef = useRef<ScrollView>(null);
 
   // Edit fields
   const [editTitle, setEditTitle] = useState("");
@@ -283,12 +429,24 @@ export function ProductDetailScreen() {
       const remaining = limits.daily_create.limit - limits.daily_create.usage;
       const createLine = `Создание: ${remaining} / ${limits.daily_create.limit} сегодня`;
       if (remaining <= 0) {
-        return { blocked: true, label: `${createLine}\n${totalLine}`, warn: true };
+        return {
+          blocked: true,
+          label: `${createLine}\n${totalLine}`,
+          warn: true,
+        };
       }
-      return { blocked: false, label: `${createLine}\n${totalLine}`, warn: false };
+      return {
+        blocked: false,
+        label: `${createLine}\n${totalLine}`,
+        warn: false,
+      };
     }
 
-    return { blocked: false, label: `Создание: не ограничено\n${totalLine}`, warn: false };
+    return {
+      blocked: false,
+      label: `Создание: не ограничено\n${totalLine}`,
+      warn: false,
+    };
   };
 
   const handlePublish = () => {
@@ -335,7 +493,7 @@ export function ProductDetailScreen() {
     if (!book) return;
     Alert.alert(
       "Повторное распознавание?",
-      "ИИ заново обработает фотографии и перезапишет данные карточки",
+      "ИИ проанализирует фотографии. Вы сможете просмотреть результат перед сохранением.",
       [
         { text: "Отмена", style: "cancel" },
         {
@@ -343,17 +501,9 @@ export function ProductDetailScreen() {
           onPress: async () => {
             setReExtracting(true);
             try {
-              await visionService.extract(book.id);
-              const [updated, freshOcr] = await Promise.all([
-                booksService.getBook(bookId),
-                visionService.getResult(bookId).catch(() => null),
-              ]);
-              setBook(updated);
-              populateEditFields(updated);
-              const raw = freshOcr?.extractedData?.price;
-              setAiPrice(typeof raw === "number" ? raw : null);
-              bookEvents.emitBookUpdated(updated);
-              Alert.alert("Готово", "Данные обновлены из фотографий");
+              const result = await visionService.extractPreview(book.id);
+              setPreviewData(result);
+              setPreviewModalVisible(true);
             } catch {
               Alert.alert("Ошибка", "Не удалось выполнить распознавание");
             } finally {
@@ -363,6 +513,56 @@ export function ProductDetailScreen() {
         },
       ],
     );
+  };
+
+  const handleAcceptPreview = async () => {
+    if (!book || !previewData) return;
+    setSaving(true);
+    try {
+      const d = previewData.extractedData;
+      const dto: UpdateBookDto = {
+        ...(d.title != null && { title: d.title }),
+        ...(d.author != null && { author: d.author }),
+        ...(d.isbn != null && { isbn: d.isbn }),
+        ...(d.publisher != null && { publisher: d.publisher }),
+        ...(d.yearPublished != null && { yearPublished: d.yearPublished }),
+        ...(d.pageCount != null && { pageCount: d.pageCount }),
+        ...(d.printRun != null && { printRun: d.printRun }),
+        ...(previewData.calculatedPrice > 0 && {
+          price: previewData.calculatedPrice,
+        }),
+        ...(d.weightGross != null && { weightGross: d.weightGross }),
+        ...(d.width != null && {
+          dimensions: {
+            width: d.width,
+            height: d.height ?? 0,
+            depth: d.depth ?? 0,
+          },
+        }),
+        annotation: d.annotation
+          ? ANNOTATION_PREFIX_MOBILE + d.annotation
+          : DEFAULT_ANNOTATION,
+        ...(d.hashtags?.length && { hashtags: d.hashtags }),
+        ...(d.coverType != null && {
+          coverType: normalizeCoverType(d.coverType),
+        }),
+        ...(d.paperType != null && {
+          paperType: normalizePaperType(d.paperType),
+        }),
+      };
+      const updated = await booksService.updateBook(book.id, dto);
+      setBook(updated);
+      populateEditFields(updated);
+      setAiPrice(typeof d.price === "number" ? d.price : null);
+      bookEvents.emitBookUpdated(updated);
+      setPreviewModalVisible(false);
+      setPreviewData(null);
+      Alert.alert("Готово", "Данные обновлены из фотографий");
+    } catch {
+      Alert.alert("Ошибка", "Не удалось сохранить данные");
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleDelete = () => {
@@ -382,6 +582,33 @@ export function ProductDetailScreen() {
       },
     ]);
   };
+
+  const openLightbox = (index: number) => {
+    setLightboxIndex(index);
+    setLightboxVisible(true);
+  };
+
+  useEffect(() => {
+    if (lightboxVisible) {
+      setTimeout(() => {
+        lightboxScrollRef.current?.scrollTo({
+          x: lightboxIndex * SCREEN_WIDTH,
+          animated: false,
+        });
+      }, 50);
+    }
+  }, [lightboxVisible, lightboxIndex]);
+
+  useEffect(() => {
+    if (previewLightboxIndex !== null) {
+      setTimeout(() => {
+        previewLightboxScrollRef.current?.scrollTo({
+          x: previewLightboxIndex * SCREEN_WIDTH,
+          animated: false,
+        });
+      }, 50);
+    }
+  }, [previewLightboxIndex]);
 
   if (loading) {
     return (
@@ -409,6 +636,37 @@ export function ProductDetailScreen() {
   return (
     <>
       <Modal
+        visible={lightboxVisible}
+        transparent={false}
+        animationType="fade"
+        statusBarTranslucent
+        onRequestClose={() => setLightboxVisible(false)}
+      >
+        <View style={styles.lightboxContainer}>
+          <TouchableOpacity
+            style={styles.lightboxClose}
+            onPress={() => setLightboxVisible(false)}
+          >
+            <Text style={styles.lightboxCloseText}>✕</Text>
+          </TouchableOpacity>
+          <ScrollView
+            ref={lightboxScrollRef}
+            horizontal
+            pagingEnabled
+            showsHorizontalScrollIndicator={false}
+          >
+            {sortedPhotos.map((photo) => (
+              <Image
+                key={photo.id}
+                source={{ uri: photo.fileUrl }}
+                style={styles.lightboxPhoto}
+                resizeMode="contain"
+              />
+            ))}
+          </ScrollView>
+        </View>
+      </Modal>
+      <Modal
         visible={storePickerVisible}
         transparent
         animationType="fade"
@@ -418,13 +676,18 @@ export function ProductDetailScreen() {
           <View style={styles.storeOverlay}>
             <TouchableWithoutFeedback>
               <View style={styles.storeContainer}>
-                <Text style={styles.storePickerTitle}>Выберите магазин Ozon</Text>
+                <Text style={styles.storePickerTitle}>
+                  Выберите магазин Ozon
+                </Text>
                 {stores.map((store) => {
                   const { blocked, label, warn } = getLimitStatus(store.id);
                   return (
                     <TouchableOpacity
                       key={store.id}
-                      style={[styles.storeItem, blocked && styles.storeItemBlocked]}
+                      style={[
+                        styles.storeItem,
+                        blocked && styles.storeItemBlocked,
+                      ]}
                       activeOpacity={blocked ? 1 : 0.7}
                       disabled={blocked}
                       onPress={() => {
@@ -434,15 +697,28 @@ export function ProductDetailScreen() {
                           `Загрузить книгу в магазин "${store.name}"?`,
                           [
                             { text: "Отмена", style: "cancel" },
-                            { text: "Загрузить", onPress: () => executePublish(store.id) },
+                            {
+                              text: "Загрузить",
+                              onPress: () => executePublish(store.id),
+                            },
                           ],
                         );
                       }}
                     >
-                      <Text style={[styles.storeItemName, blocked && styles.storeItemBlockedText]}>
+                      <Text
+                        style={[
+                          styles.storeItemName,
+                          blocked && styles.storeItemBlockedText,
+                        ]}
+                      >
                         {store.name}
                       </Text>
-                      <Text style={[styles.storeItemLimits, warn && styles.storeItemLimitWarn]}>
+                      <Text
+                        style={[
+                          styles.storeItemLimits,
+                          warn && styles.storeItemLimitWarn,
+                        ]}
+                      >
                         {label}
                       </Text>
                     </TouchableOpacity>
@@ -453,274 +729,406 @@ export function ProductDetailScreen() {
           </View>
         </TouchableWithoutFeedback>
       </Modal>
+      <Modal
+        visible={previewModalVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => {
+          setPreviewModalVisible(false);
+          setPreviewData(null);
+        }}
+      >
+        <View style={styles.previewOverlay}>
+          <View style={styles.previewContainer}>
+            <Text style={styles.previewTitle}>Результат распознавания</Text>
+            {sortedPhotos.length > 0 && (
+              <ScrollView
+                horizontal
+                pagingEnabled
+                showsHorizontalScrollIndicator={false}
+                style={styles.previewPhotoScroll}
+              >
+                {sortedPhotos.map((photo, index) => (
+                  <TouchableOpacity
+                    key={photo.id}
+                    onPress={() => setPreviewLightboxIndex(index)}
+                    activeOpacity={0.9}
+                  >
+                    <Image
+                      source={{ uri: photo.fileUrl }}
+                      style={styles.previewPhoto}
+                      resizeMode="contain"
+                    />
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            )}
+            <ScrollView
+              style={styles.previewScroll}
+              showsVerticalScrollIndicator={false}
+            >
+              {previewData &&
+                book &&
+                DIFF_FIELDS.map((field) => {
+                  const cur = field.current(book);
+                  const sug = field.suggested(previewData, book);
+                  const changed = cur !== sug;
+                  return (
+                    <View
+                      key={field.key}
+                      style={[styles.diffRow, changed && styles.diffRowChanged]}
+                    >
+                      <Text style={styles.diffLabel}>{field.label}</Text>
+                      <View style={styles.diffValues}>
+                        <Text style={styles.diffCurrent} numberOfLines={3}>
+                          {cur || "—"}
+                        </Text>
+                        {changed && (
+                          <>
+                            <Text style={styles.diffArrow}> → </Text>
+                            <Text
+                              style={styles.diffSuggested}
+                              numberOfLines={3}
+                            >
+                              {sug || "—"}
+                            </Text>
+                          </>
+                        )}
+                      </View>
+                    </View>
+                  );
+                })}
+            </ScrollView>
+            <View style={styles.previewActions}>
+              <Button
+                title="Принять"
+                onPress={handleAcceptPreview}
+                loading={saving}
+                style={{ flex: 1, marginRight: 8 }}
+              />
+              <Button
+                title="Отменить"
+                onPress={() => {
+                  setPreviewModalVisible(false);
+                  setPreviewData(null);
+                }}
+                variant="secondary"
+                style={{ flex: 1 }}
+              />
+            </View>
+            {previewLightboxIndex !== null && (
+              <View style={styles.previewLightbox}>
+                <TouchableOpacity
+                  style={styles.lightboxClose}
+                  onPress={() => setPreviewLightboxIndex(null)}
+                >
+                  <Text style={styles.lightboxCloseText}>✕</Text>
+                </TouchableOpacity>
+                <ScrollView
+                  ref={previewLightboxScrollRef}
+                  horizontal
+                  pagingEnabled
+                  showsHorizontalScrollIndicator={false}
+                >
+                  {sortedPhotos.map((photo) => (
+                    <Image
+                      key={photo.id}
+                      source={{ uri: photo.fileUrl }}
+                      style={styles.lightboxPhoto}
+                      resizeMode="contain"
+                    />
+                  ))}
+                </ScrollView>
+              </View>
+            )}
+          </View>
+        </View>
+      </Modal>
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
-      <ScrollView
-        style={styles.container}
-        contentContainerStyle={styles.scroll}
-      >
-        {sortedPhotos.length > 0 && (
-          <ScrollView
-            horizontal
-            pagingEnabled
-            showsHorizontalScrollIndicator={false}
-            style={styles.photoScroll}
-          >
-            {sortedPhotos.map((photo) => (
-              <Image
-                key={photo.id}
-                source={{ uri: photo.fileUrl }}
-                style={styles.photo}
-                resizeMode="contain"
-              />
-            ))}
-          </ScrollView>
-        )}
-
-        <View style={styles.content}>
-          {editing ? (
-            <>
-              <EditField
-                label="Название"
-                value={editTitle}
-                onChangeText={setEditTitle}
-              />
-              <EditField
-                label="Автор"
-                value={editAuthor}
-                onChangeText={setEditAuthor}
-              />
-              <EditField
-                label="ISBN"
-                value={editIsbn}
-                onChangeText={setEditIsbn}
-              />
-              <EditField
-                label="Издательство"
-                value={editPublisher}
-                onChangeText={setEditPublisher}
-              />
-              <EditField
-                label="Год"
-                value={editYear}
-                onChangeText={setEditYear}
-                keyboardType="numeric"
-              />
-              <EditField
-                label="Тираж"
-                value={editPrintRun}
-                onChangeText={setEditPrintRun}
-                keyboardType="numeric"
-              />
-              <EditField
-                label="Страниц"
-                value={editPages}
-                onChangeText={setEditPages}
-                keyboardType="numeric"
-              />
-              <EditField
-                label="Цена (₽)"
-                value={editPrice}
-                onChangeText={setEditPrice}
-                keyboardType="numeric"
-              />
-              <EditField
-                label="Вес (г)"
-                value={editWeight}
-                onChangeText={setEditWeight}
-                keyboardType="numeric"
-              />
-              <Text style={styles.sectionTitle}>Размеры (мм)</Text>
-              <View style={styles.dimRow}>
-                <EditField
-                  label="Д"
-                  value={editHeight}
-                  onChangeText={setEditHeight}
-                  keyboardType="numeric"
-                  style={{ flex: 1 }}
-                />
-                <EditField
-                  label="Ш"
-                  value={editWidth}
-                  onChangeText={setEditWidth}
-                  keyboardType="numeric"
-                  style={{ flex: 1 }}
-                />
-                <EditField
-                  label="В"
-                  value={editDepth}
-                  onChangeText={setEditDepth}
-                  keyboardType="numeric"
-                  style={{ flex: 1 }}
-                />
-              </View>
-              <SegmentPicker
-                label="Тип переплета"
-                options={Object.values(CoverType)}
-                value={editCoverType}
-                onChange={(v) => setEditCoverType(v as CoverType)}
-              />
-              <SegmentPicker
-                label="Тип бумаги"
-                options={Object.values(PaperType)}
-                value={editPaperType}
-                onChange={(v) => setEditPaperType(v as PaperType)}
-              />
-              <EditField
-                label="Аннотация"
-                value={editAnnotation}
-                onChangeText={setEditAnnotation}
-                multiline
-              />
-              <EditField
-                label="Хэштеги (через пробел)"
-                value={editHashtags}
-                onChangeText={setEditHashtags}
-                multiline
-              />
-
-              <View style={styles.editActions}>
-                <Button
-                  title="Сохранить"
-                  onPress={handleSave}
-                  loading={saving}
-                  style={{ flex: 1, marginRight: 8 }}
-                />
-                <Button
-                  title="Отмена"
-                  onPress={handleCancelEdit}
-                  variant="secondary"
-                  style={{ flex: 1 }}
-                />
-              </View>
-            </>
-          ) : (
-            <>
-              {/* Header */}
-              <Text style={styles.title}>{ozon.name}</Text>
-              <View style={styles.headerMeta}>
-                <Text style={styles.sku}>SKU: {ozon.offerId}</Text>
-                <View style={[styles.badge, { backgroundColor: statusCfg.bg }]}>
-                  <Text style={[styles.badgeText, { color: statusCfg.color }]}>
-                    {statusCfg.label}
-                  </Text>
-                </View>
-              </View>
-
-              {/* Ozon card attributes */}
-              <View style={styles.section}>
-                <Text style={styles.sectionTitle}>Карточка Озон</Text>
-                <InfoRow label="Название" value={ozon.name} />
-                <InfoRow label="Автор на обложке" value={ozon.authorOnCover} />
-                <InfoRow label="Бренд" value={ozon.brand} />
-                <InfoRow label="Тип" value={ozon.bookType} />
-                <InfoRow label="Направление" value={ozon.direction} />
-                <InfoRow label="Состояние" value={ozon.condition} />
-                <InfoRow label="ISBN" value={book.isbn} />
-                <InfoRow label="Издательство" value={book.publisher} />
-                <InfoRow label="Год" value={book.yearPublished?.toString()} />
-                <InfoRow label="Тираж" value={formatPrintRun(book.printRun)} />
-                <InfoRow label="Тип обложки" value={book.coverType} />
-                <InfoRow label="Тип бумаги" value={book.paperType} />
-                <InfoRow label="Страниц" value={book.pageCount?.toString()} />
-                <InfoRow label="Язык" value={book.language} />
-                <InfoRow label="Размеры (ДxШxВ)" value={ozon.dimString} />
-                <InfoRow label="Вес" value={`${ozon.weight} г`} />
-                <InfoRow
-                  label="Рекомендованная цена от ИИ"
-                  value={aiPrice != null ? formatPrice(aiPrice) : undefined}
-                />
-                <InfoRow
-                  label="Цена"
-                  value={ozon.price > 0 ? formatPrice(ozon.price) : undefined}
-                />
-              </View>
-
-              {/* Annotation with prefix */}
-              <View style={styles.section}>
-                <Text style={styles.sectionTitle}>Аннотация (Озон)</Text>
-                <View style={styles.annotationBox}>
-                  <Text style={styles.annotationText}>{ozon.annotation}</Text>
-                </View>
-              </View>
-
-              {/* Hashtags */}
-              {ozon.hashtags.length > 0 && (
-                <View style={styles.section}>
-                  <Text style={styles.sectionTitle}>Хэштеги</Text>
-                  <Text style={styles.hashtagsText}>{ozon.hashtags}</Text>
-                </View>
-              )}
-
-              {/* Metadata */}
-              <View style={styles.metaSection}>
-                {book.createdBy && (
-                  <Text style={styles.metaText}>
-                    Оператор: {book.createdBy.fullName}
-                  </Text>
-                )}
-                <Text style={styles.metaText}>
-                  Создана: {formatDate(book.createdAt)}
-                </Text>
-                {book.publishedToOzon && (
-                  <Text style={styles.metaText}>
-                    Опубликована: {formatDate(book.publishedToOzon)}
-                  </Text>
-                )}
-              </View>
-
-              {/* Actions */}
-              <View style={styles.actions}>
-                {editable && (
-                  <Button
-                    title="Редактировать"
-                    onPress={() => setEditing(true)}
-                    style={{ marginBottom: 8 }}
+        <ScrollView
+          style={styles.container}
+          contentContainerStyle={styles.scroll}
+        >
+          {sortedPhotos.length > 0 && (
+            <ScrollView
+              horizontal
+              pagingEnabled
+              showsHorizontalScrollIndicator={false}
+              style={styles.photoScroll}
+            >
+              {sortedPhotos.map((photo, index) => (
+                <TouchableOpacity
+                  key={photo.id}
+                  onPress={() => openLightbox(index)}
+                  activeOpacity={0.9}
+                >
+                  <Image
+                    source={{ uri: photo.fileUrl }}
+                    style={styles.photo}
+                    resizeMode="contain"
                   />
-                )}
-                <Button
-                  title="Изменить фото"
-                  onPress={() => navigation.navigate("PhotoUpload", { bookId })}
-                  style={{ marginBottom: 10 }}
-                />
-                <Button
-                  title="Распознать заново"
-                  onPress={handleReExtract}
-                  loading={reExtracting}
-                  style={{ marginBottom: 8 }}
-                />
-                {(book.status === BookStatus.PENDING_REVIEW ||
-                  book.status === BookStatus.PUBLICATION_FAILED) && (
-                  <Button
-                    title="Загрузить в Озон"
-                    onPress={handlePublish}
-                    loading={publishing}
-                    style={{ marginBottom: 8 }}
-                  />
-                )}
-                {(book.status === BookStatus.PENDING_PUBLICATION ||
-                  book.status === BookStatus.PUBLISHED) && (
-                  <Button
-                    title="Проверить статус"
-                    onPress={handleCheckStatus}
-                    loading={checkingStatus}
-                    variant="secondary"
-                    style={{ marginBottom: 8 }}
-                  />
-                )}
-                <Button
-                  title="Удалить"
-                  onPress={handleDelete}
-                  variant="danger"
-                />
-              </View>
-            </>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
           )}
-        </View>
-      </ScrollView>
-    </KeyboardAvoidingView>
+
+          <View style={styles.content}>
+            {editing ? (
+              <>
+                <EditField
+                  label="Название"
+                  value={editTitle}
+                  onChangeText={setEditTitle}
+                />
+                <EditField
+                  label="Автор"
+                  value={editAuthor}
+                  onChangeText={setEditAuthor}
+                />
+                <EditField
+                  label="ISBN"
+                  value={editIsbn}
+                  onChangeText={setEditIsbn}
+                />
+                <EditField
+                  label="Издательство"
+                  value={editPublisher}
+                  onChangeText={setEditPublisher}
+                />
+                <EditField
+                  label="Год"
+                  value={editYear}
+                  onChangeText={setEditYear}
+                  keyboardType="numeric"
+                />
+                <EditField
+                  label="Тираж"
+                  value={editPrintRun}
+                  onChangeText={setEditPrintRun}
+                  keyboardType="numeric"
+                />
+                <EditField
+                  label="Страниц"
+                  value={editPages}
+                  onChangeText={setEditPages}
+                  keyboardType="numeric"
+                />
+                <EditField
+                  label="Цена (₽)"
+                  value={editPrice}
+                  onChangeText={setEditPrice}
+                  keyboardType="numeric"
+                />
+                <EditField
+                  label="Вес (г)"
+                  value={editWeight}
+                  onChangeText={setEditWeight}
+                  keyboardType="numeric"
+                />
+                <Text style={styles.sectionTitle}>Размеры (мм)</Text>
+                <View style={styles.dimRow}>
+                  <EditField
+                    label="Д"
+                    value={editHeight}
+                    onChangeText={setEditHeight}
+                    keyboardType="numeric"
+                    style={{ flex: 1 }}
+                  />
+                  <EditField
+                    label="Ш"
+                    value={editWidth}
+                    onChangeText={setEditWidth}
+                    keyboardType="numeric"
+                    style={{ flex: 1 }}
+                  />
+                  <EditField
+                    label="В"
+                    value={editDepth}
+                    onChangeText={setEditDepth}
+                    keyboardType="numeric"
+                    style={{ flex: 1 }}
+                  />
+                </View>
+                <SegmentPicker
+                  label="Тип переплета"
+                  options={Object.values(CoverType)}
+                  value={editCoverType}
+                  onChange={(v) => setEditCoverType(v as CoverType)}
+                />
+                <SegmentPicker
+                  label="Тип бумаги"
+                  options={Object.values(PaperType)}
+                  value={editPaperType}
+                  onChange={(v) => setEditPaperType(v as PaperType)}
+                />
+                <EditField
+                  label="Аннотация"
+                  value={editAnnotation}
+                  onChangeText={setEditAnnotation}
+                  multiline
+                />
+                <EditField
+                  label="Хэштеги (через пробел)"
+                  value={editHashtags}
+                  onChangeText={setEditHashtags}
+                  multiline
+                />
+
+                <View style={styles.editActions}>
+                  <Button
+                    title="Сохранить"
+                    onPress={handleSave}
+                    loading={saving}
+                    style={{ flex: 1, marginRight: 8 }}
+                  />
+                  <Button
+                    title="Отмена"
+                    onPress={handleCancelEdit}
+                    variant="secondary"
+                    style={{ flex: 1 }}
+                  />
+                </View>
+              </>
+            ) : (
+              <>
+                {/* Header */}
+                <Text style={styles.title}>{ozon.name}</Text>
+                <View style={styles.headerMeta}>
+                  <Text style={styles.sku}>SKU: {ozon.offerId}</Text>
+                  <View
+                    style={[styles.badge, { backgroundColor: statusCfg.bg }]}
+                  >
+                    <Text
+                      style={[styles.badgeText, { color: statusCfg.color }]}
+                    >
+                      {statusCfg.label}
+                    </Text>
+                  </View>
+                </View>
+
+                {/* Ozon card attributes */}
+                <View style={styles.section}>
+                  <Text style={styles.sectionTitle}>Карточка Озон</Text>
+                  <InfoRow label="Название" value={ozon.name} />
+                  <InfoRow
+                    label="Автор на обложке"
+                    value={ozon.authorOnCover}
+                  />
+                  <InfoRow label="Бренд" value={ozon.brand} />
+                  <InfoRow label="Тип" value={ozon.bookType} />
+                  <InfoRow label="Направление" value={ozon.direction} />
+                  <InfoRow label="Состояние" value={ozon.condition} />
+                  <InfoRow label="ISBN" value={book.isbn} />
+                  <InfoRow label="Издательство" value={book.publisher} />
+                  <InfoRow label="Год" value={book.yearPublished?.toString()} />
+                  <InfoRow
+                    label="Тираж"
+                    value={formatPrintRun(book.printRun)}
+                  />
+                  <InfoRow label="Тип обложки" value={book.coverType} />
+                  <InfoRow label="Тип бумаги" value={book.paperType} />
+                  <InfoRow label="Страниц" value={book.pageCount?.toString()} />
+                  <InfoRow label="Язык" value={book.language} />
+                  <InfoRow label="Размеры (ДxШxВ)" value={ozon.dimString} />
+                  <InfoRow label="Вес" value={`${ozon.weight} г`} />
+                  <InfoRow
+                    label="Рекомендованная цена от ИИ"
+                    value={aiPrice != null ? formatPrice(aiPrice) : undefined}
+                  />
+                  <InfoRow
+                    label="Цена"
+                    value={ozon.price > 0 ? formatPrice(ozon.price) : undefined}
+                  />
+                </View>
+
+                {/* Annotation with prefix */}
+                <View style={styles.section}>
+                  <Text style={styles.sectionTitle}>Аннотация (Озон)</Text>
+                  <View style={styles.annotationBox}>
+                    <Text style={styles.annotationText}>{ozon.annotation}</Text>
+                  </View>
+                </View>
+
+                {/* Hashtags */}
+                {ozon.hashtags.length > 0 && (
+                  <View style={styles.section}>
+                    <Text style={styles.sectionTitle}>Хэштеги</Text>
+                    <Text style={styles.hashtagsText}>{ozon.hashtags}</Text>
+                  </View>
+                )}
+
+                {/* Metadata */}
+                <View style={styles.metaSection}>
+                  {book.createdBy && (
+                    <Text style={styles.metaText}>
+                      Оператор: {book.createdBy.fullName}
+                    </Text>
+                  )}
+                  <Text style={styles.metaText}>
+                    Создана: {formatDate(book.createdAt)}
+                  </Text>
+                  {book.publishedToOzon && (
+                    <Text style={styles.metaText}>
+                      Опубликована: {formatDate(book.publishedToOzon)}
+                    </Text>
+                  )}
+                </View>
+
+                {/* Actions */}
+                <View style={styles.actions}>
+                  {editable && (
+                    <Button
+                      title="Редактировать"
+                      onPress={() => setEditing(true)}
+                      style={{ marginBottom: 8 }}
+                    />
+                  )}
+                  <Button
+                    title="Изменить фото"
+                    onPress={() =>
+                      navigation.navigate("PhotoUpload", { bookId })
+                    }
+                    style={{ marginBottom: 10 }}
+                  />
+                  <Button
+                    title="Распознать заново"
+                    onPress={handleReExtract}
+                    loading={reExtracting}
+                    style={{ marginBottom: 8 }}
+                  />
+                  {(book.status === BookStatus.PENDING_REVIEW ||
+                    book.status === BookStatus.PUBLICATION_FAILED) && (
+                    <Button
+                      title="Загрузить в Озон"
+                      onPress={handlePublish}
+                      loading={publishing}
+                      style={{ marginBottom: 8 }}
+                    />
+                  )}
+                  {(book.status === BookStatus.PENDING_PUBLICATION ||
+                    book.status === BookStatus.PUBLISHED) && (
+                    <Button
+                      title="Проверить статус"
+                      onPress={handleCheckStatus}
+                      loading={checkingStatus}
+                      variant="secondary"
+                      style={{ marginBottom: 8 }}
+                    />
+                  )}
+                  <Button
+                    title="Удалить"
+                    onPress={handleDelete}
+                    variant="danger"
+                  />
+                </View>
+              </>
+            )}
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
     </>
   );
 }
@@ -1016,5 +1424,118 @@ const styles = StyleSheet.create({
   storeItemLimitWarn: {
     color: "#E53935",
     fontWeight: "600",
+  },
+  previewOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "flex-end",
+  },
+  previewContainer: {
+    backgroundColor: "#fff",
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    padding: 16,
+    maxHeight: "85%",
+  },
+  previewTitle: {
+    fontSize: 17,
+    fontWeight: "700",
+    color: "#222",
+    marginBottom: 12,
+    textAlign: "center",
+  },
+  previewScroll: {
+    flexGrow: 0,
+  },
+  diffRow: {
+    paddingVertical: 8,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: "#eee",
+  },
+  diffRowChanged: {
+    backgroundColor: "#FFF9C4",
+    borderRadius: 6,
+    paddingHorizontal: 6,
+    marginHorizontal: -6,
+  },
+  diffLabel: {
+    fontSize: 11,
+    color: "#888",
+    marginBottom: 2,
+  },
+  diffValues: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    alignItems: "flex-start",
+  },
+  diffCurrent: {
+    fontSize: 13,
+    color: "#555",
+    flex: 1,
+  },
+  diffArrow: {
+    fontSize: 13,
+    color: "#1976D2",
+    fontWeight: "700",
+    marginHorizontal: 4,
+  },
+  diffSuggested: {
+    fontSize: 13,
+    color: "#1976D2",
+    fontWeight: "600",
+    flex: 1,
+  },
+  previewActions: {
+    flexDirection: "row",
+    marginTop: 16,
+  },
+  previewPhotoScroll: {
+    height: 420,
+    marginBottom: 12,
+    borderRadius: 8,
+    overflow: "hidden",
+  },
+  previewPhoto: {
+    width: SCREEN_WIDTH - 32,
+    height: 220,
+    backgroundColor: "#f5f5f5",
+  },
+  lightboxContainer: {
+    flex: 1,
+    backgroundColor: "#000",
+    justifyContent: "center",
+  },
+  lightboxClose: {
+    position: "absolute",
+    top: 52,
+    right: 20,
+    zIndex: 10,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: "rgba(255,255,255,0.25)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  lightboxCloseText: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "700",
+  },
+  lightboxPhoto: {
+    width: SCREEN_WIDTH,
+    height: SCREEN_HEIGHT,
+  },
+  previewLightbox: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: "#000",
+    zIndex: 100,
+    borderRadius: 20,
+    overflow: "hidden",
+    justifyContent: "center",
   },
 });
