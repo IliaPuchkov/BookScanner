@@ -9,6 +9,7 @@ import React, {
 import {
   View,
   SectionList,
+  FlatList,
   StyleSheet,
   RefreshControl,
   Text,
@@ -1300,7 +1301,7 @@ export function PendingReviewScreen() {
                         autoFocus
                         clearButtonMode="while-editing"
                       />
-                      <FlatList
+                      <FlatList<{ id: string; boxNumber: string }>
                         data={[
                           { id: "", boxNumber: "Все коробки" },
                           ...boxes.filter((b) =>
@@ -1363,7 +1364,7 @@ export function PendingReviewScreen() {
                         autoFocus
                         clearButtonMode="while-editing"
                       />
-                      <FlatList
+                      <FlatList<{ id: string; fullName: string }>
                         data={[
                           { id: "", fullName: "Все операторы" },
                           ...filterUsers.filter((u) =>

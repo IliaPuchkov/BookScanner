@@ -118,6 +118,9 @@ export class Book {
   @Column({ nullable: true })
   publishedToOzon: Date;
 
+  @Column({ default: false })
+  priceReviewed: boolean;
+
   @Column({ type: 'enum', enum: BookStatus, default: BookStatus.PENDING_REVIEW })
   status: BookStatus;
 

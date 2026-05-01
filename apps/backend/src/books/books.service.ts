@@ -334,6 +334,9 @@ export class BooksService {
     const clean = Object.fromEntries(
       Object.entries(dto).filter(([, v]) => v !== undefined),
     );
+    if (dto.price !== undefined && Number(dto.price) !== Number(book.price)) {
+      (clean as any).priceReviewed = true;
+    }
     Object.assign(book, clean);
     return this.booksRepository.save(book);
   }
@@ -415,10 +418,12 @@ export class BooksService {
       .createQueryBuilder('book')
       .leftJoinAndSelect('book.photos', 'photos')
       .leftJoinAndSelect('book.box', 'box')
+      .leftJoinAndSelect('book.ozonProduct', 'ozonProduct')
       .where('book.yearPublished <= :year', { year: 1985 })
       .andWhere('book.printRun IS NOT NULL')
       .andWhere('book.printRun < :printRun', { printRun: 10000 })
       .andWhere('book.status != :archived', { archived: 'archived' })
+      .andWhere('book.priceReviewed = false')
       .orderBy('book.printRun', 'ASC')
       .skip((page - 1) * limit)
       .take(limit);
@@ -433,6 +438,7 @@ export class BooksService {
       .andWhere('book.printRun IS NOT NULL')
       .andWhere('book.printRun < :printRun', { printRun: 10000 })
       .andWhere('book.status != :archived', { archived: 'archived' })
+      .andWhere('book.priceReviewed = false')
       .getCount();
   }
 

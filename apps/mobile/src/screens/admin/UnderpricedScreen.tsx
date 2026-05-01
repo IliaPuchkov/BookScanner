@@ -8,48 +8,84 @@ import {
   Image,
   ActivityIndicator,
   RefreshControl,
+  Alert,
 } from "react-native";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { adminService } from "../../services/admin.service";
+import { booksService } from "../../services/books.service";
 import type { Book } from "../../types";
 import type { AdminMainStackParamList } from "../../navigation/AdminNavigator";
 
 type Nav = NativeStackNavigationProp<AdminMainStackParamList, "Underpriced">;
 
-function UnderpricedBookItem({ item, onNavigate }: { item: Book; onNavigate: (id: string) => void }) {
+function UnderpricedBookItem({
+  item,
+  onNavigate,
+  onMarkReviewed,
+  markingReviewed,
+}: {
+  item: Book;
+  onNavigate: (id: string) => void;
+  onMarkReviewed: (id: string) => void;
+  markingReviewed: boolean;
+}) {
   const coverPhoto = item.photos?.find((p) => p.sortOrder === 0);
+  const isPublished = item.status === "published";
   return (
-    <TouchableOpacity style={styles.card} activeOpacity={0.7} onPress={() => onNavigate(item.id)}>
-      <View style={styles.imageWrapper}>
-        {coverPhoto ? (
-          <Image source={{ uri: coverPhoto.fileUrl }} style={styles.image} />
-        ) : (
-          <View style={[styles.image, styles.placeholder]}>
-            <Text style={styles.placeholderText}>Нет фото</Text>
-          </View>
-        )}
-      </View>
-      <View style={styles.info}>
-        <Text style={styles.title} numberOfLines={2}>{item.title}</Text>
-        {item.author ? (
-          <Text style={styles.author} numberOfLines={1}>{item.author}</Text>
-        ) : null}
-        <Text style={styles.sku}>{item.sku}</Text>
-        <View style={styles.metaRow}>
-          {item.yearPublished ? (
-            <Text style={styles.metaChip}>📅 {item.yearPublished}</Text>
-          ) : null}
-          {item.printRun ? (
-            <Text style={styles.metaChip}>📦 {item.printRun.toLocaleString()} экз.</Text>
-          ) : null}
+    <View style={styles.card}>
+      <TouchableOpacity
+        style={styles.cardMain}
+        activeOpacity={0.7}
+        onPress={() => onNavigate(item.id)}
+      >
+        <View style={styles.imageWrapper}>
+          {coverPhoto ? (
+            <Image source={{ uri: coverPhoto.fileUrl }} style={styles.image} />
+          ) : (
+            <View style={[styles.image, styles.placeholder]}>
+              <Text style={styles.placeholderText}>Нет фото</Text>
+            </View>
+          )}
         </View>
-        {item.price != null ? (
-          <Text style={styles.price}>{Number(item.price).toFixed(0)} ₽</Text>
-        ) : null}
-        <Text style={styles.editHint}>Нажмите, чтобы изменить цену</Text>
+        <View style={styles.info}>
+          <Text style={styles.title} numberOfLines={2}>{item.title}</Text>
+          {item.author ? (
+            <Text style={styles.author} numberOfLines={1}>{item.author}</Text>
+          ) : null}
+          <Text style={styles.sku}>{item.sku}</Text>
+          <View style={styles.metaRow}>
+            {item.yearPublished ? (
+              <Text style={styles.metaChip}>📅 {item.yearPublished}</Text>
+            ) : null}
+            {item.printRun ? (
+              <Text style={styles.metaChip}>📦 {item.printRun.toLocaleString()} экз.</Text>
+            ) : null}
+            {isPublished && (
+              <Text style={styles.publishedChip}>Ozon ✓</Text>
+            )}
+          </View>
+          {item.price != null ? (
+            <Text style={styles.price}>{Number(item.price).toFixed(0)} ₽</Text>
+          ) : null}
+          <Text style={styles.editHint}>Нажмите, чтобы изменить цену</Text>
+        </View>
+      </TouchableOpacity>
+      <View style={styles.cardActions}>
+        <TouchableOpacity
+          style={[styles.reviewedBtn, markingReviewed && styles.reviewedBtnDisabled]}
+          onPress={() => onMarkReviewed(item.id)}
+          disabled={markingReviewed}
+          activeOpacity={0.7}
+        >
+          {markingReviewed ? (
+            <ActivityIndicator size="small" color="#2E7D32" />
+          ) : (
+            <Text style={styles.reviewedBtnText}>✓ Цена скорректирована</Text>
+          )}
+        </TouchableOpacity>
       </View>
-    </TouchableOpacity>
+    </View>
   );
 }
 
@@ -61,6 +97,7 @@ export function UnderpricedScreen() {
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [markingId, setMarkingId] = useState<string | null>(null);
   const loadingMoreRef = useRef(false);
 
   const fetchBooks = useCallback(async (p: number, mode: "initial" | "refresh" | "more") => {
@@ -96,6 +133,30 @@ export function UnderpricedScreen() {
     [navigation],
   );
 
+  const handleMarkReviewed = useCallback((bookId: string) => {
+    Alert.alert(
+      "Подтверждение",
+      "Отметить цену как скорректированную? Книга исчезнет из этого списка.",
+      [
+        { text: "Отмена", style: "cancel" },
+        {
+          text: "Да, скорректирована",
+          onPress: async () => {
+            setMarkingId(bookId);
+            try {
+              await booksService.markPriceReviewed(bookId);
+              setBooks((prev) => prev.filter((b) => b.id !== bookId));
+            } catch {
+              Alert.alert("Ошибка", "Не удалось обновить статус");
+            } finally {
+              setMarkingId(null);
+            }
+          },
+        },
+      ],
+    );
+  }, []);
+
   const handleLoadMore = () => {
     if (hasMore && !loadingMoreRef.current && !loading) {
       loadingMoreRef.current = true;
@@ -104,8 +165,15 @@ export function UnderpricedScreen() {
   };
 
   const renderItem = useCallback(
-    ({ item }: { item: Book }) => <UnderpricedBookItem item={item} onNavigate={navigate} />,
-    [navigate],
+    ({ item }: { item: Book }) => (
+      <UnderpricedBookItem
+        item={item}
+        onNavigate={navigate}
+        onMarkReviewed={handleMarkReviewed}
+        markingReviewed={markingId === item.id}
+      />
+    ),
+    [navigate, handleMarkReviewed, markingId],
   );
 
   return (
@@ -129,7 +197,7 @@ export function UnderpricedScreen() {
             📌 Критерии: год издания ≤ 1985, тираж &lt; 10 000 экземпляров
           </Text>
           <Text style={styles.infoBannerSub}>
-            Эти книги могут стоить дороже. Нажмите на карточку, чтобы скорректировать цену.
+            Скорректируйте цену или нажмите "Цена скорректирована" чтобы убрать из списка.
           </Text>
         </View>
       }
@@ -137,7 +205,7 @@ export function UnderpricedScreen() {
         loading ? null : (
           <View style={styles.emptyContainer}>
             <Text style={styles.emptyIcon}>✅</Text>
-            <Text style={styles.empty}>Книг с заниженной ценой не найдено</Text>
+            <Text style={styles.empty}>Книг с некорректной ценой не найдено</Text>
           </View>
         )
       }
@@ -178,16 +246,19 @@ const styles = StyleSheet.create({
     color: "#8D6E63",
   },
   card: {
-    flexDirection: "row",
     backgroundColor: "#fff",
     borderRadius: 12,
     marginBottom: 8,
-    padding: 12,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.08,
     shadowRadius: 4,
     elevation: 2,
+    overflow: "hidden",
+  },
+  cardMain: {
+    flexDirection: "row",
+    padding: 12,
   },
   imageWrapper: {},
   image: {
@@ -230,6 +301,7 @@ const styles = StyleSheet.create({
     gap: 6,
     marginBottom: 4,
     flexWrap: "wrap",
+    alignItems: "center",
   },
   metaChip: {
     fontSize: 12,
@@ -238,6 +310,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 4,
+  },
+  publishedChip: {
+    fontSize: 11,
+    color: "#2E7D32",
+    backgroundColor: "#E8F5E9",
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    fontWeight: "600",
   },
   price: {
     fontSize: 16,
@@ -249,6 +330,28 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: "#bbb",
     fontStyle: "italic",
+  },
+  cardActions: {
+    borderTopWidth: 1,
+    borderTopColor: "#f0f0f0",
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  reviewedBtn: {
+    backgroundColor: "#E8F5E9",
+    borderRadius: 8,
+    paddingVertical: 8,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#A5D6A7",
+  },
+  reviewedBtnDisabled: {
+    opacity: 0.6,
+  },
+  reviewedBtnText: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#2E7D32",
   },
   emptyContainer: {
     alignItems: "center",

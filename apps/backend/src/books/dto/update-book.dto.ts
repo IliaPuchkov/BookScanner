@@ -2,6 +2,7 @@ import {
   IsString,
   IsOptional,
   IsNumber,
+  IsBoolean,
   IsEnum,
   IsArray,
 } from 'class-validator';
@@ -77,6 +78,11 @@ export class UpdateBookDto {
   @IsOptional()
   @IsNumber()
   price?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  priceReviewed?: boolean;
 
   @ApiPropertyOptional()
   @IsOptional()
