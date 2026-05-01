@@ -1,4 +1,5 @@
 import OpenAI from "openai";
+import type { ChatCompletionCreateParamsNonStreaming } from "openai/resources/chat/completions";
 import { IExtractionResult } from "@bookscanner/shared";
 
 export class OpenAIVisionExtractor {
@@ -107,9 +108,10 @@ export class GeminiVisionExtractor {
       image_url: { url },
     }));
 
-    const requestBody = {
+    const requestBody: ChatCompletionCreateParamsNonStreaming = {
       model: "google/gemini-2.0-flash-lite-001",
-      max_tokens: 3000,
+      max_tokens: 1500,
+      response_format: { type: "json_object" as const },
       messages: [
         {
           role: "user",
@@ -125,16 +127,13 @@ export class GeminiVisionExtractor {
       prompt_length: prompt.length,
     }));
 
-    let response: Awaited<ReturnType<typeof this.client.chat.completions.create>>;
-    try {
-      response = await this.client.chat.completions.create(requestBody);
-    } catch (err: any) {
+    const response = await this.client.chat.completions.create(requestBody).catch((err: any) => {
       console.error("[GeminiVisionExtractor] HTTP error from Polza.AI");
       console.error("[GeminiVisionExtractor] HTTP status:", err?.status);
       console.error("[GeminiVisionExtractor] Error message:", err?.message);
       console.error("[GeminiVisionExtractor] Error body:", JSON.stringify(err?.error ?? err?.response?.data ?? null));
       throw err;
-    }
+    });
 
     const choice = response.choices[0];
     const raw = choice?.message?.content || "";

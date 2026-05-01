@@ -331,7 +331,10 @@ export class BooksService {
   async update(id: string, dto: UpdateBookDto, userId: string, role: UserRole): Promise<Book> {
     const book = await this.findOne(id);
     this.checkOwnership(book, userId, role);
-    Object.assign(book, dto);
+    const clean = Object.fromEntries(
+      Object.entries(dto).filter(([, v]) => v !== undefined),
+    );
+    Object.assign(book, clean);
     return this.booksRepository.save(book);
   }
 

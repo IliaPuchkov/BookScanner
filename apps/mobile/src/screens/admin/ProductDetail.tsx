@@ -520,23 +520,24 @@ export function ProductDetailScreen() {
     setSaving(true);
     try {
       const d = previewData.extractedData;
+      const num = (v: unknown) => (v != null && v !== "" ? Number(v) : null);
       const dto: UpdateBookDto = {
         ...(d.title != null && { title: d.title }),
         ...(d.author != null && { author: d.author }),
-        ...(d.isbn != null && { isbn: d.isbn }),
+        ...(d.isbn != null && { isbn: String(d.isbn) }),
         ...(d.publisher != null && { publisher: d.publisher }),
-        ...(d.yearPublished != null && { yearPublished: d.yearPublished }),
-        ...(d.pageCount != null && { pageCount: d.pageCount }),
-        ...(d.printRun != null && { printRun: d.printRun }),
+        ...(num(d.yearPublished) != null && { yearPublished: num(d.yearPublished)! }),
+        ...(num(d.pageCount) != null && { pageCount: num(d.pageCount)! }),
+        ...(num(d.printRun) != null && { printRun: num(d.printRun)! }),
         ...(previewData.calculatedPrice > 0 && {
           price: previewData.calculatedPrice,
         }),
-        ...(d.weightGross != null && { weightGross: d.weightGross }),
+        ...(num(d.weightGross) != null && { weightGross: num(d.weightGross)! }),
         ...(d.width != null && {
           dimensions: {
-            width: d.width,
-            height: d.height ?? 0,
-            depth: d.depth ?? 0,
+            width: num(d.width) ?? 0,
+            height: num(d.height) ?? DEFAULT_THICKNESS_MM,
+            depth: num(d.depth) ?? DEFAULT_THICKNESS_MM,
           },
         }),
         annotation: d.annotation
@@ -558,8 +559,11 @@ export function ProductDetailScreen() {
       setPreviewModalVisible(false);
       setPreviewData(null);
       Alert.alert("Готово", "Данные обновлены из фотографий");
-    } catch {
-      Alert.alert("Ошибка", "Не удалось сохранить данные");
+    } catch (err: unknown) {
+      const msg =
+        (err as { response?: { data?: { message?: string } } })?.response?.data
+          ?.message ?? (err instanceof Error ? err.message : "Неизвестная ошибка");
+      Alert.alert("Ошибка сохранения", String(msg));
     } finally {
       setSaving(false);
     }
