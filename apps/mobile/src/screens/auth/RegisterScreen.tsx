@@ -7,14 +7,25 @@ import {
   Platform,
   ScrollView,
   Alert,
+  TouchableOpacity,
 } from "react-native";
 import { useNavigation } from "@react-navigation/native";
+import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { Input } from "../../components/Input";
 import { Button } from "../../components/Button";
 import { useAuth } from "../../hooks/useAuth";
+import type { AuthStackParamList } from "../../navigation/AuthNavigator";
+import {
+  PRIVACY_POLICY_TITLE,
+  PRIVACY_POLICY_TEXT,
+  PUBLIC_OFFER_TITLE,
+  PUBLIC_OFFER_TEXT,
+} from "../../constants/legal";
+
+type NavProp = NativeStackNavigationProp<AuthStackParamList>;
 
 export function RegisterScreen() {
-  const navigation = useNavigation();
+  const navigation = useNavigation<NavProp>();
   const { register } = useAuth();
 
   const [fullName, setFullName] = useState("");
@@ -22,7 +33,11 @@ export function RegisterScreen() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [consentPrivacy, setConsentPrivacy] = useState(false);
+  const [consentOffer, setConsentOffer] = useState(false);
   const [loading, setLoading] = useState(false);
+
+  const canSubmit = consentPrivacy && consentOffer;
 
   const handleRegister = async () => {
     if (!fullName.trim() || !phone.trim() || !email.trim() || !password) {
@@ -41,6 +56,13 @@ export function RegisterScreen() {
       Alert.alert(
         "Ошибка",
         "Пароль должен содержать строчные и заглавные буквы, а также цифры",
+      );
+      return;
+    }
+    if (!canSubmit) {
+      Alert.alert(
+        "Ошибка",
+        "Необходимо принять политику конфиденциальности и пользовательское соглашение",
       );
       return;
     }
@@ -115,10 +137,39 @@ export function RegisterScreen() {
             secureTextEntry
           />
 
+          <View style={styles.consentBlock}>
+            <ConsentRow
+              checked={consentPrivacy}
+              onToggle={() => setConsentPrivacy((v) => !v)}
+              label="Я ознакомился(-ась) с "
+              linkText="Политикой конфиденциальности"
+              onLinkPress={() =>
+                navigation.navigate("LegalDocument", {
+                  title: PRIVACY_POLICY_TITLE,
+                  text: PRIVACY_POLICY_TEXT,
+                })
+              }
+              suffix=" и принимаю её"
+            />
+            <ConsentRow
+              checked={consentOffer}
+              onToggle={() => setConsentOffer((v) => !v)}
+              label="Я принимаю условия "
+              linkText="Пользовательского соглашения"
+              onLinkPress={() =>
+                navigation.navigate("LegalDocument", {
+                  title: PUBLIC_OFFER_TITLE,
+                  text: PUBLIC_OFFER_TEXT,
+                })
+              }
+            />
+          </View>
+
           <Button
             title="Зарегистрироваться"
             onPress={handleRegister}
             loading={loading}
+            disabled={!canSubmit}
             style={{ marginTop: 8 }}
           />
           <Button
@@ -130,6 +181,39 @@ export function RegisterScreen() {
         </View>
       </ScrollView>
     </KeyboardAvoidingView>
+  );
+}
+
+function ConsentRow({
+  checked,
+  onToggle,
+  label,
+  linkText,
+  onLinkPress,
+  suffix,
+}: {
+  checked: boolean;
+  onToggle: () => void;
+  label: string;
+  linkText: string;
+  onLinkPress: () => void;
+  suffix?: string;
+}) {
+  return (
+    <View style={styles.consentRow}>
+      <TouchableOpacity onPress={onToggle} activeOpacity={0.7} style={styles.checkboxWrapper}>
+        <View style={[styles.checkbox, checked && styles.checkboxChecked]}>
+          {checked && <Text style={styles.checkmark}>✓</Text>}
+        </View>
+      </TouchableOpacity>
+      <Text style={styles.consentText}>
+        <Text onPress={onToggle}>{label}</Text>
+        <Text style={styles.consentLink} onPress={onLinkPress} suppressHighlighting>
+          {linkText}
+        </Text>
+        {suffix ? <Text onPress={onToggle}>{suffix}</Text> : null}
+      </Text>
+    </View>
   );
 }
 
@@ -158,5 +242,47 @@ const styles = StyleSheet.create({
   },
   form: {
     width: "100%",
+  },
+  consentBlock: {
+    marginTop: 20,
+    marginBottom: 4,
+    gap: 12,
+  },
+  consentRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 10,
+  },
+  checkboxWrapper: {
+    paddingTop: 1,
+  },
+  checkbox: {
+    width: 22,
+    height: 22,
+    borderRadius: 5,
+    borderWidth: 2,
+    borderColor: "#1976D2",
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 1,
+    flexShrink: 0,
+  },
+  checkboxChecked: {
+    backgroundColor: "#1976D2",
+  },
+  checkmark: {
+    color: "#fff",
+    fontSize: 13,
+    fontWeight: "700",
+  },
+  consentText: {
+    flex: 1,
+    fontSize: 13,
+    color: "#444",
+    lineHeight: 20,
+  },
+  consentLink: {
+    color: "#1976D2",
+    textDecorationLine: "underline",
   },
 });

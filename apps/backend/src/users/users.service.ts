@@ -101,4 +101,21 @@ export class UsersService {
       refreshToken: hashedToken ?? (undefined as any),
     });
   }
+
+  async giveConsent(id: string): Promise<void> {
+    await this.usersRepository.update(id, { consentGivenAt: new Date() });
+  }
+
+  async anonymizeUser(id: string): Promise<void> {
+    await this.findById(id);
+    await this.usersRepository.update(id, {
+      fullName: 'Удалённый пользователь',
+      phone: `deleted_${id}`,
+      email: `deleted_${id}@deleted.local`,
+      passwordHash: '',
+      refreshToken: null as any,
+      isApproved: false,
+      consentGivenAt: null,
+    });
+  }
 }

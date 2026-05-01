@@ -28,4 +28,12 @@ export const authService = {
   async logout(): Promise<void> {
     await api.post('/auth/logout');
   },
+
+  async acceptConsent(): Promise<void> {
+    await api.post('/users/me/consent');
+  },
+
+  async deleteMe(): Promise<void> {
+    await api.delete('/users/me');
+  },
 };

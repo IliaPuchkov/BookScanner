@@ -27,6 +27,8 @@ export class AuthService {
       password: dto.password,
     });
 
+    await this.usersService.giveConsent(user.id);
+
     return {
       id: user.id,
       fullName: user.fullName,
@@ -61,6 +63,7 @@ export class AuthService {
         email: user.email,
         role: user.role,
         isApproved: user.isApproved,
+        consentGivenAt: user.consentGivenAt,
       },
     };
   }

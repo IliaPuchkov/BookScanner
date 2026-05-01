@@ -29,6 +29,7 @@ export interface User {
   email: string;
   role: UserRole;
   isApproved: boolean;
+  consentGivenAt?: string | null;
 }
 
 export interface AuthTokens {

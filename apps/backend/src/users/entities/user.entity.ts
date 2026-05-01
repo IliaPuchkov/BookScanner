@@ -4,7 +4,6 @@ import {
   Column,
   CreateDateColumn,
   UpdateDateColumn,
-  OneToMany,
 } from 'typeorm';
 import { UserRole } from '@bookscanner/shared';
 import { Exclude } from 'class-transformer';
@@ -36,6 +35,9 @@ export class User {
   @Column({ nullable: true })
   @Exclude()
   refreshToken: string;
+
+  @Column({ type: 'timestamp', nullable: true })
+  consentGivenAt: Date | null;
 
   @CreateDateColumn()
   createdAt: Date;
