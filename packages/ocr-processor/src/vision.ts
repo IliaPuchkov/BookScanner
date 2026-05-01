@@ -120,13 +120,6 @@ export class GeminiVisionExtractor {
       ],
     };
 
-    console.log("[GeminiVisionExtractor] Request body:", JSON.stringify({
-      model: requestBody.model,
-      max_tokens: requestBody.max_tokens,
-      image_urls: images.map(i => i.url),
-      prompt_length: prompt.length,
-    }));
-
     const response = await this.client.chat.completions.create(requestBody).catch((err: any) => {
       console.error("[GeminiVisionExtractor] HTTP error from Polza.AI");
       console.error("[GeminiVisionExtractor] HTTP status:", err?.status);
