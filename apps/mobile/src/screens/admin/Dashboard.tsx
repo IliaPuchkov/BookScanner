@@ -22,24 +22,29 @@ export function DashboardScreen() {
   const tabsNavigation = useNavigation<TabsNav["navigation"]>();
   const [stats, setStats] = useState<StatsSummary | null>(null);
   const [recentBooks, setRecentBooks] = useState<Book[]>([]);
-  const [pendingBooks, setPendingBooks] = useState<Book[]>([]);
   const [pendingCount, setPendingCount] = useState(0);
+  const [duplicatesCount, setDuplicatesCount] = useState(0);
+  const [ocrErrorsCount, setOcrErrorsCount] = useState(0);
+  const [ozonErrorsCount, setOzonErrorsCount] = useState(0);
+  const [underpricedCount, setUnderpricedCount] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
 
   const fetchData = useCallback(async () => {
     try {
-      const [statsData, booksData, pendingData] = await Promise.all([
+      const [statsData, booksData] = await Promise.all([
         adminService.getStatistics(
           (() => { const d = new Date(); const diff = d.getDay() === 0 ? -6 : 1 - d.getDay(); d.setDate(d.getDate() + diff); d.setHours(0, 0, 0, 0); return d.toISOString(); })(),
           (() => { const d = new Date(); d.setHours(23, 59, 59, 999); return d.toISOString(); })(),
         ),
         adminService.getBookDatabase(1, 4),
-        adminService.getPendingReviewBooks(1, 5),
       ]);
       setStats(statsData);
       setRecentBooks(booksData.data);
-      setPendingBooks(pendingData.data);
-      setPendingCount(pendingData.meta.total);
+      setPendingCount(statsData.pendingReviewCount ?? 0);
+      setDuplicatesCount(statsData.duplicatesCount ?? 0);
+      setOcrErrorsCount(statsData.ocrErrorsCount ?? 0);
+      setOzonErrorsCount(statsData.ozonErrorsCount ?? 0);
+      setUnderpricedCount(statsData.underpricedCount ?? 0);
     } catch {
       // silent
     } finally {
@@ -58,6 +63,8 @@ export function DashboardScreen() {
     fetchData();
   };
 
+  const errorsCount = ocrErrorsCount + ozonErrorsCount;
+
   return (
     <ScrollView
       style={styles.container}
@@ -66,47 +73,56 @@ export function DashboardScreen() {
         <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
       }
     >
-      {/* Pending Review */}
-      {pendingCount > 0 && (
+      {/* 2×2 Alert Grid */}
+      <View style={styles.grid}>
+        {/* Cell 1: Карточки на проверке */}
         <TouchableOpacity
-          style={[styles.wideCard, styles.cardRed]}
+          style={[styles.gridCard, styles.cardRed]}
           activeOpacity={0.75}
           onPress={() => tabsNavigation.navigate("CardCreationTab")}
         >
-          <View style={styles.wideCardHeader}>
-            <Text style={styles.wideCardTitle}>
-              Карточки требующие проверки:
-            </Text>
-
-            <Text style={styles.badgeText}>{pendingCount}</Text>
-          </View>
-          {/* {pendingBooks.map((book) => (
-            <TouchableOpacity
-              key={book.id}
-              style={styles.bookRow}
-              onPress={() => navigation.navigate('ProductDetail', { bookId: book.id })}
-            >
-              <View style={styles.pendingBookRow}>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.bookTitle} numberOfLines={1}>
-                    {book.title}
-                  </Text>
-                  {book.author ? (
-                    <Text style={styles.bookAuthor} numberOfLines={1}>
-                      {book.author}
-                    </Text>
-                  ) : null}
-                </View>
-                {book.createdBy?.fullName ? (
-                  <Text style={styles.pendingCreator} numberOfLines={1}>
-                    {book.createdBy.fullName}
-                  </Text>
-                ) : null}
-              </View>
-            </TouchableOpacity>
-          ))} */}
+          <Text style={styles.gridCardTitle}>На проверке</Text>
+          <Text style={[styles.gridCardCount, { color: "#E53935" }]}>
+            {pendingCount}
+          </Text>
         </TouchableOpacity>
-      )}
+
+        {/* Cell 2: Дубли */}
+        <TouchableOpacity
+          style={[styles.gridCard, styles.cardTeal]}
+          activeOpacity={0.75}
+          onPress={() => navigation.navigate("Duplicates")}
+        >
+          <Text style={styles.gridCardTitle}>Дубли</Text>
+          <Text style={[styles.gridCardCount, { color: "#00838F" }]}>
+            {duplicatesCount}
+          </Text>
+        </TouchableOpacity>
+
+        {/* Cell 3: Заниженная цена */}
+        <TouchableOpacity
+          style={[styles.gridCard, styles.cardAmber]}
+          activeOpacity={0.75}
+          onPress={() => navigation.navigate("Underpriced")}
+        >
+          <Text style={styles.gridCardTitle}>Редкие книги</Text>
+          <Text style={[styles.gridCardCount, { color: "#F57F17" }]}>
+            {underpricedCount}
+          </Text>
+        </TouchableOpacity>
+
+        {/* Cell 4: Ошибки */}
+        <TouchableOpacity
+          style={[styles.gridCard, styles.cardOrangeRed]}
+          activeOpacity={0.75}
+          onPress={() => navigation.navigate("Errors")}
+        >
+          <Text style={styles.gridCardTitle}>Ошибки</Text>
+          <Text style={[styles.gridCardCount, { color: "#BF360C" }]}>
+            {errorsCount}
+          </Text>
+        </TouchableOpacity>
+      </View>
 
       {/* Statistics */}
       <TouchableOpacity
@@ -188,7 +204,7 @@ export function DashboardScreen() {
         )}
       </TouchableOpacity>
 
-      {/* Row 3: Book Database */}
+      {/* Book Database */}
       <TouchableOpacity
         style={[styles.wideCard, styles.cardPurple]}
         activeOpacity={0.75}
@@ -228,22 +244,54 @@ const styles = StyleSheet.create({
     padding: 16,
     gap: 12,
   },
-  cardArrow: {
-    position: "absolute",
-    top: 14,
-    right: 14,
-    fontSize: 22,
-    color: "rgba(255,255,255,0.6)",
-    fontWeight: "300",
+  grid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 10,
   },
-  wideCard: {
+  gridCard: {
+    width: "47.5%",
     borderRadius: 14,
-    padding: 18,
+    padding: 16,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.08,
     shadowRadius: 6,
     elevation: 2,
+    minHeight: 100,
+    justifyContent: "space-between",
+  },
+  gridCardTitle: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#555",
+    textTransform: "uppercase",
+    letterSpacing: 0.3,
+  },
+  gridCardCount: {
+    fontSize: 36,
+    fontWeight: "800",
+    marginTop: 4,
+  },
+  cardRed: {
+    backgroundColor: "#fff",
+    borderLeftWidth: 4,
+    borderLeftColor: "#E53935",
+  },
+  cardTeal: {
+    backgroundColor: "#fff",
+    borderLeftWidth: 4,
+    borderLeftColor: "#00838F",
+  },
+  cardAmber: {
+    backgroundColor: "#fff",
+    borderLeftWidth: 4,
+    borderLeftColor: "#F57F17",
+  },
+  cardOrangeRed: {
+    backgroundColor: "#fff",
+    borderLeftWidth: 4,
+    borderLeftColor: "#BF360C",
   },
   cardOrange: {
     backgroundColor: "#fff",
@@ -255,27 +303,22 @@ const styles = StyleSheet.create({
     borderLeftWidth: 4,
     borderLeftColor: "#8E24AA",
   },
-  cardRed: {
-    backgroundColor: "#fff",
-    borderLeftWidth: 4,
-    borderLeftColor: "#E53935",
+  cardArrow: {
+    position: "absolute",
+    top: 14,
+    right: 14,
+    fontSize: 22,
+    color: "rgba(0,0,0,0.15)",
+    fontWeight: "300",
   },
-  badgeText: {
-    color: "#f00",
-    fontSize: 28,
-    fontWeight: "700" as const,
-    marginTop: 10,
-  },
-  pendingBookRow: {
-    flexDirection: "row" as const,
-    alignItems: "center" as const,
-    justifyContent: "space-between" as const,
-  },
-  pendingCreator: {
-    fontSize: 11,
-    color: "#aaa",
-    marginLeft: 8,
-    flexShrink: 1,
+  wideCard: {
+    borderRadius: 14,
+    padding: 18,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    elevation: 2,
   },
   wideCardHeader: {
     flexDirection: "column",

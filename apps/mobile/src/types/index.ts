@@ -87,6 +87,7 @@ export interface Book {
   status: BookStatus;
   publishedToOzon?: string;
   ozonProduct?: { errorMessage?: string; status?: string; storeId?: string };
+  ocrResult?: { status: string; errorMessage?: string };
   createdAt: string;
   updatedAt: string;
 }
@@ -118,6 +119,10 @@ export interface StatsSummary {
   cardsToday: number;
   cardsThisWeek: number;
   pendingReviewCount: number;
+  duplicatesCount?: number;
+  ocrErrorsCount?: number;
+  ozonErrorsCount?: number;
+  underpricedCount?: number;
   perUser: Array<{
     userId: string;
     fullName: string;
@@ -125,6 +130,17 @@ export interface StatsSummary {
     completedCardsCount: number;
     activeCardsCount: number;
   }>;
+}
+
+export interface DuplicateGroup {
+  type: 'isbn' | 'title';
+  key: string;
+  books: Book[];
+}
+
+export interface DuplicatesResponse {
+  isbnDuplicates: DuplicateGroup[];
+  possibleDuplicates: DuplicateGroup[];
 }
 
 export interface CreateBookDto {

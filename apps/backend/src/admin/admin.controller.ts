@@ -9,6 +9,7 @@ import {
   Query,
   UseGuards,
   ParseUUIDPipe,
+  Request,
 } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiQuery } from '@nestjs/swagger';
 import { AdminService } from './admin.service';
@@ -20,6 +21,8 @@ import { CreateUserDto } from '../users/dto/create-user.dto';
 import { UpdateUserDto } from '../users/dto/update-user.dto';
 import { PaginationDto } from '../common/dto/pagination.dto';
 import { SearchBooksDto } from './dto/search-books.dto';
+import { ResolveDuplicateDto } from './dto/resolve-duplicate.dto';
+import { CurrentUser } from '../common/decorators/current-user.decorator';
 
 @ApiTags('Admin')
 @Controller('admin')
@@ -102,5 +105,32 @@ export class AdminController {
   @ApiOperation({ summary: 'Поиск по базе книг' })
   searchBooks(@Query() dto: SearchBooksDto) {
     return this.adminService.searchBooks(dto);
+  }
+
+  // Duplicates
+  @Get('books/duplicates')
+  @ApiOperation({ summary: 'Книги с возможными дубликатами' })
+  getDuplicates() {
+    return this.adminService.getDuplicates();
+  }
+
+  @Post('books/duplicates/resolve')
+  @ApiOperation({ summary: 'Пометить пару книг как не дубликаты' })
+  resolveDuplicate(@Body() dto: ResolveDuplicateDto, @CurrentUser() user: any) {
+    return this.adminService.resolveDuplicate(dto.book1Id, dto.book2Id, user.id);
+  }
+
+  // OCR errors
+  @Get('books/ocr-failed')
+  @ApiOperation({ summary: 'Книги с ошибкой распознавания (OCR)' })
+  getOcrFailedBooks(@Query() pagination: PaginationDto) {
+    return this.adminService.getOcrFailedBooks(pagination);
+  }
+
+  // Underpriced books
+  @Get('books/underpriced')
+  @ApiOperation({ summary: 'Книги с возможно заниженной ценой (год ≤ 1985, тираж < 10 000)' })
+  getUnderpricedBooks(@Query() pagination: PaginationDto) {
+    return this.adminService.getUnderpricedBooks(pagination);
   }
 }

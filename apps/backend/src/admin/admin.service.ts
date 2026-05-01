@@ -1,10 +1,13 @@
 import { Injectable } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
 import { UsersService } from '../users/users.service';
 import { BooksService } from '../books/books.service';
 import { CreateUserDto } from '../users/dto/create-user.dto';
 import { UpdateUserDto } from '../users/dto/update-user.dto';
 import { PaginationDto } from '../common/dto/pagination.dto';
 import { SearchBooksDto } from './dto/search-books.dto';
+import { DuplicateResolution } from './entities/duplicate-resolution.entity';
 import { UserRole, BookStatus } from '@bookscanner/shared';
 
 @Injectable()
@@ -12,6 +15,8 @@ export class AdminService {
   constructor(
     private readonly usersService: UsersService,
     private readonly booksService: BooksService,
+    @InjectRepository(DuplicateResolution)
+    private readonly dupResRepository: Repository<DuplicateResolution>,
   ) {}
 
   async getUsers(pagination: PaginationDto) {
@@ -48,7 +53,20 @@ export class AdminService {
     miniPagination.page = 1;
     miniPagination.limit = 1;
 
-    const [cardsToday, cardsPeriod, perUserRaw, usersResult, totalCards, pendingReviewCount, totalAdmins, totalOperators] = await Promise.all([
+    const [
+      cardsToday,
+      cardsPeriod,
+      perUserRaw,
+      usersResult,
+      totalCards,
+      pendingReviewCount,
+      totalAdmins,
+      totalOperators,
+      duplicatesCount,
+      ocrErrorsCount,
+      ozonErrorsCount,
+      underpricedCount,
+    ] = await Promise.all([
       this.booksService.countCreatedSince(startOfToday, endOfToday, true),
       this.booksService.countCreatedSince(periodStart, periodEnd, true),
       this.booksService.getPerUserBookCounts(periodStart, periodEnd, includeActiveSessions),
@@ -57,6 +75,10 @@ export class AdminService {
       this.booksService.countPendingReview(),
       this.usersService.countByRole(UserRole.ADMIN),
       this.usersService.countByRole(UserRole.OPERATOR),
+      this.booksService.countDuplicates(),
+      this.booksService.countOcrFailed(),
+      this.booksService.countOzonFailed(),
+      this.booksService.countUnderpriced(),
     ]);
 
     return {
@@ -67,6 +89,10 @@ export class AdminService {
       cardsToday,
       cardsThisWeek: cardsPeriod,
       pendingReviewCount,
+      duplicatesCount,
+      ocrErrorsCount,
+      ozonErrorsCount,
+      underpricedCount,
       perUser: perUserRaw.map((u) => {
         const completed = parseInt(u.completedCount, 10);
         const active = parseInt(u.activeCount, 10);
@@ -101,5 +127,31 @@ export class AdminService {
 
   async getFailedPublicationBooks(pagination: PaginationDto) {
     return this.booksService.getFailedPublicationBooks(pagination);
+  }
+
+  async getOcrFailedBooks(pagination: PaginationDto) {
+    return this.booksService.getOcrFailedBooks(pagination);
+  }
+
+  async getUnderpricedBooks(pagination: PaginationDto) {
+    return this.booksService.getUnderpricedBooks(pagination);
+  }
+
+  async getDuplicates() {
+    const resolvedPairs = await this.dupResRepository.find({
+      select: ['book1Id', 'book2Id'],
+    });
+    return this.booksService.getDuplicatePairs(resolvedPairs);
+  }
+
+  async resolveDuplicate(book1Id: string, book2Id: string, adminId: string) {
+    const [id1, id2] = [book1Id, book2Id].sort();
+    await this.dupResRepository
+      .createQueryBuilder()
+      .insert()
+      .into(DuplicateResolution)
+      .values({ book1Id: id1, book2Id: id2, resolvedById: adminId })
+      .orIgnore()
+      .execute();
   }
 }

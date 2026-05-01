@@ -1,5 +1,5 @@
 import api from './api';
-import type { User, PaginatedResponse, StatsSummary, Book } from '../types';
+import type { User, PaginatedResponse, StatsSummary, Book, DuplicatesResponse } from '../types';
 
 export interface SystemSetting {
   id: string;
@@ -244,6 +244,29 @@ export const adminService = {
     inSystemNotOnOzon: Array<{ bookId: string; sku: string; title: string; status: string }>;
   }> {
     const { data } = await api.get('/ozon/sync-diff', { params: storeId ? { storeId } : {} });
+    return data;
+  },
+
+  async getDuplicates(): Promise<DuplicatesResponse> {
+    const { data } = await api.get<DuplicatesResponse>('/admin/books/duplicates');
+    return data;
+  },
+
+  async resolveDuplicate(book1Id: string, book2Id: string): Promise<void> {
+    await api.post('/admin/books/duplicates/resolve', { book1Id, book2Id });
+  },
+
+  async getOcrFailedBooks(page = 1, limit = 20): Promise<PaginatedResponse<Book>> {
+    const { data } = await api.get<PaginatedResponse<Book>>('/admin/books/ocr-failed', {
+      params: { page, limit },
+    });
+    return data;
+  },
+
+  async getUnderpricedBooks(page = 1, limit = 20): Promise<PaginatedResponse<Book>> {
+    const { data } = await api.get<PaginatedResponse<Book>>('/admin/books/underpriced', {
+      params: { page, limit },
+    });
     return data;
   },
 };

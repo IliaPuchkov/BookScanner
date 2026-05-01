@@ -5,7 +5,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { nanoid } from 'nanoid';
 import { Book } from './entities/book.entity';
 import { CreateBookDto } from './dto/create-book.dto';
@@ -377,6 +377,156 @@ export class BooksService {
     if (boxId) {
       await this.boxesService.deleteIfEmpty(boxId);
     }
+  }
+
+  async getOcrFailedBooks(pagination: PaginationDto) {
+    const { page = 1, limit = 20 } = pagination;
+    const qb = this.booksRepository
+      .createQueryBuilder('book')
+      .leftJoin('book.ocrResult', 'ocrResult')
+      .leftJoinAndSelect('book.photos', 'photos')
+      .leftJoinAndSelect('book.box', 'box')
+      .where("LOWER(TRIM(book.title)) = :title", { title: 'новая книга' })
+      .andWhere('ocrResult.id IS NULL')
+      .andWhere('book.status != :archived', { archived: 'archived' })
+      .orderBy('book.createdAt', 'DESC')
+      .skip((page - 1) * limit)
+      .take(limit);
+    const [data, total] = await qb.getManyAndCount();
+    return { data, meta: { total, page, limit, totalPages: Math.ceil(total / limit) } };
+  }
+
+  async countOcrFailed(): Promise<number> {
+    return this.booksRepository
+      .createQueryBuilder('book')
+      .leftJoin('book.ocrResult', 'ocrResult')
+      .where("LOWER(TRIM(book.title)) = :title", { title: 'новая книга' })
+      .andWhere('ocrResult.id IS NULL')
+      .andWhere('book.status != :archived', { archived: 'archived' })
+      .getCount();
+  }
+
+  async getUnderpricedBooks(pagination: PaginationDto) {
+    const { page = 1, limit = 20 } = pagination;
+    const qb = this.booksRepository
+      .createQueryBuilder('book')
+      .leftJoinAndSelect('book.photos', 'photos')
+      .leftJoinAndSelect('book.box', 'box')
+      .where('book.yearPublished <= :year', { year: 1985 })
+      .andWhere('book.printRun IS NOT NULL')
+      .andWhere('book.printRun < :printRun', { printRun: 10000 })
+      .andWhere('book.status != :archived', { archived: 'archived' })
+      .orderBy('book.printRun', 'ASC')
+      .skip((page - 1) * limit)
+      .take(limit);
+    const [data, total] = await qb.getManyAndCount();
+    return { data, meta: { total, page, limit, totalPages: Math.ceil(total / limit) } };
+  }
+
+  async countUnderpriced(): Promise<number> {
+    return this.booksRepository
+      .createQueryBuilder('book')
+      .where('book.yearPublished <= :year', { year: 1985 })
+      .andWhere('book.printRun IS NOT NULL')
+      .andWhere('book.printRun < :printRun', { printRun: 10000 })
+      .andWhere('book.status != :archived', { archived: 'archived' })
+      .getCount();
+  }
+
+  async countOzonFailed(): Promise<number> {
+    return this.booksRepository
+      .createQueryBuilder('book')
+      .where('book.status = :status', { status: BookStatus.PUBLICATION_FAILED })
+      .getCount();
+  }
+
+  async getDuplicatePairs(resolvedPairs: Array<{ book1Id: string; book2Id: string }>) {
+    const resolvedSet = new Set(
+      resolvedPairs.map((p) => [p.book1Id, p.book2Id].sort().join(':')),
+    );
+
+    const isbnGroupsRaw: Array<{ isbn: string; ids: string[] }> = await this.booksRepository
+      .createQueryBuilder('book')
+      .select('book.isbn', 'isbn')
+      .addSelect('array_agg(book.id)', 'ids')
+      .where('book.isbn IS NOT NULL')
+      .andWhere("book.isbn != ''")
+      .andWhere('book.status != :archived', { archived: 'archived' })
+      .groupBy('book.isbn')
+      .having('COUNT(*) >= 2')
+      .getRawMany();
+
+    const titleGroupsRaw: Array<{ normalizedTitle: string; ids: string[] }> = await this.booksRepository
+      .createQueryBuilder('book')
+      .select('LOWER(TRIM(book.title))', 'normalizedTitle')
+      .addSelect('array_agg(book.id)', 'ids')
+      .where("LOWER(TRIM(book.title)) NOT ILIKE :newBook", { newBook: 'новая книга' })
+      .andWhere('book.status != :archived', { archived: 'archived' })
+      .groupBy('LOWER(TRIM(book.title))')
+      .having('COUNT(*) >= 2')
+      .getRawMany();
+
+    const fetchBooks = (ids: string[]) =>
+      this.booksRepository.find({
+        where: { id: In(ids) },
+        relations: ['photos', 'box', 'ocrResult', 'ozonProduct'],
+      });
+
+    const allPairsResolved = (ids: string[]) => {
+      for (let i = 0; i < ids.length; i++) {
+        for (let j = i + 1; j < ids.length; j++) {
+          const key = [ids[i], ids[j]].sort().join(':');
+          if (!resolvedSet.has(key)) return false;
+        }
+      }
+      return true;
+    };
+
+    const isbnDuplicates: Array<{ type: 'isbn'; key: string; books: Book[] }> = [];
+    const isbnKeys = new Set(isbnGroupsRaw.map((g) => g.isbn));
+
+    for (const group of isbnGroupsRaw) {
+      const ids: string[] = Array.isArray(group.ids) ? group.ids : [group.ids];
+      if (allPairsResolved(ids)) continue;
+      const books = await fetchBooks(ids);
+      isbnDuplicates.push({ type: 'isbn' as const, key: group.isbn, books });
+    }
+
+    const possibleDuplicates: Array<{ type: 'title'; key: string; books: Book[] }> = [];
+
+    for (const group of titleGroupsRaw) {
+      const ids: string[] = Array.isArray(group.ids) ? group.ids : [group.ids];
+      const books = await fetchBooks(ids);
+      const hasMissingIsbn = books.some((b) => !b.isbn);
+      if (!hasMissingIsbn) continue;
+      const allHaveSameIsbn = books.every((b) => b.isbn && isbnKeys.has(b.isbn));
+      if (allHaveSameIsbn) continue;
+      if (allPairsResolved(ids)) continue;
+      possibleDuplicates.push({ type: 'title' as const, key: group.normalizedTitle, books });
+    }
+
+    return { isbnDuplicates, possibleDuplicates };
+  }
+
+  async countDuplicates(): Promise<number> {
+    // getCount() strips GROUP BY/HAVING internally — use raw subqueries to count groups
+    const [isbnResult, titleResult] = await Promise.all([
+      this.booksRepository.manager.query<[{ cnt: string }]>(`
+        SELECT COUNT(*) AS cnt FROM (
+          SELECT isbn FROM books
+          WHERE isbn IS NOT NULL AND isbn != '' AND status != 'archived'
+          GROUP BY isbn HAVING COUNT(*) >= 2
+        ) sub
+      `),
+      this.booksRepository.manager.query<[{ cnt: string }]>(`
+        SELECT COUNT(*) AS cnt FROM (
+          SELECT LOWER(TRIM(title)) FROM books
+          WHERE LOWER(TRIM(title)) NOT ILIKE 'новая книга' AND status != 'archived'
+          GROUP BY LOWER(TRIM(title)) HAVING COUNT(*) >= 2
+        ) sub
+      `),
+    ]);
+    return parseInt(isbnResult[0].cnt, 10) + parseInt(titleResult[0].cnt, 10);
   }
 
   private generateSku(boxNumber: string): string {

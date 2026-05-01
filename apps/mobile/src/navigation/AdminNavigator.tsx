@@ -17,6 +17,9 @@ import { PhotoUploadScreen } from "../screens/operator/PhotoUpload";
 import ImportFromOzonScreen from "../screens/admin/ImportFromOzonScreen";
 import { OzonStoresScreen } from "../screens/admin/OzonStoresScreen";
 import OzonSyncScreen from "../screens/admin/OzonSyncScreen";
+import { ErrorsScreen } from "../screens/admin/ErrorsScreen";
+import { DuplicatesScreen } from "../screens/admin/DuplicatesScreen";
+import { UnderpricedScreen } from "../screens/admin/UnderpricedScreen";
 
 export type AdminMainStackParamList = {
   Dashboard: undefined;
@@ -27,6 +30,9 @@ export type AdminMainStackParamList = {
   PhotoUpload: { bookId: string };
   CreateCard: { boxId?: string; sessionId?: string } | undefined;
   ProductDetail: { bookId: string; editable?: boolean };
+  Errors: undefined;
+  Duplicates: undefined;
+  Underpriced: undefined;
 };
 
 export type AdminCardCreationParamList = {
@@ -101,6 +107,21 @@ function MainStackScreen() {
         name="ProductDetail"
         component={ProductDetailScreen}
         options={{ title: "Товар" }}
+      />
+      <MainStack.Screen
+        name="Errors"
+        component={ErrorsScreen}
+        options={{ title: "Ошибки" }}
+      />
+      <MainStack.Screen
+        name="Duplicates"
+        component={DuplicatesScreen}
+        options={{ title: "Дубли" }}
+      />
+      <MainStack.Screen
+        name="Underpriced"
+        component={UnderpricedScreen}
+        options={{ title: "Заниженная цена" }}
       />
     </MainStack.Navigator>
   );

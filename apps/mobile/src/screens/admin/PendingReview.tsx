@@ -9,8 +9,6 @@ import React, {
 import {
   View,
   SectionList,
-  FlatList,
-  ScrollView,
   StyleSheet,
   RefreshControl,
   Text,
@@ -271,82 +269,6 @@ const PendingBookItem = React.memo(function PendingBookItem({
   );
 });
 
-type FailedBookItemProps = {
-  item: Book;
-  failedSelectMode: boolean;
-  isSelected: boolean;
-  isRetrying: boolean;
-  onToggleSelect: (id: string) => void;
-  onNavigate: (bookId: string) => void;
-  onRetry: (book: Book) => void;
-};
-
-const FailedBookItem = React.memo(function FailedBookItem({
-  item,
-  failedSelectMode,
-  isSelected,
-  isRetrying,
-  onToggleSelect,
-  onNavigate,
-  onRetry,
-}: FailedBookItemProps) {
-  const coverPhoto = item.photos?.find((p) => p.sortOrder === 0);
-  return (
-    <TouchableOpacity
-      style={[
-        styles.card,
-        failedSelectMode && isSelected && styles.cardSelected,
-      ]}
-      activeOpacity={0.7}
-      onPress={() => {
-        if (failedSelectMode) onToggleSelect(item.id);
-        else onNavigate(item.id);
-      }}
-    >
-      <View style={styles.imageWrapper}>
-        {coverPhoto ? (
-          <Image source={{ uri: coverPhoto.fileUrl }} style={styles.image} />
-        ) : (
-          <View style={[styles.image, styles.placeholder]}>
-            <Text style={styles.placeholderText}>Нет фото</Text>
-          </View>
-        )}
-        {failedSelectMode && (
-          <View
-            style={[styles.checkbox, isSelected && styles.checkboxSelected]}
-          >
-            {isSelected && <Text style={styles.checkmark}>✓</Text>}
-          </View>
-        )}
-      </View>
-      <View style={styles.info}>
-        <Text style={styles.title} numberOfLines={2}>
-          {item.title}
-        </Text>
-        <Text style={styles.sku}>{item.sku}</Text>
-        {item.ozonProduct?.errorMessage ? (
-          <Text style={styles.errorText} numberOfLines={2}>
-            {item.ozonProduct.errorMessage}
-          </Text>
-        ) : null}
-        {!failedSelectMode && (
-          <TouchableOpacity
-            style={[styles.publishBtn, isRetrying && styles.publishBtnDisabled]}
-            onPress={() => onRetry(item)}
-            disabled={isRetrying}
-            activeOpacity={0.7}
-          >
-            {isRetrying ? (
-              <ActivityIndicator size="small" color="#fff" />
-            ) : (
-              <Text style={styles.publishBtnText}>Повторить</Text>
-            )}
-          </TouchableOpacity>
-        )}
-      </View>
-    </TouchableOpacity>
-  );
-});
 
 export function PendingReviewScreen() {
   const navigation = useNavigation<Nav>();
@@ -376,15 +298,6 @@ export function PendingReviewScreen() {
   const [pendingPublishAction, setPendingPublishAction] = useState<
     { type: "single"; book: Book } | { type: "bulk"; ids: string[] } | null
   >(null);
-  const [activeTab, setActiveTab] = useState<"pending" | "failed">("pending");
-  const [failedBooks, setFailedBooks] = useState<Book[]>([]);
-  const [loadingFailed, setLoadingFailed] = useState(false);
-  const [retryingId, setRetryingId] = useState<string | null>(null);
-  const [failedSelectMode, setFailedSelectMode] = useState(false);
-  const [failedSelectedIds, setFailedSelectedIds] = useState<Set<string>>(
-    new Set(),
-  );
-  const [bulkRetrying, setBulkRetrying] = useState(false);
 
   // Filter state
   const [search, setSearch] = useState("");
@@ -421,17 +334,6 @@ export function PendingReviewScreen() {
   const searchRef = useRef("");
   const filtersRef = useRef<Filters>({});
 
-  const fetchFailedBooks = useCallback(async () => {
-    setLoadingFailed(true);
-    try {
-      const res = await adminService.getFailedPublicationBooks(1, 100);
-      setFailedBooks(res.data);
-    } catch {
-      console.error("Failed books fetch error");
-    } finally {
-      setLoadingFailed(false);
-    }
-  }, []);
 
   // Load filter options once
   useEffect(() => {
@@ -523,24 +425,6 @@ export function PendingReviewScreen() {
     setSelectedIds(new Set());
   }, []);
 
-  const exitFailedSelectMode = useCallback(() => {
-    setFailedSelectMode(false);
-    setFailedSelectedIds(new Set());
-  }, []);
-
-  const toggleFailedSelect = useCallback((id: string) => {
-    setFailedSelectedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  }, []);
-
-  const handleBulkRetry = () => {
-    if (failedSelectedIds.size === 0) return;
-    initiatePublish({ type: "bulk", ids: Array.from(failedSelectedIds) });
-  };
 
   useLayoutEffect(() => {
     if (selectMode) {
@@ -548,25 +432,6 @@ export function PendingReviewScreen() {
         headerRight: () => (
           <TouchableOpacity
             onPress={exitSelectMode}
-            style={{
-              width: 44,
-              height: 44,
-              backgroundColor: "#1976D2",
-              alignItems: "center",
-              justifyContent: "center",
-            }}
-          >
-            <Text style={{ color: "#fff", fontSize: 15, fontWeight: "600" }}>
-              Отмена
-            </Text>
-          </TouchableOpacity>
-        ),
-      });
-    } else if (failedSelectMode) {
-      navigation.setOptions({
-        headerRight: () => (
-          <TouchableOpacity
-            onPress={exitFailedSelectMode}
             style={{
               width: 44,
               height: 44,
@@ -679,7 +544,6 @@ export function PendingReviewScreen() {
         return;
       }
       fetchBooks(1, searchRef.current, filtersRef.current, "initial");
-      fetchFailedBooks();
       adminService
         .getPendingReviewCountsByBox()
         .then((counts) => {
@@ -766,7 +630,6 @@ export function PendingReviewScreen() {
     setRefreshing(true);
     setBoxAllIds({});
     fetchBooks(1, search, filters, "refresh");
-    fetchFailedBooks();
     adminService
       .getPendingReviewCountsByBox()
       .then((counts) => {
@@ -947,30 +810,20 @@ export function PendingReviewScreen() {
         await booksService.publishToOzon(action.book.id, storeId);
         Alert.alert("Готово", "Карточка отправлена на модерацию Ozon");
         setBooks((prev) => prev.filter((b) => b.id !== action.book.id));
-        setFailedBooks((prev) => prev.filter((b) => b.id !== action.book.id));
-        if (failedSelectMode) exitFailedSelectMode();
       } catch {
         Alert.alert("Ошибка", "Не удалось загрузить в Озон");
       } finally {
         setPublishingId(null);
       }
     } else {
-      const isFailedRetry = action.ids.some((id) =>
-        failedBooks.some((b) => b.id === id),
-      );
-      if (isFailedRetry) setBulkRetrying(true);
-      else setBulkPublishing(true);
+      setBulkPublishing(true);
       try {
         const result = await booksService.publishBulkToOzon(
           action.ids,
           storeId,
         );
         setBooks((prev) => prev.filter((b) => !action.ids.includes(b.id)));
-        setFailedBooks((prev) =>
-          prev.filter((b) => !action.ids.includes(b.id)),
-        );
-        if (isFailedRetry) exitFailedSelectMode();
-        else exitSelectMode();
+        exitSelectMode();
         if (result.failed > 0) {
           Alert.alert(
             "Готово с ошибками",
@@ -985,7 +838,6 @@ export function PendingReviewScreen() {
       } catch {
         Alert.alert("Ошибка", "Не удалось загрузить книги в Озон");
       } finally {
-        setBulkRetrying(false);
         setBulkPublishing(false);
       }
     }
@@ -1013,18 +865,6 @@ export function PendingReviewScreen() {
     [stores],
   );
 
-  const handleRetry = useCallback(
-    (book: Book) => {
-      if (stores.length === 0) {
-        Alert.alert("Нет магазинов", "Добавьте магазин Ozon в настройках.");
-        return;
-      }
-      setPendingPublishAction({ type: "single", book });
-      refreshStoreLimits(stores);
-      setStorePickerVisible(true);
-    },
-    [stores],
-  );
 
   const handleNavigateToPending = useCallback(
     (bookId: string) => {
@@ -1190,27 +1030,6 @@ export function PendingReviewScreen() {
     );
   };
 
-  const renderFailedItem = useCallback(
-    ({ item }: { item: Book }) => (
-      <FailedBookItem
-        item={item}
-        failedSelectMode={failedSelectMode}
-        isSelected={failedSelectedIds.has(item.id)}
-        isRetrying={retryingId === item.id}
-        onToggleSelect={toggleFailedSelect}
-        onNavigate={handleNavigateToPending}
-        onRetry={handleRetry}
-      />
-    ),
-    [
-      failedSelectMode,
-      failedSelectedIds,
-      retryingId,
-      toggleFailedSelect,
-      handleNavigateToPending,
-      handleRetry,
-    ],
-  );
 
   const renderItem = useCallback(
     ({ item }: { item: Book }) => (
@@ -1326,11 +1145,7 @@ export function PendingReviewScreen() {
                   activeOpacity={0.7}
                   onPress={() => {
                     setMenuVisible(false);
-                    if (activeTab === "failed") {
-                      setFailedSelectMode(true);
-                    } else {
-                      setSelectMode(true);
-                    }
+                    setSelectMode(true);
                   }}
                 >
                   <Text style={styles.menuItemText}>Выбрать несколько</Text>
@@ -1340,39 +1155,8 @@ export function PendingReviewScreen() {
           </View>
         </TouchableWithoutFeedback>
       </Modal>
-      <View style={styles.tabBar}>
-        <TouchableOpacity
-          style={[styles.tab, activeTab === "pending" && styles.tabActive]}
-          onPress={() => setActiveTab("pending")}
-          activeOpacity={0.7}
-        >
-          <Text
-            style={[
-              styles.tabText,
-              activeTab === "pending" && styles.tabTextActive,
-            ]}
-          >
-            На проверке
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.tab, activeTab === "failed" && styles.tabActive]}
-          onPress={() => setActiveTab("failed")}
-          activeOpacity={0.7}
-        >
-          <Text
-            style={[
-              styles.tabText,
-              activeTab === "failed" && styles.tabTextActive,
-            ]}
-          >
-            Ошибки{failedBooks.length > 0 ? ` (${failedBooks.length})` : ""}
-          </Text>
-        </TouchableOpacity>
-      </View>
 
-      {activeTab === "pending" && (
-        <View style={styles.searchBar}>
+      <View style={styles.searchBar}>
           <Input
             label=""
             placeholder="Поиск по названию, автору, ISBN..."
@@ -1397,9 +1181,8 @@ export function PendingReviewScreen() {
             </Text>
           </TouchableOpacity>
         </View>
-      )}
 
-      {activeTab === "pending" && showFilters && (
+      {showFilters && (
         <View style={styles.filterPanel}>
           <FilterRow
             label="Коробка"
@@ -1771,11 +1554,11 @@ export function PendingReviewScreen() {
         </KeyboardAvoidingView>
       </Modal>
 
-      {activeTab === "pending" && loading && !refreshing ? (
+      {loading && !refreshing ? (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#1976D2" />
         </View>
-      ) : activeTab === "pending" ? (
+      ) : (
         <SectionList
           style={styles.container}
           sections={sections}
@@ -1870,27 +1653,6 @@ export function PendingReviewScreen() {
                 style={{ marginVertical: 16 }}
               />
             ) : null
-          }
-        />
-      ) : loadingFailed ? (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#1976D2" />
-        </View>
-      ) : (
-        <FlatList
-          style={styles.failedList}
-          data={failedBooks}
-          keyExtractor={(item) => item.id}
-          renderItem={renderFailedItem}
-          contentContainerStyle={styles.failedListContent}
-          refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
-          }
-          removeClippedSubviews={true}
-          maxToRenderPerBatch={8}
-          windowSize={7}
-          ListEmptyComponent={
-            <Text style={styles.empty}>Нет карточек с ошибками публикации</Text>
           }
         />
       )}
@@ -2012,50 +1774,6 @@ export function PendingReviewScreen() {
             Распознавание: {polling.completed + polling.failed}/{polling.total}
             {polling.failed > 0 ? `  (ошибок: ${polling.failed})` : ""}
           </Text>
-        </View>
-      )}
-      {failedSelectMode && (
-        <View style={styles.bottomBar}>
-          <TouchableOpacity
-            onPress={() => {
-              const allSelected = failedBooks.every((b) =>
-                failedSelectedIds.has(b.id),
-              );
-              if (allSelected) {
-                setFailedSelectedIds(new Set());
-              } else {
-                setFailedSelectedIds(new Set(failedBooks.map((b) => b.id)));
-              }
-            }}
-            activeOpacity={0.7}
-          >
-            <Text style={styles.bottomBarCount}>
-              {failedBooks.every((b) => failedSelectedIds.has(b.id))
-                ? "Снять все"
-                : `Выбрать все (${failedBooks.length})`}
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[
-              styles.bottomBarBtn,
-              (failedSelectedIds.size === 0 || bulkRetrying) &&
-                styles.bottomBarBtnDisabled,
-            ]}
-            onPress={handleBulkRetry}
-            disabled={failedSelectedIds.size === 0 || bulkRetrying}
-            activeOpacity={0.8}
-          >
-            {bulkRetrying ? (
-              <ActivityIndicator size="small" color="#fff" />
-            ) : (
-              <Text style={styles.bottomBarBtnText}>
-                Повторить
-                {failedSelectedIds.size > 0
-                  ? ` (${failedSelectedIds.size})`
-                  : ""}
-              </Text>
-            )}
-          </TouchableOpacity>
         </View>
       )}
       {selectMode && !polling && (
