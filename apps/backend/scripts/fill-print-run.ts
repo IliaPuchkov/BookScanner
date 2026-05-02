@@ -7,7 +7,8 @@
  *
  * Parameters:
  *   --limit N        How many books to process per run (default: 10)
- *   --delay N        Milliseconds between AI requests to avoid rate limiting (default: 2000)
+ *   --concurrency N  How many parallel AI requests (default: 1)
+ *   --delay N        Milliseconds between each batch of parallel requests (default: 2000)
  *   --dry-run        List matching books without making AI calls or writing to DB
  *   --retry-unknown  Retry books where AI previously could not find the print run
  *
@@ -46,6 +47,7 @@ import { DataSource } from "typeorm";
 function parseArgs() {
   const args = process.argv.slice(2);
   let limit = 10;
+  let concurrency = 1;
   let delay = 2000;
   let dryRun = false;
   let retryUnknown = false;
@@ -54,6 +56,9 @@ function parseArgs() {
     if (args[i] === "--limit" && args[i + 1]) {
       const parsed = parseInt(args[++i], 10);
       if (!isNaN(parsed) && parsed > 0) limit = parsed;
+    } else if (args[i] === "--concurrency" && args[i + 1]) {
+      const parsed = parseInt(args[++i], 10);
+      if (!isNaN(parsed) && parsed > 0) concurrency = parsed;
     } else if (args[i] === "--delay" && args[i + 1]) {
       const parsed = parseInt(args[++i], 10);
       if (!isNaN(parsed) && parsed >= 0) delay = parsed;
@@ -64,7 +69,7 @@ function parseArgs() {
     }
   }
 
-  return { limit, delay, dryRun, retryUnknown };
+  return { limit, concurrency, delay, dryRun, retryUnknown };
 }
 
 // ---------------------------------------------------------------------------
@@ -119,7 +124,7 @@ function buildPrompt(book: BookRow): string {
   Год издания: ${book.yearPublished ?? "не указан"}
 
 Задача: определи тираж этой книги (количество напечатанных экземпляров).
-${hasPhotos ? "На фотографиях книги может быть видна страница с выходными данными, где указан тираж." : "Используй свои знания об этой книге."}
+${hasPhotos ? "На фотографиях книги может быть видна страница с выходными данными, где указан тираж. Ищи число после слова 'Тираж' или число где после него стоит 'экз.'. " : "Используй свои знания об этой книге."}
 
 Верни ТОЛЬКО одно целое число — тираж книги в экземплярах.
 Без слов, без пояснений, без единиц измерения. Только число.
@@ -172,16 +177,20 @@ function sleep(ms: number): Promise<void> {
 }
 
 async function main() {
-  const { limit, delay, dryRun, retryUnknown } = parseArgs();
+  const { limit, concurrency, delay, dryRun, retryUnknown } = parseArgs();
 
   if (!process.env.POLZA_AI_API_KEY && !dryRun) {
-    console.error("ERROR: POLZA_AI_API_KEY is not set in environment or .env file");
+    console.error(
+      "ERROR: POLZA_AI_API_KEY is not set in environment or .env file",
+    );
     process.exit(1);
   }
 
   const skippedIds = retryUnknown ? new Set<string>() : loadSkippedIds();
   if (skippedIds.size > 0) {
-    console.log(`Loaded ${skippedIds.size} previously skipped book(s) from ${path.basename(SKIPPED_FILE)}`);
+    console.log(
+      `Loaded ${skippedIds.size} previously skipped book(s) from ${path.basename(SKIPPED_FILE)}`,
+    );
   }
 
   const db = new DataSource({
@@ -234,7 +243,9 @@ async function main() {
   if (dryRun) {
     console.log("\n[DRY RUN] Books that would be processed:");
     books.forEach((b, i) => {
-      console.log(`  ${i + 1}. [${b.sku}] "${b.title}" — ${b.photos.length} photo(s)`);
+      console.log(
+        `  ${i + 1}. [${b.sku}] "${b.title}" — ${b.photos.length} photo(s)`,
+      );
     });
     await db.destroy();
     return;
@@ -250,33 +261,46 @@ async function main() {
   let skipped = 0;
   let failed = 0;
 
-  for (const book of books) {
-    processed++;
-    console.log(`\n[${processed}/${books.length}] [${book.sku}] "${book.title}"`);
+  for (let i = 0; i < books.length; i += concurrency) {
+    const chunk = books.slice(i, i + concurrency);
 
-    try {
-      const printRun = await askAiForPrintRun(client, book);
+    await Promise.all(
+      chunk.map(async (book) => {
+        const num = ++processed;
+        console.log(`\n[${num}/${books.length}] [${book.sku}] "${book.title}"`);
 
-      if (printRun === null) {
-        skippedIds.add(book.id);
-        console.warn("  WARNING: AI returned non-numeric response — added to skipped list");
-        failed++;
-      } else if (printRun === 0) {
-        skippedIds.add(book.id);
-        console.log("  INFO: AI could not determine print run — added to skipped list");
-        skipped++;
-      } else {
-        await db.query(`UPDATE books SET "printRun" = $1 WHERE id = $2`, [printRun, book.id]);
-        console.log(`  OK: printRun = ${printRun}`);
-        updated++;
-      }
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      console.error(`  ERROR: ${message}`);
-      failed++;
-    }
+        try {
+          const printRun = await askAiForPrintRun(client, book);
 
-    if (processed < books.length) {
+          if (printRun === null) {
+            skippedIds.add(book.id);
+            console.warn(
+              `  [${book.sku}] WARNING: AI returned non-numeric response — added to skipped list`,
+            );
+            failed++;
+          } else if (printRun === 0) {
+            skippedIds.add(book.id);
+            console.log(
+              `  [${book.sku}] INFO: AI could not determine print run — added to skipped list`,
+            );
+            skipped++;
+          } else {
+            await db.query(`UPDATE books SET "printRun" = $1 WHERE id = $2`, [
+              printRun,
+              book.id,
+            ]);
+            console.log(`  [${book.sku}] OK: printRun = ${printRun}`);
+            updated++;
+          }
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          console.error(`  [${book.sku}] ERROR: ${message}`);
+          failed++;
+        }
+      }),
+    );
+
+    if (i + concurrency < books.length) {
       await sleep(delay);
     }
   }
@@ -286,14 +310,21 @@ async function main() {
   console.log("\n--- Summary ---");
   console.log(`Processed: ${processed}`);
   console.log(`Updated:   ${updated}`);
-  console.log(`Skipped:   ${skipped}  (AI could not determine — saved to ${path.basename(SKIPPED_FILE)})`);
-  console.log(`Failed:    ${failed}  (error or non-numeric response — saved to ${path.basename(SKIPPED_FILE)})`);
+  console.log(
+    `Skipped:   ${skipped}  (AI could not determine — saved to ${path.basename(SKIPPED_FILE)})`,
+  );
+  console.log(
+    `Failed:    ${failed}  (error or non-numeric response — saved to ${path.basename(SKIPPED_FILE)})`,
+  );
   console.log(`\nTo retry skipped books: add --retry-unknown flag`);
 
   await db.destroy();
 }
 
 main().catch((err) => {
-  console.error("Fatal error:", err instanceof Error ? err.message : String(err));
+  console.error(
+    "Fatal error:",
+    err instanceof Error ? err.message : String(err),
+  );
   process.exit(1);
 });
