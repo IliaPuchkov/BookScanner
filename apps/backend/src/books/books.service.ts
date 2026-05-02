@@ -3,6 +3,7 @@ import {
   NotFoundException,
   ForbiddenException,
   BadRequestException,
+  Logger,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
@@ -27,6 +28,8 @@ import {
 
 @Injectable()
 export class BooksService {
+  private readonly logger = new Logger(BooksService.name);
+
   constructor(
     @InjectRepository(Book)
     private readonly booksRepository: Repository<Book>,
@@ -449,76 +452,210 @@ export class BooksService {
       .getCount();
   }
 
-  async getDuplicatePairs(resolvedPairs: Array<{ book1Id: string; book2Id: string }>) {
+  async getDuplicatePairs(
+    resolvedPairs: Array<{ book1Id: string; book2Id: string }>,
+    page = 1,
+    limit = 20,
+  ) {
     const resolvedSet = new Set(
       resolvedPairs.map((p) => [p.book1Id, p.book2Id].sort().join(':')),
     );
 
-    const isbnGroupsRaw: Array<{ isbn: string; ids: string[] }> = await this.booksRepository
-      .createQueryBuilder('book')
-      .select('book.isbn', 'isbn')
-      .addSelect('array_agg(book.id)', 'ids')
-      .where('book.isbn IS NOT NULL')
-      .andWhere("book.isbn != ''")
-      .andWhere('book.status != :archived', { archived: 'archived' })
-      .groupBy('book.isbn')
-      .having('COUNT(*) >= 2')
-      .getRawMany();
-
-    const titleGroupsRaw: Array<{ normalizedTitle: string; ids: string[] }> = await this.booksRepository
-      .createQueryBuilder('book')
-      .select('LOWER(TRIM(book.title))', 'normalizedTitle')
-      .addSelect('array_agg(book.id)', 'ids')
-      .where("LOWER(TRIM(book.title)) NOT ILIKE :newBook", { newBook: 'новая книга' })
-      .andWhere('book.status != :archived', { archived: 'archived' })
-      .groupBy('LOWER(TRIM(book.title))')
-      .having('COUNT(*) >= 2')
-      .getRawMany();
-
-    const fetchBooks = (ids: string[]) =>
-      this.booksRepository.find({
-        where: { id: In(ids) },
-        relations: ['photos', 'box', 'ocrResult', 'ozonProduct'],
-      });
+    const parseIds = (raw: unknown): string[] => {
+      if (Array.isArray(raw)) return raw as string[];
+      if (typeof raw === 'string' && raw.startsWith('{')) {
+        return raw.slice(1, -1).split(',').filter(Boolean);
+      }
+      return raw ? [raw as string] : [];
+    };
 
     const allPairsResolved = (ids: string[]) => {
       for (let i = 0; i < ids.length; i++) {
         for (let j = i + 1; j < ids.length; j++) {
-          const key = [ids[i], ids[j]].sort().join(':');
-          if (!resolvedSet.has(key)) return false;
+          if (!resolvedSet.has([ids[i], ids[j]].sort().join(':'))) return false;
         }
       }
       return true;
     };
 
-    const isbnDuplicates: Array<{ type: 'isbn'; key: string; books: Book[] }> = [];
-    const isbnKeys = new Set(isbnGroupsRaw.map((g) => g.isbn));
+    // Step 1: Fetch group keys + IDs — 4 parallel queries
+    // allTitles/allAuthors are used only for probability scoring (not for building groups)
+    const [isbnGroupsRaw, titleGroupsRaw, allTitlesRaw, allAuthorsRaw] = await Promise.all([
+      this.booksRepository
+        .createQueryBuilder('book')
+        .select('book.isbn', 'isbn')
+        .addSelect('array_agg(book.id)', 'ids')
+        .where('book.isbn IS NOT NULL')
+        .andWhere("book.isbn != ''")
+        .andWhere('book.status != :archived', { archived: 'archived' })
+        .groupBy('book.isbn')
+        .having('COUNT(*) >= 2')
+        .getRawMany<{ isbn: string; ids: unknown }>(),
+      this.booksRepository
+        .createQueryBuilder('book')
+        .select('LOWER(TRIM(book.title))', 'normalizedTitle')
+        .addSelect('array_agg(book.id)', 'ids')
+        .where("LOWER(TRIM(book.title)) NOT ILIKE :newBook", { newBook: 'новая книга' })
+        .andWhere('book.status != :archived', { archived: 'archived' })
+        .andWhere("book.isbn IS NULL OR book.isbn = ''")
+        .groupBy('LOWER(TRIM(book.title))')
+        .having('COUNT(*) >= 2')
+        .getRawMany<{ normalizedTitle: string; ids: unknown }>(),
+      // All-books title grouping for probability (includes isbn books)
+      this.booksRepository
+        .createQueryBuilder('book')
+        .select('LOWER(TRIM(book.title))', 'normalizedTitle')
+        .addSelect('array_agg(book.id)', 'ids')
+        .where("LOWER(TRIM(book.title)) NOT ILIKE :newBook", { newBook: 'новая книга' })
+        .andWhere('book.status != :archived', { archived: 'archived' })
+        .groupBy('LOWER(TRIM(book.title))')
+        .having('COUNT(*) >= 2')
+        .getRawMany<{ normalizedTitle: string; ids: unknown }>(),
+      // Author grouping for probability
+      this.booksRepository
+        .createQueryBuilder('book')
+        .select('LOWER(TRIM(book.author))', 'normalizedAuthor')
+        .addSelect('array_agg(book.id)', 'ids')
+        .where('book.author IS NOT NULL')
+        .andWhere("LOWER(TRIM(book.author)) != ''")
+        .andWhere('book.status != :archived', { archived: 'archived' })
+        .groupBy('LOWER(TRIM(book.author))')
+        .having('COUNT(*) >= 2')
+        .getRawMany<{ normalizedAuthor: string; ids: unknown }>(),
+    ]);
 
-    for (const group of isbnGroupsRaw) {
-      const ids: string[] = Array.isArray(group.ids) ? group.ids : [group.ids];
-      if (allPairsResolved(ids)) continue;
-      const books = await fetchBooks(ids);
-      isbnDuplicates.push({ type: 'isbn' as const, key: group.isbn, books });
+    // Build bookId → groupKey maps for DB-level title and author matching
+    const titleGroupMap = new Map<string, string>();
+    for (const g of allTitlesRaw) {
+      for (const id of parseIds(g.ids)) titleGroupMap.set(id, g.normalizedTitle);
+    }
+    const authorGroupMap = new Map<string, string>();
+    for (const g of allAuthorsRaw) {
+      for (const id of parseIds(g.ids)) authorGroupMap.set(id, g.normalizedAuthor);
     }
 
-    const possibleDuplicates: Array<{ type: 'title'; key: string; books: Book[] }> = [];
+    this.logger.debug(
+      `[duplicates] isbn_groups=${isbnGroupsRaw.length} title_groups=${titleGroupsRaw.length}` +
+      ` allTitles=${allTitlesRaw.length} allAuthors=${allAuthorsRaw.length}` +
+      ` titleMap=${titleGroupMap.size} authorMap=${authorGroupMap.size}`,
+    );
 
-    for (const group of titleGroupsRaw) {
-      const ids: string[] = Array.isArray(group.ids) ? group.ids : [group.ids];
-      const books = await fetchBooks(ids);
-      const hasMissingIsbn = books.some((b) => !b.isbn);
-      if (!hasMissingIsbn) continue;
-      const allHaveSameIsbn = books.every((b) => b.isbn && isbnKeys.has(b.isbn));
-      if (allHaveSameIsbn) continue;
-      if (allPairsResolved(ids)) continue;
-      possibleDuplicates.push({ type: 'title' as const, key: group.normalizedTitle, books });
+    // Step 2: Filter resolved, build flat list
+    type RawGroup = { type: 'isbn' | 'title'; key: string; ids: string[] };
+    const allGroups: RawGroup[] = [];
+
+    for (const g of isbnGroupsRaw) {
+      const ids = parseIds(g.ids);
+      if (ids.length >= 2 && !allPairsResolved(ids)) {
+        allGroups.push({ type: 'isbn', key: g.isbn, ids });
+      }
+    }
+    for (const g of titleGroupsRaw) {
+      const ids = parseIds(g.ids);
+      if (ids.length >= 2 && !allPairsResolved(ids)) {
+        allGroups.push({ type: 'title', key: g.normalizedTitle, ids });
+      }
     }
 
-    return { isbnDuplicates, possibleDuplicates };
+    const total = allGroups.length;
+    const totalPages = Math.ceil(total / limit);
+    const pageGroups = allGroups.slice((page - 1) * limit, page * limit);
+
+    // Step 3: Bulk-fetch books only for this page
+    const pageIds = [...new Set(pageGroups.flatMap((g) => g.ids))];
+    const bookMap = new Map<string, Book>();
+    if (pageIds.length > 0) {
+      const books = await this.booksRepository.find({
+        where: { id: In(pageIds) },
+        relations: ['photos', 'box', 'ocrResult', 'ozonProduct'],
+      });
+      books.forEach((b) => bookMap.set(b.id, b));
+    }
+
+    type GroupResult = { type: 'isbn' | 'title'; key: string; books: Book[]; probability: number; matchedFields: string[] };
+    const isbnDuplicates: GroupResult[] = [];
+    const possibleDuplicates: GroupResult[] = [];
+
+    // Latin→Cyrillic homoglyph normalization: OCR/operators often mix them visually
+    const HOMO: Record<string, string> = { a: 'а', c: 'с', e: 'е', o: 'о', p: 'р', x: 'х', y: 'у' };
+    const norm = (s?: string | null) =>
+      (s ?? '')
+        .toLowerCase()
+        .replace(/ё/g, 'е')
+        .replace(/[acoepxy]/g, (ch) => HOMO[ch] ?? ch)
+        .replace(/[.,\-–—:;!?«»"'`()\[\]\/\\]/g, ' ')
+        .replace(/[  ​‌­﻿]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+
+    const calcGroupProbability = (groupIds: string[], books: Book[], groupType: 'isbn' | 'title') => {
+      let bestProb = 0;
+      let bestFields: string[] = [];
+      for (let i = 0; i < groupIds.length; i++) {
+        for (let j = i + 1; j < groupIds.length; j++) {
+          const idA = groupIds[i];
+          const idB = groupIds[j];
+          const a = books[i];
+          const b = books[j];
+          const isbnMatch = groupType === 'isbn';
+          // DB-level: PostgreSQL grouped these by LOWER(TRIM(title/author)) — more reliable
+          const titleMatchDb = !!(titleGroupMap.get(idA) && titleGroupMap.get(idA) === titleGroupMap.get(idB));
+          const authorMatchDb = !!(authorGroupMap.get(idA) && authorGroupMap.get(idA) === authorGroupMap.get(idB));
+          // JS-level: homoglyph normalization catches what DB misses
+          const na = norm(a?.title); const nb = norm(b?.title);
+          const aa = norm(a?.author); const ab = norm(b?.author);
+          const titleMatch = titleMatchDb || !!(na && nb && na === nb);
+          const authorMatch = authorMatchDb || !!(aa && ab && aa === ab);
+          const fields: string[] = [];
+          if (isbnMatch) fields.push('ISBN');
+          if (titleMatch) fields.push('Название');
+          if (authorMatch) fields.push('Автор');
+          const prob = fields.length >= 3 ? 100 : fields.length === 2 ? 60 : 30;
+          if (prob > bestProb) { bestProb = prob; bestFields = fields; }
+        }
+      }
+      if (bestFields.length === 0) {
+        bestFields = groupType === 'isbn' ? ['ISBN'] : ['Название'];
+        bestProb = 30;
+      }
+      return { probability: bestProb, matchedFields: bestFields };
+    };
+
+    let debugCount = 0;
+    for (const group of pageGroups) {
+      const books = group.ids.map((id) => bookMap.get(id)).filter(Boolean) as Book[];
+      if (books.length < 2) continue;
+      const { probability, matchedFields } = calcGroupProbability(group.ids, books, group.type);
+
+      // Log first 3 groups in detail to diagnose probability issues
+      if (debugCount < 3) {
+        debugCount++;
+        const idA = group.ids[0];
+        const idB = group.ids[1];
+        const a = books[0];
+        const b = books[1];
+        this.logger.debug(
+          `[dup #${debugCount}] key="${group.key}" type=${group.type} prob=${probability} fields=${matchedFields.join(',')}` +
+          ` | A(${idA}): title="${a?.title}" author="${a?.author}"` +
+          ` | B(${idB}): title="${b?.title}" author="${b?.author}"` +
+          ` | titleMapA="${titleGroupMap.get(idA)}" titleMapB="${titleGroupMap.get(idB)}"` +
+          ` | authorMapA="${authorGroupMap.get(idA)}" authorMapB="${authorGroupMap.get(idB)}"`,
+        );
+      }
+
+      if (group.type === 'isbn') {
+        isbnDuplicates.push({ type: 'isbn', key: group.key, books, probability, matchedFields });
+      } else {
+        possibleDuplicates.push({ type: 'title', key: group.key, books, probability, matchedFields });
+      }
+    }
+
+    return { isbnDuplicates, possibleDuplicates, total, page, totalPages };
   }
 
   async countDuplicates(): Promise<number> {
     // getCount() strips GROUP BY/HAVING internally — use raw subqueries to count groups
+    // Title groups only count books missing ISBN to avoid double-counting isbn+title groups
     const [isbnResult, titleResult] = await Promise.all([
       this.booksRepository.manager.query<[{ cnt: string }]>(`
         SELECT COUNT(*) AS cnt FROM (
@@ -530,7 +667,9 @@ export class BooksService {
       this.booksRepository.manager.query<[{ cnt: string }]>(`
         SELECT COUNT(*) AS cnt FROM (
           SELECT LOWER(TRIM(title)) FROM books
-          WHERE LOWER(TRIM(title)) NOT ILIKE 'новая книга' AND status != 'archived'
+          WHERE LOWER(TRIM(title)) NOT ILIKE 'новая книга'
+            AND status != 'archived'
+            AND (isbn IS NULL OR isbn = '')
           GROUP BY LOWER(TRIM(title)) HAVING COUNT(*) >= 2
         ) sub
       `),

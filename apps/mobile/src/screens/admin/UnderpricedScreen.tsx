@@ -12,7 +12,7 @@ import {
 } from "react-native";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import { adminService } from "../../services/admin.service";
+import { adminService, type OzonStore } from "../../services/admin.service";
 import { booksService } from "../../services/books.service";
 import type { Book } from "../../types";
 import type { AdminMainStackParamList } from "../../navigation/AdminNavigator";
@@ -24,14 +24,19 @@ function UnderpricedBookItem({
   onNavigate,
   onMarkReviewed,
   markingReviewed,
+  stores,
 }: {
   item: Book;
   onNavigate: (id: string) => void;
   onMarkReviewed: (id: string) => void;
   markingReviewed: boolean;
+  stores: OzonStore[];
 }) {
   const coverPhoto = item.photos?.find((p) => p.sortOrder === 0);
   const isPublished = item.status === "published";
+  const storeName = item.ozonProduct?.storeId
+    ? stores.find((s) => s.id === item.ozonProduct!.storeId)?.name ?? null
+    : null;
   return (
     <View style={styles.card}>
       <TouchableOpacity
@@ -62,7 +67,9 @@ function UnderpricedBookItem({
               <Text style={styles.metaChip}>📦 {item.printRun.toLocaleString()} экз.</Text>
             ) : null}
             {isPublished && (
-              <Text style={styles.publishedChip}>Ozon ✓</Text>
+              <Text style={styles.publishedChip}>
+                {storeName ? `Ozon: ${storeName}` : "Ozon ✓"}
+              </Text>
             )}
           </View>
           {item.price != null ? (
@@ -98,13 +105,17 @@ export function UnderpricedScreen() {
   const [hasMore, setHasMore] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [markingId, setMarkingId] = useState<string | null>(null);
+  const [stores, setStores] = useState<OzonStore[]>([]);
   const loadingMoreRef = useRef(false);
 
   const fetchBooks = useCallback(async (p: number, mode: "initial" | "refresh" | "more") => {
     if (mode === "initial") setLoading(true);
     if (mode === "more") setLoadingMore(true);
     try {
-      const res = await adminService.getUnderpricedBooks(p, 20);
+      const [res, storesRes] = await Promise.all([
+        adminService.getUnderpricedBooks(p, 20),
+        p === 1 ? adminService.getOzonStores().catch(() => ({ stores: [] })) : Promise.resolve(null),
+      ]);
       if (mode === "more") {
         setBooks((prev) => [...prev, ...res.data]);
       } else {
@@ -112,6 +123,7 @@ export function UnderpricedScreen() {
       }
       setHasMore(p < res.meta.totalPages);
       setPage(p);
+      if (storesRes) setStores((storesRes as { stores: OzonStore[] }).stores);
     } catch {
       // silent
     } finally {
@@ -171,9 +183,10 @@ export function UnderpricedScreen() {
         onNavigate={navigate}
         onMarkReviewed={handleMarkReviewed}
         markingReviewed={markingId === item.id}
+        stores={stores}
       />
     ),
-    [navigate, handleMarkReviewed, markingId],
+    [navigate, handleMarkReviewed, markingId, stores],
   );
 
   return (

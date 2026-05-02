@@ -44,6 +44,9 @@ services:
     environment:
       DB_HOST: postgres
       REDIS_HOST: redis
+      NODE_OPTIONS: "--max-old-space-size=400"
+    mem_limit: 512m
+    memswap_limit: 512m
     depends_on:
       postgres:
         condition: service_healthy

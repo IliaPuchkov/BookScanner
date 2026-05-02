@@ -110,8 +110,8 @@ export class AdminController {
   // Duplicates
   @Get('books/duplicates')
   @ApiOperation({ summary: 'Книги с возможными дубликатами' })
-  getDuplicates() {
-    return this.adminService.getDuplicates();
+  getDuplicates(@Query() pagination: PaginationDto) {
+    return this.adminService.getDuplicates(pagination.page, pagination.limit);
   }
 
   @Post('books/duplicates/resolve')

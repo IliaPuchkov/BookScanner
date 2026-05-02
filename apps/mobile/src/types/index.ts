@@ -138,11 +138,16 @@ export interface DuplicateGroup {
   type: 'isbn' | 'title';
   key: string;
   books: Book[];
+  probability?: number;
+  matchedFields?: string[];
 }
 
 export interface DuplicatesResponse {
   isbnDuplicates: DuplicateGroup[];
   possibleDuplicates: DuplicateGroup[];
+  total: number;
+  page: number;
+  totalPages: number;
 }
 
 export interface CreateBookDto {

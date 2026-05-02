@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useRef, useEffect } from "react";
 import {
   View,
   FlatList,
@@ -11,7 +11,7 @@ import {
   ActivityIndicator,
   RefreshControl,
 } from "react-native";
-import { useFocusEffect, useNavigation } from "@react-navigation/native";
+import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { adminService, type OzonStore } from "../../services/admin.service";
 import { booksService } from "../../services/books.service";
@@ -88,6 +88,12 @@ function BookMiniCard({
   );
 }
 
+function probabilityMeta(p: number) {
+  if (p >= 100) return { border: "#E53935", badge: "#FFEBEE", text: "#C62828", label: "Высокая вероятность" };
+  if (p >= 60) return { border: "#FB8C00", badge: "#FFF3E0", text: "#E65100", label: "Средняя вероятность" };
+  return { border: "#F9A825", badge: "#FFFDE7", text: "#F57F17", label: "Малая вероятность" };
+}
+
 function DuplicateGroupCard({
   group,
   onNavigate,
@@ -105,17 +111,20 @@ function DuplicateGroupCard({
   resolvingKey: string | null;
   stores: OzonStore[];
 }) {
-  const isExact = group.type === "isbn";
+  const prob = group.probability ?? 30;
+  const meta = probabilityMeta(prob);
+  const fieldsLabel = group.matchedFields?.join(" + ") ?? (group.type === "isbn" ? "ISBN" : "Название");
   return (
-    <View style={[styles.groupCard, isExact ? styles.groupExact : styles.groupPossible]}>
+    <View style={[styles.groupCard, { borderLeftColor: meta.border }]}>
       <View style={styles.groupHeader}>
-        <View style={[styles.badge, isExact ? styles.badgeExact : styles.badgePossible]}>
-          <Text style={styles.badgeText}>{isExact ? "100% дубль" : "Возможный дубль"}</Text>
+        <View style={[styles.badge, { backgroundColor: meta.badge }]}>
+          <Text style={[styles.badgeText, { color: meta.text }]}>{meta.label}</Text>
         </View>
-        <Text style={styles.groupKey} numberOfLines={1}>
-          {isExact ? `ISBN: ${group.key}` : `Название: ${group.key}`}
-        </Text>
+        <Text style={[styles.badgeFields, { color: meta.text }]}>{fieldsLabel}</Text>
       </View>
+      <Text style={styles.groupKey} numberOfLines={1}>
+        {group.type === "isbn" ? `ISBN: ${group.key}` : group.key}
+      </Text>
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
@@ -151,37 +160,57 @@ function DuplicateGroupCard({
 
 export function DuplicatesScreen() {
   const navigation = useNavigation<Nav>();
-  const [isbnDuplicates, setIsbnDuplicates] = useState<DuplicateGroup[]>([]);
-  const [possibleDuplicates, setPossibleDuplicates] = useState<DuplicateGroup[]>([]);
+  const [groups, setGroups] = useState<DuplicateGroup[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(true);
+  const [total, setTotal] = useState(0);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [resolvingKey, setResolvingKey] = useState<string | null>(null);
   const [stores, setStores] = useState<OzonStore[]>([]);
+  const [filterProb, setFilterProb] = useState<number | null>(null);
+  const loadingMoreRef = useRef(false);
 
-  const fetchData = useCallback(async () => {
+  const fetchData = useCallback(async (p: number, mode: "initial" | "refresh" | "more") => {
+    if (mode === "more") setLoadingMore(true);
     try {
       const [res, storesRes] = await Promise.all([
-        adminService.getDuplicates(),
-        adminService.getOzonStores().catch(() => ({ stores: [] })),
+        adminService.getDuplicates(p, 20),
+        p === 1 ? adminService.getOzonStores().catch(() => ({ stores: [] })) : Promise.resolve(null),
       ]);
-      setIsbnDuplicates(res.isbnDuplicates);
-      setPossibleDuplicates(res.possibleDuplicates);
-      setStores(storesRes.stores);
+      const incoming = [...res.isbnDuplicates, ...res.possibleDuplicates];
+      if (mode === "more") {
+        setGroups((prev) => [...prev, ...incoming]);
+      } else {
+        setGroups(incoming);
+      }
+      setTotal(res.total);
+      setHasMore(p < res.totalPages);
+      setPage(p);
+      if (storesRes) setStores((storesRes as { stores: OzonStore[] }).stores);
     } catch {
       // silent
     } finally {
+      loadingMoreRef.current = false;
       setLoading(false);
       setRefreshing(false);
+      setLoadingMore(false);
     }
   }, []);
 
-  useFocusEffect(
-    useCallback(() => {
-      setLoading(true);
-      fetchData();
-    }, [fetchData]),
-  );
+  useEffect(() => {
+    setLoading(true);
+    fetchData(1, "initial");
+  }, [fetchData]);
+
+  const handleLoadMore = () => {
+    if (hasMore && !loadingMoreRef.current && !loading) {
+      loadingMoreRef.current = true;
+      fetchData(page + 1, "more");
+    }
+  };
 
   const navigate = useCallback(
     (bookId: string) => navigation.navigate("ProductDetail", { bookId, editable: true }),
@@ -201,12 +230,7 @@ export function DuplicatesScreen() {
             setDeletingId(book.id);
             try {
               await booksService.deleteBook(book.id);
-              setIsbnDuplicates((prev) =>
-                prev
-                  .map((g) => ({ ...g, books: g.books.filter((b) => b.id !== book.id) }))
-                  .filter((g) => g.books.length >= 2),
-              );
-              setPossibleDuplicates((prev) =>
+              setGroups((prev) =>
                 prev
                   .map((g) => ({ ...g, books: g.books.filter((b) => b.id !== book.id) }))
                   .filter((g) => g.books.length >= 2),
@@ -233,11 +257,7 @@ export function DuplicatesScreen() {
         }
       }
       await Promise.all(pairs.map(([id1, id2]) => adminService.resolveDuplicate(id1, id2)));
-      if (group.type === "isbn") {
-        setIsbnDuplicates((prev) => prev.filter((g) => g.key !== group.key));
-      } else {
-        setPossibleDuplicates((prev) => prev.filter((g) => g.key !== group.key));
-      }
+      setGroups((prev) => prev.filter((g) => g.key !== group.key));
     } catch {
       Alert.alert("Ошибка", "Не удалось отметить как не дубль");
     } finally {
@@ -245,7 +265,15 @@ export function DuplicatesScreen() {
     }
   }, []);
 
-  const allGroups: DuplicateGroup[] = [...isbnDuplicates, ...possibleDuplicates];
+  const displayGroups = filterProb === null
+    ? groups
+    : groups.filter((g) => (g.probability ?? 30) === filterProb);
+
+  const FILTERS: { label: string; value: number; color: string }[] = [
+    { label: "Высокая", value: 100, color: "#E53935" },
+    { label: "Средняя", value: 60, color: "#FB8C00" },
+    { label: "Малая", value: 30, color: "#F9A825" },
+  ];
 
   if (loading) {
     return (
@@ -258,7 +286,7 @@ export function DuplicatesScreen() {
   return (
     <FlatList
       style={styles.container}
-      data={allGroups}
+      data={displayGroups}
       keyExtractor={(item) => `${item.type}:${item.key}`}
       renderItem={({ item }) => (
         <DuplicateGroupCard
@@ -275,29 +303,48 @@ export function DuplicatesScreen() {
       refreshControl={
         <RefreshControl
           refreshing={refreshing}
-          onRefresh={() => { setRefreshing(true); fetchData(); }}
+          onRefresh={() => { setRefreshing(true); fetchData(1, "refresh"); }}
         />
       }
+      onEndReached={handleLoadMore}
+      onEndReachedThreshold={0.3}
       ListHeaderComponent={
-        allGroups.length > 0 ? (
-          <View style={styles.header}>
-            {isbnDuplicates.length > 0 && (
-              <Text style={styles.headerSection}>
-                📌 Точные дубли (ISBN): {isbnDuplicates.length}
-              </Text>
-            )}
-            {possibleDuplicates.length > 0 && (
-              <Text style={styles.headerSection}>
-                ⚠️ Возможные дубли (название): {possibleDuplicates.length}
-              </Text>
-            )}
+        <View>
+          <View style={styles.filterRow}>
+            {FILTERS.map((f) => {
+              const active = filterProb === f.value;
+              return (
+                <TouchableOpacity
+                  key={f.value}
+                  style={[styles.filterChip, active && { backgroundColor: f.color, borderColor: f.color }]}
+                  onPress={() => setFilterProb(active ? null : f.value)}
+                  activeOpacity={0.7}
+                >
+                  <Text style={[styles.filterChipText, active && styles.filterChipTextActive]}>
+                    {f.label}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+            <Text style={styles.filterCount}>
+              {filterProb !== null
+                ? `${displayGroups.length} из ${groups.length}`
+                : `${groups.length} из ${total}`}
+            </Text>
           </View>
+        </View>
+      }
+      ListFooterComponent={
+        loadingMore ? (
+          <ActivityIndicator size="small" color="#1976D2" style={{ marginVertical: 16 }} />
         ) : null
       }
       ListEmptyComponent={
         <View style={styles.emptyContainer}>
           <Text style={styles.emptyIcon}>✅</Text>
-          <Text style={styles.empty}>Дубликатов не найдено</Text>
+          <Text style={styles.empty}>
+            {filterProb !== null ? "Нет дублей с такой вероятностью" : "Дубликатов не найдено"}
+          </Text>
         </View>
       }
     />
@@ -318,7 +365,41 @@ const styles = StyleSheet.create({
     padding: 12,
     gap: 12,
   },
+  filterRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 12,
+    flexWrap: "wrap",
+  },
+  filterChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    borderWidth: 1.5,
+    borderColor: "#ccc",
+    backgroundColor: "#fff",
+  },
+  filterChipText: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#666",
+  },
+  filterChipTextActive: {
+    color: "#fff",
+  },
+  filterCount: {
+    fontSize: 12,
+    color: "#999",
+    marginLeft: "auto",
+  },
   header: {
+    marginBottom: 4,
+  },
+  headerTotal: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#444",
     marginBottom: 4,
   },
   headerSection: {
@@ -361,9 +442,14 @@ const styles = StyleSheet.create({
     backgroundColor: "#FFF3E0",
   },
   badgeText: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: "700",
-    color: "#555",
+  },
+  badgeFields: {
+    fontSize: 11,
+    fontWeight: "600",
+    marginLeft: 4,
+    flexShrink: 1,
   },
   groupKey: {
     flex: 1,

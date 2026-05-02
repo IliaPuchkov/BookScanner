@@ -137,11 +137,11 @@ export class AdminService {
     return this.booksService.getUnderpricedBooks(pagination);
   }
 
-  async getDuplicates() {
+  async getDuplicates(page = 1, limit = 20) {
     const resolvedPairs = await this.dupResRepository.find({
       select: ['book1Id', 'book2Id'],
     });
-    return this.booksService.getDuplicatePairs(resolvedPairs);
+    return this.booksService.getDuplicatePairs(resolvedPairs, page, limit);
   }
 
   async resolveDuplicate(book1Id: string, book2Id: string, adminId: string) {

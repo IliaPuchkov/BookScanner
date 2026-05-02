@@ -28,9 +28,16 @@ ssh "$SSH_USER@$SERVER_IP" bash << EOF
   set -e
   cd $REMOTE_DIR
 
-  # Build and restart
+  # Build
   docker compose -f docker/docker-compose.prod.yml --env-file docker/.env build backend
+
+  # Restart
   docker compose -f docker/docker-compose.prod.yml --env-file docker/.env up -d --force-recreate backend
+
+  # Run migrations inside the running container (correct network, DB reachable)
+  echo "==> Running migrations..."
+  sleep 5
+  docker exec bookscanner-backend sh -c "cd /app/apps/backend && pnpm migration:run"
   docker compose -f docker/docker-compose.prod.yml --env-file docker/.env up -d
   # Ensure backend is on both networks (docker-compose sometimes misses one on recreate)
   docker network connect --alias backend docker_web bookscanner-backend 2>/dev/null || true
@@ -39,6 +46,8 @@ ssh "$SSH_USER@$SERVER_IP" bash << EOF
 
   echo "==> Done. Containers:"
   docker compose -f docker/docker-compose.prod.yml --env-file docker/.env ps
+  echo ""
+  docker stats --no-stream --format "table {{.Name}}\t{{.CPUPerc}}\t{{.MemUsage}}\t{{.MemPerc}}"
 EOF
 
 echo "==> Deployed successfully!"

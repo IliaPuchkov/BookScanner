@@ -247,8 +247,10 @@ export const adminService = {
     return data;
   },
 
-  async getDuplicates(): Promise<DuplicatesResponse> {
-    const { data } = await api.get<DuplicatesResponse>('/admin/books/duplicates');
+  async getDuplicates(page = 1, limit = 20): Promise<DuplicatesResponse> {
+    const { data } = await api.get<DuplicatesResponse>('/admin/books/duplicates', {
+      params: { page, limit },
+    });
     return data;
   },
 
