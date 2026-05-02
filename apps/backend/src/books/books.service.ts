@@ -348,9 +348,20 @@ export class BooksService {
     const clean = Object.fromEntries(
       Object.entries(data).filter(([, v]) => v !== null && v !== undefined),
     );
-    if (Object.keys(clean).length > 0) {
-      await this.booksRepository.update(id, clean as any);
+    if (Object.keys(clean).length === 0) {
+      this.logger.warn(`updateFromExtraction: no data to write for book ${id}`);
+      return;
     }
+
+    const book = await this.booksRepository.findOne({ where: { id } });
+    if (!book) {
+      this.logger.error(`updateFromExtraction: book ${id} not found`);
+      return;
+    }
+
+    this.logger.log(`updateFromExtraction: writing fields [${Object.keys(clean).join(', ')}] to book ${id}`);
+    Object.assign(book, clean);
+    await this.booksRepository.save(book);
   }
 
   async createWithPhotos(
