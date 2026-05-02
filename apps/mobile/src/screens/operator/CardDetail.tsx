@@ -120,6 +120,24 @@ export function CardDetailScreen() {
     setExtracting(true);
     try {
       await visionService.extract(bookId);
+
+      // Poll until the async BullMQ job finishes (up to 60s)
+      const deadline = Date.now() + 60_000;
+      let ocrDone = false;
+      while (Date.now() < deadline) {
+        await new Promise((r) => setTimeout(r, 2000));
+        const ocr = await visionService.getResult(bookId);
+        if (ocr?.status === 'completed' || ocr?.status === 'failed') {
+          ocrDone = true;
+          break;
+        }
+      }
+
+      if (!ocrDone) {
+        Alert.alert('Таймаут', 'Распознавание заняло слишком долго, попробуйте позже');
+        return;
+      }
+
       const updated = await booksService.getBook(bookId);
       setBook(updated);
       populateEditFields(updated);

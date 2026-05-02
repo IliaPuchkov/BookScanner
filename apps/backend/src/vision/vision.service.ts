@@ -23,6 +23,7 @@ import {
   ANNOTATION_PREFIX,
   DEFAULT_PRICE,
   DEFAULT_LOWER_PRICE,
+  type IExtractionResult,
 } from "@bookscanner/shared";
 
 function normalizePaperType(
@@ -110,7 +111,6 @@ export class VisionService {
   }
 
   async extractBookData(bookId: string) {
-    const book = await this.booksService.findOne(bookId);
     const photos = await this.photosService.findByBookId(bookId);
 
     let ocrResult = await this.ocrResultRepository.findOne({
@@ -151,17 +151,6 @@ export class VisionService {
       );
       const extractedData = applyDefaults(result);
 
-      ocrResult.photo01Extraction = (availablePhotos[0]
-        ? result
-        : null) as unknown as Record<string, unknown>;
-      ocrResult.photo02Extraction = null as unknown as Record<string, unknown>;
-      ocrResult.extractedData = extractedData as unknown as Record<
-        string,
-        unknown
-      >;
-      ocrResult.status = "completed";
-      await this.ocrResultRepository.save(ocrResult);
-
       await this.booksService.updateFromExtraction(bookId, {
         title: extractedData.title,
         author: extractedData.author,
@@ -188,6 +177,17 @@ export class VisionService {
         language: extractedData.language,
         hashtags: extractedData.hashtags,
       });
+
+      ocrResult.photo01Extraction = (availablePhotos[0]
+        ? result
+        : null) as unknown as Record<string, unknown>;
+      ocrResult.photo02Extraction = null as unknown as Record<string, unknown>;
+      ocrResult.extractedData = extractedData as unknown as Record<
+        string,
+        unknown
+      >;
+      ocrResult.status = "completed";
+      await this.ocrResultRepository.save(ocrResult);
 
       return {
         ocrResult,
@@ -255,7 +255,7 @@ export class VisionService {
         availablePhotos.map((p) => this.storage.getSignedUrl(p.fileKey, 3600)),
       );
 
-      let result;
+      let result: IExtractionResult | undefined;
       for (let attempt = 1; attempt <= 3; attempt++) {
         try {
           result = await extractor.extractBookData(imageUrls.map((url) => ({ url })), prompt);
