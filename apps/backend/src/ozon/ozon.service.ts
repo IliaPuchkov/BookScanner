@@ -250,6 +250,22 @@ export class OzonService {
           return { status: 'published', message: 'Загружено в Ozon' };
         } else if (item.status === 'failed') {
           const errorMsg = item.errors?.map((e) => e.message).join('; ') || 'Import failed';
+          // Ozon sometimes reports 'failed' in the import task even when the product was created.
+          // Verify by searching on Ozon before marking as failed.
+          const offerId = ozonProduct.publishPayload?.items?.[0]?.offer_id as string | undefined;
+          if (offerId) {
+            try {
+              const found = await this.ozonApiClient.findProductByOfferId(offerId, ozonProduct.storeId ?? undefined);
+              if (found?.product_id) {
+                ozonProduct.ozonProductId = String(found.product_id);
+                ozonProduct.status = 'published';
+                await this.ozonProductRepository.save(ozonProduct);
+                await this.booksService.updateFromExtraction(bookId, { status: BookStatus.PUBLISHED, publishedToOzon: new Date() });
+                this.logger.log(`Book ${bookId}: task reported failed but product found on Ozon by offer_id=${offerId}, product_id=${found.product_id}`);
+                return { status: 'published', message: 'Загружено в Ozon' };
+              }
+            } catch { /* not found, fall through to mark as failed */ }
+          }
           ozonProduct.status = 'failed';
           ozonProduct.errorMessage = errorMsg;
           await this.ozonProductRepository.save(ozonProduct);
@@ -384,6 +400,21 @@ export class OzonService {
             this.logger.log(`Book ${product.bookId}: imported to Ozon, product_id=${item.product_id}`);
           } else if (item.status === 'failed') {
             const errorMsg = item.errors?.map((e) => e.message).join('; ') || 'Import failed';
+            // Ozon sometimes reports 'failed' in the import task even when the product was created.
+            // Verify by searching on Ozon before marking as failed.
+            if (offerId) {
+              try {
+                const found = await this.ozonApiClient.findProductByOfferId(offerId, product.storeId ?? undefined);
+                if (found?.product_id) {
+                  product.ozonProductId = String(found.product_id);
+                  product.status = 'published';
+                  await this.ozonProductRepository.save(product);
+                  await this.booksService.updateFromExtraction(product.bookId, { status: BookStatus.PUBLISHED, publishedToOzon: new Date() });
+                  this.logger.log(`Book ${product.bookId}: task reported failed but product found on Ozon by offer_id=${offerId}, product_id=${found.product_id}`);
+                  continue;
+                }
+              } catch { /* not found, fall through to mark as failed */ }
+            }
             product.status = 'failed';
             product.errorMessage = errorMsg;
             await this.ozonProductRepository.save(product);
