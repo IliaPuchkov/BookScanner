@@ -173,6 +173,23 @@ export class OzonController {
     return { message: "Запущено в фоне. Результат появится в логах сервера." };
   }
 
+  @Post("sync-status")
+  @Roles(UserRole.ADMIN)
+  @ApiOperation({
+    summary: "Синхронизировать статусы товаров с Ozon (архив и публикация)",
+  })
+  syncOzonStatus() {
+    this.ozonService
+      .syncOzonStatus()
+      .catch((e) =>
+        this.ozonApiClient["logger"]?.error(
+          "syncOzonStatus background error",
+          e,
+        ),
+      );
+    return { message: "Запущено в фоне. Результат появится в логах сервера." };
+  }
+
   @Get("sync-diff")
   @Roles(UserRole.ADMIN)
   @ApiOperation({ summary: "Сравнить товары на Ozon с книгами в системе" })

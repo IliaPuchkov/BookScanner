@@ -238,6 +238,11 @@ export const adminService = {
     return data;
   },
 
+  async syncOzonStatus(): Promise<{ message: string }> {
+    const { data } = await api.post('/ozon/sync-status', {});
+    return data;
+  },
+
   async getSyncDiff(storeId?: string): Promise<{
     counts: { ozonActive: number; ozonArchived: number; systemPublished: number; systemArchived: number };
     onOzonNotInSystem: Array<{ productId: number; offerId: string; name: string; visibility: string; storeId: string | null }>;

@@ -844,6 +844,70 @@ export class OzonService {
     return { checked: published.length, archived };
   }
 
+  async syncOzonStatus(): Promise<{ checked: number; archived: number; restored: number }> {
+    this.logger.log('syncOzonStatus: started');
+
+    const stores = await this.ozonApiClient.getAllStores();
+    const storeIds: Array<string | null> = stores.length ? stores.map((s) => s.id) : [null];
+
+    // Build two sets: all offer_ids present on Ozon, and those that are archived
+    const allOfferIds = new Set<string>();
+    const archivedOfferIds = new Set<string>();
+
+    for (const storeId of storeIds) {
+      for (const visibility of [undefined, 'ARCHIVED'] as Array<string | undefined>) {
+        let lastId = '';
+        try {
+          do {
+            const result = await this.ozonApiClient.getProductList(storeId ?? undefined, lastId, 1000, visibility);
+            for (const item of result.items) {
+              allOfferIds.add(item.offer_id);
+              if (visibility === 'ARCHIVED') archivedOfferIds.add(item.offer_id);
+            }
+            lastId = result.last_id;
+            if (!lastId || result.items.length < 1000) break;
+          } while (true);
+        } catch (err) {
+          this.logger.error(`syncOzonStatus: failed to fetch store=${storeId} visibility=${visibility ?? 'ALL'}`, err);
+        }
+      }
+      this.logger.log(`syncOzonStatus: store=${storeId} — total=${allOfferIds.size} archived=${archivedOfferIds.size}`);
+    }
+
+    const tracked = await this.ozonProductRepository
+      .createQueryBuilder('op')
+      .innerJoinAndSelect('op.book', 'book')
+      .where('op.status IN (:...statuses)', { statuses: ['published', 'archived'] })
+      .getMany();
+
+    this.logger.log(`syncOzonStatus: checking ${tracked.length} tracked records`);
+
+    let archived = 0;
+    let restored = 0;
+
+    for (const op of tracked) {
+      const sku = op.book?.sku;
+      if (!sku || !allOfferIds.has(sku)) continue;
+
+      if (archivedOfferIds.has(sku) && op.status !== 'archived') {
+        op.status = 'archived';
+        await this.ozonProductRepository.save(op);
+        await this.booksService.updateFromExtraction(op.bookId, { status: BookStatus.ARCHIVED });
+        archived++;
+        this.logger.log(`syncOzonStatus: archived book ${op.bookId} sku=${sku}`);
+      } else if (!archivedOfferIds.has(sku) && op.status === 'archived') {
+        op.status = 'published';
+        await this.ozonProductRepository.save(op);
+        await this.booksService.updateFromExtraction(op.bookId, { status: BookStatus.PUBLISHED });
+        restored++;
+        this.logger.log(`syncOzonStatus: restored book ${op.bookId} sku=${sku}`);
+      }
+    }
+
+    this.logger.log(`syncOzonStatus: checked=${tracked.length}, archived=${archived}, restored=${restored}`);
+    return { checked: tracked.length, archived, restored };
+  }
+
   /**
    * Проходит по всем ozon_products со статусом 'failed' и offer_id в publishPayload.
    * Если товар найден на Ozon (по любому магазину) — помечает как published.

@@ -99,7 +99,7 @@ export function SettingsScreen() {
   const [backfilling, setBackfilling] = useState(false);
   const [resettingStuck, setResettingStuck] = useState(false);
   const [repairing, setRepairing] = useState(false);
-  const [syncingArchived, setSyncingArchived] = useState(false);
+  const [syncingOzon, setSyncingOzon] = useState(false);
 
   // Maintenance settings
   const { refresh: refreshMaintenance } = useMaintenanceContext();
@@ -710,22 +710,22 @@ export function SettingsScreen() {
             </TouchableOpacity> */}
 
             {/* Sync archived status */}
-            {/* <TouchableOpacity
+            <TouchableOpacity
               style={styles.card}
               activeOpacity={0.75}
-              disabled={syncingArchived}
+              disabled={syncingOzon}
               onPress={() => {
                 Alert.alert(
-                  "Синхронизировать архив Ozon",
-                  "Система проверит все опубликованные книги и отметит те, которые были заархивированы на Ozon.",
+                  "Синхронизировать с Ozon",
+                  "Система проверит статус каждого товара по магазинам и обновит состояние: опубликован или в архиве.",
                   [
                     { text: "Отмена", style: "cancel" },
                     {
                       text: "Запустить",
                       onPress: async () => {
-                        setSyncingArchived(true);
+                        setSyncingOzon(true);
                         try {
-                          const res = await adminService.syncArchivedStatus();
+                          const res = await adminService.syncOzonStatus();
                           Alert.alert("Запущено", res.message);
                         } catch {
                           Alert.alert(
@@ -733,7 +733,7 @@ export function SettingsScreen() {
                             "Не удалось запустить синхронизацию",
                           );
                         } finally {
-                          setSyncingArchived(false);
+                          setSyncingOzon(false);
                         }
                       },
                     },
@@ -744,19 +744,19 @@ export function SettingsScreen() {
               <View style={[styles.sectionHeader, { marginBottom: 0 }]}>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.sectionTitle}>
-                    Синхронизировать архив Ozon
+                    Синхронизировать с Ozon
                   </Text>
                   <Text style={styles.sectionDesc}>
-                    Отметить книги, заархивированные на Ozon
+                    Обновить статусы товаров: опубликован или в архиве
                   </Text>
                 </View>
-                {syncingArchived ? (
+                {syncingOzon ? (
                   <ActivityIndicator size="small" color="#1976D2" />
                 ) : (
                   <Text style={{ fontSize: 20, color: "#1976D2" }}>›</Text>
                 )}
               </View>
-            </TouchableOpacity> */}
+            </TouchableOpacity>
 
             {/* Max photos setting */}
             <View style={styles.card}>
