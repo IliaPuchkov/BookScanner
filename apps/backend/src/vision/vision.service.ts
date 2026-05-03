@@ -230,7 +230,9 @@ export class VisionService {
     );
 
     const extractor = new GeminiVisionExtractor(apiKey);
-    const availablePhotos = photos.slice(0, 4).filter(Boolean);
+    const availablePhotos = photos
+      .slice(0, 4)
+      .filter((p) => p && p.fileKey);
     const imageUrls = await Promise.all(
       availablePhotos.map((p) => this.storage.getSignedUrl(p.fileKey, 3600)),
     );
@@ -323,12 +325,18 @@ export class VisionService {
     extractedData: IExtractionResult,
     calculatedPrice: number,
   ): Partial<Book> {
+    const parseIntSafe = (v: unknown): number | undefined => {
+      if (v == null) return undefined;
+      const n = parseInt(String(v).replace(/[\s,.']/g, ''), 10);
+      return isNaN(n) ? undefined : n;
+    };
+
     return {
       title: extractedData.title,
       author: extractedData.author,
       isbn: extractedData.isbn,
       publisher: extractedData.publisher,
-      yearPublished: extractedData.yearPublished,
+      yearPublished: parseIntSafe(extractedData.yearPublished),
       ...(extractedData.width != null && {
         dimensions: {
           width: extractedData.width,
@@ -340,8 +348,8 @@ export class VisionService {
       weightNet: extractedData.weightNet,
       paperType: normalizePaperType(extractedData.paperType),
       coverType: normalizeCoverType(extractedData.coverType),
-      pageCount: extractedData.pageCount,
-      printRun: extractedData.printRun,
+      pageCount: parseIntSafe(extractedData.pageCount),
+      printRun: parseIntSafe(extractedData.printRun),
       price: calculatedPrice,
       annotation: extractedData.annotation
         ? `${ANNOTATION_PREFIX}${extractedData.annotation}`
