@@ -910,6 +910,28 @@ export function PendingReviewScreen() {
     async (sectionBooks: Book[]) => {
       const boxId = sectionBooks[0]?.boxId;
       const loadedIds = sectionBooks.map((b) => b.id);
+
+      // When filters or search are active, only operate on the visible filtered books
+      const hasActiveFilters =
+        searchRef.current.length > 0 ||
+        Object.keys(filtersRef.current).length > 0;
+
+      if (hasActiveFilters) {
+        const allSelected =
+          loadedIds.length > 0 &&
+          loadedIds.every((id) => selectedIds.has(id));
+        setSelectedIds((prev) => {
+          const next = new Set(prev);
+          if (allSelected) {
+            loadedIds.forEach((id) => next.delete(id));
+          } else {
+            loadedIds.forEach((id) => next.add(id));
+          }
+          return next;
+        });
+        return;
+      }
+
       const cachedIds = boxId ? boxAllIds[boxId] : undefined;
       const idsToCheck = cachedIds ?? loadedIds;
       const allSelected =
