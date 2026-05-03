@@ -15,6 +15,7 @@ import { PaginationDto } from '../common/dto/pagination.dto';
 import { BoxesService } from '../boxes/boxes.service';
 import { StatsService } from '../stats/stats.service';
 import { PhotosService } from '../photos/photos.service';
+import { SettingsService } from '../settings/settings.service';
 import { UserRole, BookStatus } from '@bookscanner/shared';
 import {
   DEFAULT_HEIGHT_MM,
@@ -36,6 +37,7 @@ export class BooksService {
     private readonly boxesService: BoxesService,
     private readonly statsService: StatsService,
     private readonly photosService: PhotosService,
+    private readonly settingsService: SettingsService,
   ) {}
 
   async create(dto: CreateBookDto, userId: string): Promise<Book> {
@@ -428,14 +430,18 @@ export class BooksService {
 
   async getUnderpricedBooks(pagination: PaginationDto) {
     const { page = 1, limit = 20 } = pagination;
+    const [maxYear, maxPrintRun] = await Promise.all([
+      this.settingsService.getValue<number>('rare_book_max_year', 1985),
+      this.settingsService.getValue<number>('rare_book_max_print_run', 10000),
+    ]);
     const qb = this.booksRepository
       .createQueryBuilder('book')
       .leftJoinAndSelect('book.photos', 'photos')
       .leftJoinAndSelect('book.box', 'box')
       .leftJoinAndSelect('book.ozonProduct', 'ozonProduct')
-      .where('book.yearPublished <= :year', { year: 1985 })
+      .where('book.yearPublished <= :year', { year: maxYear })
       .andWhere('book.printRun IS NOT NULL')
-      .andWhere('book.printRun < :printRun', { printRun: 10000 })
+      .andWhere('book.printRun < :printRun', { printRun: maxPrintRun })
       .andWhere('book.status != :archived', { archived: 'archived' })
       .andWhere('book.priceReviewed = false')
       .orderBy('book.printRun', 'ASC')
@@ -446,11 +452,15 @@ export class BooksService {
   }
 
   async countUnderpriced(): Promise<number> {
+    const [maxYear, maxPrintRun] = await Promise.all([
+      this.settingsService.getValue<number>('rare_book_max_year', 1985),
+      this.settingsService.getValue<number>('rare_book_max_print_run', 10000),
+    ]);
     return this.booksRepository
       .createQueryBuilder('book')
-      .where('book.yearPublished <= :year', { year: 1985 })
+      .where('book.yearPublished <= :year', { year: maxYear })
       .andWhere('book.printRun IS NOT NULL')
-      .andWhere('book.printRun < :printRun', { printRun: 10000 })
+      .andWhere('book.printRun < :printRun', { printRun: maxPrintRun })
       .andWhere('book.status != :archived', { archived: 'archived' })
       .andWhere('book.priceReviewed = false')
       .getCount();

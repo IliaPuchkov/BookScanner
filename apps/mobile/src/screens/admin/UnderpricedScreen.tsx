@@ -4,6 +4,7 @@ import {
   FlatList,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   Image,
   ActivityIndicator,
@@ -96,6 +97,9 @@ function UnderpricedBookItem({
   );
 }
 
+const RARE_YEAR_KEY = "rare_book_max_year";
+const RARE_PRINT_RUN_KEY = "rare_book_max_print_run";
+
 export function UnderpricedScreen() {
   const navigation = useNavigation<Nav>();
   const [books, setBooks] = useState<Book[]>([]);
@@ -106,15 +110,22 @@ export function UnderpricedScreen() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [markingId, setMarkingId] = useState<string | null>(null);
   const [stores, setStores] = useState<OzonStore[]>([]);
+  const [rareMaxYear, setRareMaxYear] = useState(1985);
+  const [rareMaxPrintRun, setRareMaxPrintRun] = useState(10000);
+  const [editingCriteria, setEditingCriteria] = useState(false);
+  const [draftYear, setDraftYear] = useState("");
+  const [draftPrintRun, setDraftPrintRun] = useState("");
+  const [savingCriteria, setSavingCriteria] = useState(false);
   const loadingMoreRef = useRef(false);
 
   const fetchBooks = useCallback(async (p: number, mode: "initial" | "refresh" | "more") => {
     if (mode === "initial") setLoading(true);
     if (mode === "more") setLoadingMore(true);
     try {
-      const [res, storesRes] = await Promise.all([
+      const [res, storesRes, settingsRes] = await Promise.all([
         adminService.getUnderpricedBooks(p, 20),
         p === 1 ? adminService.getOzonStores().catch(() => ({ stores: [] })) : Promise.resolve(null),
+        p === 1 ? adminService.getSettings().catch(() => []) : Promise.resolve(null),
       ]);
       if (mode === "more") {
         setBooks((prev) => [...prev, ...res.data]);
@@ -124,6 +135,12 @@ export function UnderpricedScreen() {
       setHasMore(p < res.meta.totalPages);
       setPage(p);
       if (storesRes) setStores((storesRes as { stores: OzonStore[] }).stores);
+      if (settingsRes) {
+        const yearSetting = (settingsRes as { key: string; value: string }[]).find((s) => s.key === RARE_YEAR_KEY);
+        const printRunSetting = (settingsRes as { key: string; value: string }[]).find((s) => s.key === RARE_PRINT_RUN_KEY);
+        if (yearSetting) setRareMaxYear(parseInt(yearSetting.value, 10) || 1985);
+        if (printRunSetting) setRareMaxPrintRun(parseInt(printRunSetting.value, 10) || 10000);
+      }
     } catch {
       // silent
     } finally {
@@ -169,6 +186,34 @@ export function UnderpricedScreen() {
     );
   }, []);
 
+  const handleSaveCriteria = async () => {
+    const year = parseInt(draftYear, 10);
+    const printRun = parseInt(draftPrintRun, 10);
+    if (isNaN(year) || year < 1900 || year > new Date().getFullYear()) {
+      Alert.alert("Ошибка", "Введите корректный год (1900–текущий)");
+      return;
+    }
+    if (isNaN(printRun) || printRun <= 0) {
+      Alert.alert("Ошибка", "Тираж должен быть больше 0");
+      return;
+    }
+    setSavingCriteria(true);
+    try {
+      await Promise.all([
+        adminService.upsertSetting({ key: RARE_YEAR_KEY, value: String(year), valueType: "number", description: "Максимальный год издания для раздела редких книг" }),
+        adminService.upsertSetting({ key: RARE_PRINT_RUN_KEY, value: String(printRun), valueType: "number", description: "Максимальный тираж для раздела редких книг" }),
+      ]);
+      setRareMaxYear(year);
+      setRareMaxPrintRun(printRun);
+      setEditingCriteria(false);
+      fetchBooks(1, "refresh");
+    } catch {
+      Alert.alert("Ошибка", "Не удалось сохранить критерии");
+    } finally {
+      setSavingCriteria(false);
+    }
+  };
+
   const handleLoadMore = () => {
     if (hasMore && !loadingMoreRef.current && !loading) {
       loadingMoreRef.current = true;
@@ -206,12 +251,69 @@ export function UnderpricedScreen() {
       onEndReachedThreshold={0.3}
       ListHeaderComponent={
         <View style={styles.infoBanner}>
-          <Text style={styles.infoBannerText}>
-            📌 Критерии: год издания ≤ 1985, тираж &lt; 10 000 экземпляров
-          </Text>
-          <Text style={styles.infoBannerSub}>
-            Скорректируйте цену или нажмите "Цена скорректирована" чтобы убрать из списка.
-          </Text>
+          {editingCriteria ? (
+            <>
+              <Text style={styles.infoBannerText}>✏️ Критерии отбора</Text>
+              <View style={styles.criteriaRow}>
+                <Text style={styles.criteriaLabel}>Год издания ≤</Text>
+                <TextInput
+                  style={styles.criteriaInput}
+                  value={draftYear}
+                  onChangeText={setDraftYear}
+                  keyboardType="number-pad"
+                  maxLength={4}
+                  editable={!savingCriteria}
+                  autoFocus
+                />
+              </View>
+              <View style={styles.criteriaRow}>
+                <Text style={styles.criteriaLabel}>Тираж &lt;</Text>
+                <TextInput
+                  style={styles.criteriaInput}
+                  value={draftPrintRun}
+                  onChangeText={setDraftPrintRun}
+                  keyboardType="number-pad"
+                  editable={!savingCriteria}
+                />
+              </View>
+              <View style={styles.criteriaActions}>
+                <TouchableOpacity
+                  style={styles.criteriaCancelBtn}
+                  onPress={() => setEditingCriteria(false)}
+                  disabled={savingCriteria}
+                >
+                  <Text style={styles.criteriaCancelText}>Отмена</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.criteriaSaveBtn, savingCriteria && { opacity: 0.6 }]}
+                  onPress={handleSaveCriteria}
+                  disabled={savingCriteria}
+                >
+                  {savingCriteria ? (
+                    <ActivityIndicator size="small" color="#fff" />
+                  ) : (
+                    <Text style={styles.criteriaSaveText}>Сохранить</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+            </>
+          ) : (
+            <>
+              <View style={styles.criteriaHeaderRow}>
+                <Text style={styles.infoBannerText}>
+                  📌 Год ≤ {rareMaxYear}, тираж &lt; {rareMaxPrintRun.toLocaleString()} экз.
+                </Text>
+                <TouchableOpacity
+                  onPress={() => { setDraftYear(String(rareMaxYear)); setDraftPrintRun(String(rareMaxPrintRun)); setEditingCriteria(true); }}
+                >
+                  <Text style={styles.criteriaEditLink}>Изменить</Text>
+                </TouchableOpacity>
+              </View>
+              <Text style={styles.infoBannerSub}>
+                Скорректируйте цену или нажмите "Цена скорректирована" чтобы убрать из списка.
+              </Text>
+            </>
+          )}
         </View>
       }
       ListEmptyComponent={
@@ -257,6 +359,71 @@ const styles = StyleSheet.create({
   infoBannerSub: {
     fontSize: 12,
     color: "#8D6E63",
+  },
+  criteriaHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 4,
+  },
+  criteriaEditLink: {
+    fontSize: 12,
+    color: "#F57F17",
+    fontWeight: "600",
+  },
+  criteriaRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginTop: 8,
+  },
+  criteriaLabel: {
+    fontSize: 13,
+    color: "#5D4037",
+    fontWeight: "600",
+  },
+  criteriaInput: {
+    width: 100,
+    height: 36,
+    borderWidth: 1.5,
+    borderColor: "#F57F17",
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#222",
+    backgroundColor: "#fff",
+    textAlign: "center",
+  },
+  criteriaActions: {
+    flexDirection: "row",
+    gap: 8,
+    marginTop: 12,
+  },
+  criteriaCancelBtn: {
+    flex: 1,
+    paddingVertical: 9,
+    borderRadius: 8,
+    borderWidth: 1.5,
+    borderColor: "#ccc",
+    alignItems: "center",
+  },
+  criteriaCancelText: {
+    fontSize: 13,
+    color: "#666",
+    fontWeight: "600",
+  },
+  criteriaSaveBtn: {
+    flex: 1,
+    paddingVertical: 9,
+    borderRadius: 8,
+    backgroundColor: "#F57F17",
+    alignItems: "center",
+  },
+  criteriaSaveText: {
+    fontSize: 13,
+    color: "#fff",
+    fontWeight: "600",
   },
   card: {
     backgroundColor: "#fff",
