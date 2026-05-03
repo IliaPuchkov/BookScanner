@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   View,
   ScrollView,
@@ -71,6 +72,7 @@ interface DiffField {
   label: string;
   current: (b: Book) => string;
   suggested: (p: ExtractPreviewResult, b: Book) => string;
+  multiline?: boolean;
 }
 
 const DIFF_FIELDS: DiffField[] = [
@@ -118,8 +120,15 @@ const DIFF_FIELDS: DiffField[] = [
       formatPrintRun(p.extractedData.printRun ?? undefined) ?? "",
   },
   {
+    key: "aiPrice",
+    label: "Рыночная цена (ИИ)",
+    current: () => "",
+    suggested: (p) =>
+      p.extractedData.price != null ? formatPrice(p.extractedData.price) : "",
+  },
+  {
     key: "price",
-    label: "Цена",
+    label: "Цена (расчётная)",
     current: (b) => formatPrice(b.price),
     suggested: (p) => formatPrice(p.calculatedPrice),
   },
@@ -149,13 +158,13 @@ const DIFF_FIELDS: DiffField[] = [
     key: "cover",
     label: "Переплёт",
     current: (b) => b.coverType ?? "",
-    suggested: (p) => p.extractedData.coverType ?? "",
+    suggested: (p) => normalizeCoverType(p.extractedData.coverType) ?? "",
   },
   {
     key: "paper",
     label: "Бумага",
     current: (b) => b.paperType ?? "",
-    suggested: (p) => p.extractedData.paperType ?? "",
+    suggested: (p) => normalizePaperType(p.extractedData.paperType) ?? "",
   },
   {
     key: "annotation",
@@ -165,12 +174,14 @@ const DIFF_FIELDS: DiffField[] = [
       p.extractedData.annotation
         ? ANNOTATION_PREFIX_MOBILE + p.extractedData.annotation
         : DEFAULT_ANNOTATION,
+    multiline: true,
   },
   {
     key: "hashtags",
     label: "Хэштеги",
     current: (b) => (b.hashtags ?? []).join(" "),
     suggested: (p) => (p.extractedData.hashtags ?? []).join(" "),
+    multiline: true,
   },
 ];
 
@@ -253,6 +264,7 @@ const STATUS_CONFIG: Record<
 };
 
 export function ProductDetailScreen() {
+  const insets = useSafeAreaInsets();
   const route = useRoute<Route>();
   const navigation = useNavigation<Nav>();
   const { bookId } = route.params;
@@ -777,6 +789,7 @@ export function ProductDetailScreen() {
                   const cur = field.current(book);
                   const sug = field.suggested(previewData, book);
                   const changed = cur !== sug;
+                  const lines = field.multiline ? undefined : 3;
                   return (
                     <View
                       key={field.key}
@@ -784,7 +797,7 @@ export function ProductDetailScreen() {
                     >
                       <Text style={styles.diffLabel}>{field.label}</Text>
                       <View style={styles.diffValues}>
-                        <Text style={styles.diffCurrent} numberOfLines={3}>
+                        <Text style={styles.diffCurrent} numberOfLines={lines}>
                           {cur || "—"}
                         </Text>
                         {changed && (
@@ -792,7 +805,7 @@ export function ProductDetailScreen() {
                             <Text style={styles.diffArrow}> → </Text>
                             <Text
                               style={styles.diffSuggested}
-                              numberOfLines={3}
+                              numberOfLines={lines}
                             >
                               {sug || "—"}
                             </Text>
@@ -803,7 +816,7 @@ export function ProductDetailScreen() {
                   );
                 })}
             </ScrollView>
-            <View style={styles.previewActions}>
+            <View style={[styles.previewActions, { paddingBottom: insets.bottom }]}>
               <Button
                 title="Принять"
                 onPress={handleAcceptPreview}
