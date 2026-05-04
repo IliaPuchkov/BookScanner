@@ -10,6 +10,7 @@ import {
   ActivityIndicator,
   RefreshControl,
   Alert,
+  ScrollView,
 } from "react-native";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
@@ -67,11 +68,13 @@ function UnderpricedBookItem({
             {item.printRun ? (
               <Text style={styles.metaChip}>📦 {item.printRun.toLocaleString()} экз.</Text>
             ) : null}
-            {isPublished && (
+            {isPublished ? (
               <Text style={styles.publishedChip}>
                 {storeName ? `Ozon: ${storeName}` : "Ozon ✓"}
               </Text>
-            )}
+            ) : item.status === "pending_review" ? (
+              <Text style={styles.pendingChip}>На проверке</Text>
+            ) : null}
           </View>
           {item.price != null ? (
             <Text style={styles.price}>{Number(item.price).toFixed(0)} ₽</Text>
@@ -98,7 +101,31 @@ function UnderpricedBookItem({
 }
 
 const RARE_YEAR_KEY = "rare_book_max_year";
+const RARE_MIN_YEAR_KEY = "rare_book_min_year";
 const RARE_PRINT_RUN_KEY = "rare_book_max_print_run";
+const RARE_MIN_PRICE_KEY = "rare_book_min_price";
+const RARE_MAX_PRICE_KEY = "rare_book_max_price";
+const RARE_STORES_KEY = "rare_book_selected_stores";
+const RARE_INCLUDE_REVIEW_KEY = "rare_book_include_pending_review";
+
+function Checkbox({
+  checked,
+  onToggle,
+  label,
+}: {
+  checked: boolean;
+  onToggle: () => void;
+  label: string;
+}) {
+  return (
+    <TouchableOpacity style={styles.checkboxRow} onPress={onToggle} activeOpacity={0.7}>
+      <View style={[styles.checkboxBox, checked && styles.checkboxBoxChecked]}>
+        {checked && <Text style={styles.checkboxMark}>✓</Text>}
+      </View>
+      <Text style={styles.checkboxLabel}>{label}</Text>
+    </TouchableOpacity>
+  );
+}
 
 export function UnderpricedScreen() {
   const navigation = useNavigation<Nav>();
@@ -110,12 +137,27 @@ export function UnderpricedScreen() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [markingId, setMarkingId] = useState<string | null>(null);
   const [stores, setStores] = useState<OzonStore[]>([]);
+
+  // Saved criteria
   const [rareMaxYear, setRareMaxYear] = useState(1985);
+  const [rareMinYear, setRareMinYear] = useState(0);
   const [rareMaxPrintRun, setRareMaxPrintRun] = useState(10000);
+  const [rarePriceMin, setRarePriceMin] = useState(0);
+  const [rarePriceMax, setRarePriceMax] = useState(0);
+  const [rareSelectedStores, setRareSelectedStores] = useState<string[]>([]);
+  const [rareIncludePendingReview, setRareIncludePendingReview] = useState(true);
+
+  // Editing mode
   const [editingCriteria, setEditingCriteria] = useState(false);
-  const [draftYear, setDraftYear] = useState("");
+  const [draftMaxYear, setDraftMaxYear] = useState("");
+  const [draftMinYear, setDraftMinYear] = useState("");
   const [draftPrintRun, setDraftPrintRun] = useState("");
+  const [draftPriceMin, setDraftPriceMin] = useState("");
+  const [draftPriceMax, setDraftPriceMax] = useState("");
+  const [draftSelectedStores, setDraftSelectedStores] = useState<string[]>([]);
+  const [draftIncludePendingReview, setDraftIncludePendingReview] = useState(true);
   const [savingCriteria, setSavingCriteria] = useState(false);
+
   const loadingMoreRef = useRef(false);
 
   const fetchBooks = useCallback(async (p: number, mode: "initial" | "refresh" | "more") => {
@@ -136,10 +178,26 @@ export function UnderpricedScreen() {
       setPage(p);
       if (storesRes) setStores((storesRes as { stores: OzonStore[] }).stores);
       if (settingsRes) {
-        const yearSetting = (settingsRes as { key: string; value: string }[]).find((s) => s.key === RARE_YEAR_KEY);
-        const printRunSetting = (settingsRes as { key: string; value: string }[]).find((s) => s.key === RARE_PRINT_RUN_KEY);
-        if (yearSetting) setRareMaxYear(parseInt(yearSetting.value, 10) || 1985);
-        if (printRunSetting) setRareMaxPrintRun(parseInt(printRunSetting.value, 10) || 10000);
+        const settings = settingsRes as { key: string; value: string; valueType: string }[];
+        const get = (key: string) => settings.find((s) => s.key === key);
+
+        const maxYearS = get(RARE_YEAR_KEY);
+        const minYearS = get(RARE_MIN_YEAR_KEY);
+        const printRunS = get(RARE_PRINT_RUN_KEY);
+        const priceMinS = get(RARE_MIN_PRICE_KEY);
+        const priceMaxS = get(RARE_MAX_PRICE_KEY);
+        const storesS = get(RARE_STORES_KEY);
+        const includeRevS = get(RARE_INCLUDE_REVIEW_KEY);
+
+        if (maxYearS) setRareMaxYear(parseInt(maxYearS.value, 10) || 1985);
+        if (minYearS) setRareMinYear(parseInt(minYearS.value, 10) || 0);
+        if (printRunS) setRareMaxPrintRun(parseInt(printRunS.value, 10) || 10000);
+        if (priceMinS) setRarePriceMin(parseFloat(priceMinS.value) || 0);
+        if (priceMaxS) setRarePriceMax(parseFloat(priceMaxS.value) || 0);
+        if (storesS) {
+          try { setRareSelectedStores(JSON.parse(storesS.value) || []); } catch { /* */ }
+        }
+        if (includeRevS) setRareIncludePendingReview(includeRevS.value === "true");
       }
     } catch {
       // silent
@@ -186,25 +244,65 @@ export function UnderpricedScreen() {
     );
   }, []);
 
+  const openEditing = () => {
+    setDraftMaxYear(String(rareMaxYear));
+    setDraftMinYear(rareMinYear > 0 ? String(rareMinYear) : "");
+    setDraftPrintRun(String(rareMaxPrintRun));
+    setDraftPriceMin(rarePriceMin > 0 ? String(rarePriceMin) : "");
+    setDraftPriceMax(rarePriceMax > 0 ? String(rarePriceMax) : "");
+    setDraftSelectedStores([...rareSelectedStores]);
+    setDraftIncludePendingReview(rareIncludePendingReview);
+    setEditingCriteria(true);
+  };
+
+  const toggleDraftStore = (storeId: string) => {
+    setDraftSelectedStores((prev) =>
+      prev.includes(storeId) ? prev.filter((id) => id !== storeId) : [...prev, storeId],
+    );
+  };
+
   const handleSaveCriteria = async () => {
-    const year = parseInt(draftYear, 10);
+    const maxYear = parseInt(draftMaxYear, 10);
+    const minYear = draftMinYear.trim() ? parseInt(draftMinYear, 10) : 0;
     const printRun = parseInt(draftPrintRun, 10);
-    if (isNaN(year) || year < 1900 || year > new Date().getFullYear()) {
-      Alert.alert("Ошибка", "Введите корректный год (1900–текущий)");
+    const priceMin = draftPriceMin.trim() ? parseFloat(draftPriceMin) : 0;
+    const priceMax = draftPriceMax.trim() ? parseFloat(draftPriceMax) : 0;
+
+    if (isNaN(maxYear) || maxYear < 1900 || maxYear > new Date().getFullYear()) {
+      Alert.alert("Ошибка", "Введите корректный максимальный год (1900–текущий)");
+      return;
+    }
+    if (minYear > 0 && (isNaN(minYear) || minYear >= maxYear)) {
+      Alert.alert("Ошибка", "Год от должен быть меньше года до");
       return;
     }
     if (isNaN(printRun) || printRun <= 0) {
       Alert.alert("Ошибка", "Тираж должен быть больше 0");
       return;
     }
+    if (priceMin > 0 && priceMax > 0 && priceMin >= priceMax) {
+      Alert.alert("Ошибка", "Цена от должна быть меньше цены до");
+      return;
+    }
+
     setSavingCriteria(true);
     try {
       await Promise.all([
-        adminService.upsertSetting({ key: RARE_YEAR_KEY, value: String(year), valueType: "number", description: "Максимальный год издания для раздела редких книг" }),
+        adminService.upsertSetting({ key: RARE_YEAR_KEY, value: String(maxYear), valueType: "number", description: "Максимальный год издания для раздела редких книг" }),
+        adminService.upsertSetting({ key: RARE_MIN_YEAR_KEY, value: String(minYear), valueType: "number", description: "Минимальный год издания для раздела редких книг" }),
         adminService.upsertSetting({ key: RARE_PRINT_RUN_KEY, value: String(printRun), valueType: "number", description: "Максимальный тираж для раздела редких книг" }),
+        adminService.upsertSetting({ key: RARE_MIN_PRICE_KEY, value: String(priceMin), valueType: "number", description: "Минимальная цена для раздела редких книг" }),
+        adminService.upsertSetting({ key: RARE_MAX_PRICE_KEY, value: String(priceMax), valueType: "number", description: "Максимальная цена для раздела редких книг" }),
+        adminService.upsertSetting({ key: RARE_STORES_KEY, value: JSON.stringify(draftSelectedStores), valueType: "json", description: "Выбранные магазины Ozon для раздела редких книг" }),
+        adminService.upsertSetting({ key: RARE_INCLUDE_REVIEW_KEY, value: String(draftIncludePendingReview), valueType: "boolean", description: "Включить книги на проверке в раздел редких книг" }),
       ]);
-      setRareMaxYear(year);
+      setRareMaxYear(maxYear);
+      setRareMinYear(minYear);
       setRareMaxPrintRun(printRun);
+      setRarePriceMin(priceMin);
+      setRarePriceMax(priceMax);
+      setRareSelectedStores(draftSelectedStores);
+      setRareIncludePendingReview(draftIncludePendingReview);
       setEditingCriteria(false);
       fetchBooks(1, "refresh");
     } catch {
@@ -234,6 +332,18 @@ export function UnderpricedScreen() {
     [navigate, handleMarkReviewed, markingId, stores],
   );
 
+  const storeSummary = () => {
+    const storeFilterActive = rareSelectedStores.length > 0 || !rareIncludePendingReview;
+    if (!storeFilterActive) return "Все";
+    const parts: string[] = [];
+    if (rareIncludePendingReview) parts.push("На проверке");
+    rareSelectedStores.forEach((id) => {
+      const name = stores.find((s) => s.id === id)?.name;
+      if (name) parts.push(name);
+    });
+    return parts.length > 0 ? parts.join(", ") : "Все";
+  };
+
   return (
     <FlatList
       style={styles.container}
@@ -252,30 +362,92 @@ export function UnderpricedScreen() {
       ListHeaderComponent={
         <View style={styles.infoBanner}>
           {editingCriteria ? (
-            <>
+            <ScrollView showsVerticalScrollIndicator={false}>
               <Text style={styles.infoBannerText}>✏️ Критерии отбора</Text>
-              <View style={styles.criteriaRow}>
-                <Text style={styles.criteriaLabel}>Год издания ≤</Text>
-                <TextInput
-                  style={styles.criteriaInput}
-                  value={draftYear}
-                  onChangeText={setDraftYear}
-                  keyboardType="number-pad"
-                  maxLength={4}
-                  editable={!savingCriteria}
-                  autoFocus
-                />
+
+              <Text style={styles.sectionLabel}>Год издания</Text>
+              <View style={styles.rangeRow}>
+                <View style={styles.rangeField}>
+                  <Text style={styles.rangeFieldLabel}>От</Text>
+                  <TextInput
+                    style={styles.criteriaInput}
+                    value={draftMinYear}
+                    onChangeText={setDraftMinYear}
+                    keyboardType="number-pad"
+                    maxLength={4}
+                    editable={!savingCriteria}
+                    placeholder="любой"
+                    placeholderTextColor="#ccc"
+                  />
+                </View>
+                <View style={styles.rangeField}>
+                  <Text style={styles.rangeFieldLabel}>До</Text>
+                  <TextInput
+                    style={styles.criteriaInput}
+                    value={draftMaxYear}
+                    onChangeText={setDraftMaxYear}
+                    keyboardType="number-pad"
+                    maxLength={4}
+                    editable={!savingCriteria}
+                  />
+                </View>
               </View>
-              <View style={styles.criteriaRow}>
-                <Text style={styles.criteriaLabel}>Тираж &lt;</Text>
-                <TextInput
-                  style={styles.criteriaInput}
-                  value={draftPrintRun}
-                  onChangeText={setDraftPrintRun}
-                  keyboardType="number-pad"
-                  editable={!savingCriteria}
-                />
+
+              <Text style={styles.sectionLabel}>Тираж (не более)</Text>
+              <TextInput
+                style={[styles.criteriaInput, styles.criteriaInputFull]}
+                value={draftPrintRun}
+                onChangeText={setDraftPrintRun}
+                keyboardType="number-pad"
+                editable={!savingCriteria}
+              />
+
+              <Text style={styles.sectionLabel}>Цена, ₽</Text>
+              <View style={styles.rangeRow}>
+                <View style={styles.rangeField}>
+                  <Text style={styles.rangeFieldLabel}>От</Text>
+                  <TextInput
+                    style={styles.criteriaInput}
+                    value={draftPriceMin}
+                    onChangeText={setDraftPriceMin}
+                    keyboardType="number-pad"
+                    editable={!savingCriteria}
+                    placeholder="любая"
+                    placeholderTextColor="#ccc"
+                  />
+                </View>
+                <View style={styles.rangeField}>
+                  <Text style={styles.rangeFieldLabel}>До</Text>
+                  <TextInput
+                    style={styles.criteriaInput}
+                    value={draftPriceMax}
+                    onChangeText={setDraftPriceMax}
+                    keyboardType="number-pad"
+                    editable={!savingCriteria}
+                    placeholder="любая"
+                    placeholderTextColor="#ccc"
+                  />
+                </View>
               </View>
+
+              <Text style={styles.sectionLabel}>Статус / Магазин</Text>
+              <Checkbox
+                checked={draftIncludePendingReview}
+                onToggle={() => setDraftIncludePendingReview((v) => !v)}
+                label="На проверке"
+              />
+              {stores.map((store) => (
+                <Checkbox
+                  key={store.id}
+                  checked={draftSelectedStores.includes(store.id)}
+                  onToggle={() => toggleDraftStore(store.id)}
+                  label={`Ozon: ${store.name}`}
+                />
+              ))}
+              {stores.length === 0 && (
+                <Text style={styles.noStoresHint}>Магазины не настроены</Text>
+              )}
+
               <View style={styles.criteriaActions}>
                 <TouchableOpacity
                   style={styles.criteriaCancelBtn}
@@ -296,19 +468,26 @@ export function UnderpricedScreen() {
                   )}
                 </TouchableOpacity>
               </View>
-            </>
+            </ScrollView>
           ) : (
             <>
               <View style={styles.criteriaHeaderRow}>
-                <Text style={styles.infoBannerText}>
-                  📌 Год ≤ {rareMaxYear}, тираж &lt; {rareMaxPrintRun.toLocaleString()} экз.
-                </Text>
-                <TouchableOpacity
-                  onPress={() => { setDraftYear(String(rareMaxYear)); setDraftPrintRun(String(rareMaxPrintRun)); setEditingCriteria(true); }}
-                >
+                <Text style={styles.infoBannerText}>📌 Критерии редких книг</Text>
+                <TouchableOpacity onPress={openEditing}>
                   <Text style={styles.criteriaEditLink}>Изменить</Text>
                 </TouchableOpacity>
               </View>
+              <Text style={styles.criteriaLine}>
+                Год: {rareMinYear > 0 ? `${rareMinYear}–${rareMaxYear}` : `≤ ${rareMaxYear}`}
+                {"  "}Тираж: &lt; {rareMaxPrintRun.toLocaleString()}
+              </Text>
+              {(rarePriceMin > 0 || rarePriceMax > 0) && (
+                <Text style={styles.criteriaLine}>
+                  Цена:{rarePriceMin > 0 ? ` от ${rarePriceMin} ₽` : ""}
+                  {rarePriceMax > 0 ? ` до ${rarePriceMax} ₽` : ""}
+                </Text>
+              )}
+              <Text style={styles.criteriaLine}>Статус: {storeSummary()}</Text>
               <Text style={styles.infoBannerSub}>
                 Скорректируйте цену или нажмите "Цена скорректирована" чтобы убрать из списка.
               </Text>
@@ -354,11 +533,17 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "600",
     color: "#5D4037",
-    marginBottom: 4,
+    marginBottom: 6,
   },
   infoBannerSub: {
     fontSize: 12,
     color: "#8D6E63",
+    marginTop: 4,
+  },
+  criteriaLine: {
+    fontSize: 12,
+    color: "#5D4037",
+    marginBottom: 2,
   },
   criteriaHeaderRow: {
     flexDirection: "row",
@@ -371,19 +556,26 @@ const styles = StyleSheet.create({
     color: "#F57F17",
     fontWeight: "600",
   },
-  criteriaRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginTop: 8,
-  },
-  criteriaLabel: {
-    fontSize: 13,
-    color: "#5D4037",
+  sectionLabel: {
+    fontSize: 12,
     fontWeight: "600",
+    color: "#5D4037",
+    marginTop: 10,
+    marginBottom: 4,
+  },
+  rangeRow: {
+    flexDirection: "row",
+    gap: 10,
+  },
+  rangeField: {
+    flex: 1,
+    gap: 2,
+  },
+  rangeFieldLabel: {
+    fontSize: 11,
+    color: "#888",
   },
   criteriaInput: {
-    width: 100,
     height: 36,
     borderWidth: 1.5,
     borderColor: "#F57F17",
@@ -395,10 +587,47 @@ const styles = StyleSheet.create({
     backgroundColor: "#fff",
     textAlign: "center",
   },
+  criteriaInputFull: {
+    width: "100%",
+  },
+  checkboxRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 5,
+    gap: 8,
+  },
+  checkboxBox: {
+    width: 20,
+    height: 20,
+    borderRadius: 4,
+    borderWidth: 2,
+    borderColor: "#F57F17",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#fff",
+  },
+  checkboxBoxChecked: {
+    backgroundColor: "#F57F17",
+  },
+  checkboxMark: {
+    fontSize: 12,
+    color: "#fff",
+    fontWeight: "700",
+  },
+  checkboxLabel: {
+    fontSize: 13,
+    color: "#5D4037",
+  },
+  noStoresHint: {
+    fontSize: 12,
+    color: "#aaa",
+    fontStyle: "italic",
+    paddingVertical: 4,
+  },
   criteriaActions: {
     flexDirection: "row",
     gap: 8,
-    marginTop: 12,
+    marginTop: 14,
   },
   criteriaCancelBtn: {
     flex: 1,
@@ -495,6 +724,15 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: "#2E7D32",
     backgroundColor: "#E8F5E9",
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    fontWeight: "600",
+  },
+  pendingChip: {
+    fontSize: 11,
+    color: "#E65100",
+    backgroundColor: "#FFF3E0",
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 4,

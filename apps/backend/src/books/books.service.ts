@@ -428,42 +428,71 @@ export class BooksService {
       .getCount();
   }
 
-  async getUnderpricedBooks(pagination: PaginationDto) {
-    const { page = 1, limit = 20 } = pagination;
-    const [maxYear, maxPrintRun] = await Promise.all([
-      this.settingsService.getValue<number>('rare_book_max_year', 1985),
-      this.settingsService.getValue<number>('rare_book_max_print_run', 10000),
-    ]);
+  private async buildRareBooksQuery() {
+    const [maxYear, maxPrintRun, minYear, minPrice, maxPrice, selectedStores, includePendingReview] =
+      await Promise.all([
+        this.settingsService.getValue<number>('rare_book_max_year', 1985),
+        this.settingsService.getValue<number>('rare_book_max_print_run', 10000),
+        this.settingsService.getValue<number>('rare_book_min_year', 0),
+        this.settingsService.getValue<number>('rare_book_min_price', 0),
+        this.settingsService.getValue<number>('rare_book_max_price', 0),
+        this.settingsService.getValue<string[]>('rare_book_selected_stores', []),
+        this.settingsService.getValue<boolean>('rare_book_include_pending_review', true),
+      ]);
+
     const qb = this.booksRepository
       .createQueryBuilder('book')
       .leftJoinAndSelect('book.photos', 'photos')
       .leftJoinAndSelect('book.box', 'box')
       .leftJoinAndSelect('book.ozonProduct', 'ozonProduct')
-      .where('book.yearPublished <= :year', { year: maxYear })
+      .where('book.yearPublished <= :maxYear', { maxYear })
       .andWhere('book.printRun IS NOT NULL')
-      .andWhere('book.printRun < :printRun', { printRun: maxPrintRun })
+      .andWhere('book.printRun < :maxPrintRun', { maxPrintRun })
       .andWhere('book.status != :archived', { archived: 'archived' })
-      .andWhere('book.priceReviewed = false')
-      .orderBy('book.printRun', 'ASC')
-      .skip((page - 1) * limit)
-      .take(limit);
+      .andWhere('book.priceReviewed = false');
+
+    if (minYear > 0) {
+      qb.andWhere('book.yearPublished >= :minYear', { minYear });
+    }
+    if (minPrice > 0) {
+      qb.andWhere('book.price >= :minPrice', { minPrice });
+    }
+    if (maxPrice > 0) {
+      qb.andWhere('book.price <= :maxPrice', { maxPrice });
+    }
+
+    // Store filter: only apply when user explicitly configured it
+    const storeFilterActive = selectedStores.length > 0 || !includePendingReview;
+    if (storeFilterActive) {
+      const conditions: string[] = [];
+      const params: Record<string, unknown> = {};
+      if (selectedStores.length > 0) {
+        conditions.push('ozonProduct.storeId IN (:...filterStoreIds)');
+        params.filterStoreIds = selectedStores;
+      }
+      if (includePendingReview) {
+        conditions.push('book.status = :pendingReviewStatus');
+        params.pendingReviewStatus = BookStatus.PENDING_REVIEW;
+      }
+      if (conditions.length > 0) {
+        qb.andWhere(`(${conditions.join(' OR ')})`, params);
+      }
+    }
+
+    return qb;
+  }
+
+  async getUnderpricedBooks(pagination: PaginationDto) {
+    const { page = 1, limit = 20 } = pagination;
+    const qb = await this.buildRareBooksQuery();
+    qb.orderBy('book.printRun', 'ASC').skip((page - 1) * limit).take(limit);
     const [data, total] = await qb.getManyAndCount();
     return { data, meta: { total, page, limit, totalPages: Math.ceil(total / limit) } };
   }
 
   async countUnderpriced(): Promise<number> {
-    const [maxYear, maxPrintRun] = await Promise.all([
-      this.settingsService.getValue<number>('rare_book_max_year', 1985),
-      this.settingsService.getValue<number>('rare_book_max_print_run', 10000),
-    ]);
-    return this.booksRepository
-      .createQueryBuilder('book')
-      .where('book.yearPublished <= :year', { year: maxYear })
-      .andWhere('book.printRun IS NOT NULL')
-      .andWhere('book.printRun < :printRun', { printRun: maxPrintRun })
-      .andWhere('book.status != :archived', { archived: 'archived' })
-      .andWhere('book.priceReviewed = false')
-      .getCount();
+    const qb = await this.buildRareBooksQuery();
+    return qb.getCount();
   }
 
   async countOzonFailed(): Promise<number> {
