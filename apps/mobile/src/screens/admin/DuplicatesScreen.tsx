@@ -1,15 +1,20 @@
-import React, { useState, useCallback, useRef, useEffect } from "react";
+import React, { useState, useCallback, useEffect, useMemo } from "react";
 import {
   View,
   FlatList,
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   Image,
   Alert,
   ActivityIndicator,
   RefreshControl,
+  Modal,
+  KeyboardAvoidingView,
+  TouchableWithoutFeedback,
+  Platform,
 } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
@@ -20,6 +25,8 @@ import type { DuplicateGroup, Book } from "../../types";
 import type { AdminMainStackParamList } from "../../navigation/AdminNavigator";
 
 type Nav = NativeStackNavigationProp<AdminMainStackParamList, "Duplicates">;
+
+// ─── Book card ────────────────────────────────────────────────────────────────
 
 function BookMiniCard({
   book,
@@ -42,7 +49,8 @@ function BookMiniCard({
   const storeName = book.ozonProduct?.storeId
     ? stores.find((s) => s.id === book.ozonProduct!.storeId)?.name
     : null;
-  const isPublished = book.ozonProduct?.status === "published" || book.ozonProduct?.status === "PUBLISHED";
+  const isPublished =
+    book.ozonProduct?.status === "published" || book.ozonProduct?.status === "PUBLISHED";
   return (
     <View style={styles.miniCard}>
       <TouchableOpacity activeOpacity={0.8} onPress={() => onNavigate(book.id)}>
@@ -104,11 +112,15 @@ function BookMiniCard({
   );
 }
 
+// ─── Probability helpers ──────────────────────────────────────────────────────
+
 function probabilityMeta(p: number) {
   if (p >= 100) return { border: "#E53935", badge: "#FFEBEE", text: "#C62828", label: "Высокая вероятность" };
   if (p >= 60) return { border: "#FB8C00", badge: "#FFF3E0", text: "#E65100", label: "Средняя вероятность" };
   return { border: "#F9A825", badge: "#FFFDE7", text: "#F57F17", label: "Малая вероятность" };
 }
+
+// ─── Group card ───────────────────────────────────────────────────────────────
 
 function DuplicateGroupCard({
   group,
@@ -133,7 +145,8 @@ function DuplicateGroupCard({
 }) {
   const prob = group.probability ?? 30;
   const meta = probabilityMeta(prob);
-  const fieldsLabel = group.matchedFields?.join(" + ") ?? (group.type === "isbn" ? "ISBN" : "Название");
+  const fieldsLabel =
+    group.matchedFields?.join(" + ") ?? (group.type === "isbn" ? "ISBN" : "Название");
   return (
     <View style={[styles.groupCard, { borderLeftColor: meta.border }]}>
       <View style={styles.groupHeader}>
@@ -141,6 +154,7 @@ function DuplicateGroupCard({
           <Text style={[styles.badgeText, { color: meta.text }]}>{meta.label}</Text>
         </View>
         <Text style={[styles.badgeFields, { color: meta.text }]}>{fieldsLabel}</Text>
+        <Text style={styles.bookCount}>{group.books.length} шт.</Text>
       </View>
       <Text style={styles.groupKey} numberOfLines={1}>
         {group.type === "isbn" ? `ISBN: ${group.key}` : group.key}
@@ -180,60 +194,164 @@ function DuplicateGroupCard({
   );
 }
 
+// ─── Filter chip ──────────────────────────────────────────────────────────────
+
+function FilterChip({
+  label,
+  active,
+  color,
+  onPress,
+}: {
+  label: string;
+  active: boolean;
+  color?: string;
+  onPress: () => void;
+}) {
+  const bg = active ? (color ?? "#1976D2") : "#fff";
+  const border = active ? (color ?? "#1976D2") : "#ccc";
+  return (
+    <TouchableOpacity
+      style={[styles.filterChip, { backgroundColor: bg, borderColor: border }]}
+      onPress={onPress}
+      activeOpacity={0.7}
+    >
+      <Text style={[styles.filterChipText, active && styles.filterChipTextActive]}>{label}</Text>
+    </TouchableOpacity>
+  );
+}
+
+// ─── Main screen ──────────────────────────────────────────────────────────────
+
+type StatusFilter = "all" | "published" | "not_published";
+
 export function DuplicatesScreen() {
   const navigation = useNavigation<Nav>();
   const [groups, setGroups] = useState<DuplicateGroup[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [loadingMore, setLoadingMore] = useState(false);
-  const [page, setPage] = useState(1);
-  const [hasMore, setHasMore] = useState(true);
-  const [total, setTotal] = useState(0);
+
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [resolvingKey, setResolvingKey] = useState<string | null>(null);
   const [markingNotDuplicateId, setMarkingNotDuplicateId] = useState<string | null>(null);
   const [stores, setStores] = useState<OzonStore[]>([]);
-  const [filterProb, setFilterProb] = useState<number | null>(null);
-  const loadingMoreRef = useRef(false);
 
-  const fetchData = useCallback(async (p: number, mode: "initial" | "refresh" | "more") => {
-    if (mode === "more") setLoadingMore(true);
+  // Filters
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [filterProb, setFilterProb] = useState<number | null>(null);
+  const [filterStatus, setFilterStatus] = useState<StatusFilter>("all");
+  const [filterCount, setFilterCount] = useState<number | null>(null); // null=all, 2, 3, 4=«4+»
+  const [filterSearch, setFilterSearch] = useState("");
+  const [filterOperatorId, setFilterOperatorId] = useState<string | null>(null);
+  const [filterStoreId, setFilterStoreId] = useState<string | null>(null);
+  const [filterBoxId, setFilterBoxId] = useState<string | null>(null);
+  const [boxPickerOpen, setBoxPickerOpen] = useState(false);
+  const [boxPickerSearch, setBoxPickerSearch] = useState("");
+
+  const fetchData = useCallback(async () => {
     try {
       const [res, storesRes] = await Promise.all([
-        adminService.getDuplicates(p, 20),
-        p === 1 ? adminService.getOzonStores().catch(() => ({ stores: [] })) : Promise.resolve(null),
+        adminService.getDuplicates(1, 700),
+        adminService.getOzonStores().catch(() => ({ stores: [] })),
       ]);
-      const incoming = [...res.isbnDuplicates, ...res.possibleDuplicates];
-      if (mode === "more") {
-        setGroups((prev) => [...prev, ...incoming]);
-      } else {
-        setGroups(incoming);
-      }
-      setTotal(res.total);
-      setHasMore(p < res.totalPages);
-      setPage(p);
-      if (storesRes) setStores((storesRes as { stores: OzonStore[] }).stores);
+      const all = [...res.isbnDuplicates, ...res.possibleDuplicates];
+      setGroups(all);
+
+      setStores((storesRes as { stores: OzonStore[] }).stores);
     } catch {
       // silent
     } finally {
-      loadingMoreRef.current = false;
       setLoading(false);
       setRefreshing(false);
-      setLoadingMore(false);
     }
   }, []);
 
   useEffect(() => {
     setLoading(true);
-    fetchData(1, "initial");
+    fetchData();
   }, [fetchData]);
 
-  const handleLoadMore = () => {
-    if (hasMore && !loadingMoreRef.current && !loading) {
-      loadingMoreRef.current = true;
-      fetchData(page + 1, "more");
-    }
-  };
+  // Extract unique operators and boxes from loaded groups
+  const operators = useMemo(() => {
+    const map = new Map<string, string>();
+    groups.forEach((g) =>
+      g.books.forEach((b) => {
+        if (b.createdBy) map.set(b.createdById, b.createdBy.fullName);
+      }),
+    );
+    return Array.from(map.entries()).map(([id, name]) => ({ id, name }));
+  }, [groups]);
+
+  const boxes = useMemo(() => {
+    const map = new Map<string, string>();
+    groups.forEach((g) =>
+      g.books.forEach((b) => {
+        if (b.box) map.set(b.boxId, b.box.boxNumber);
+      }),
+    );
+    return Array.from(map.entries())
+      .map(([id, boxNumber]) => ({ id, boxNumber }))
+      .sort((a, b) => a.boxNumber.localeCompare(b.boxNumber));
+  }, [groups]);
+
+  // Count active secondary filters (excluding probability)
+  const activeSecondaryCount = useMemo(() => {
+    let n = 0;
+    if (filterStatus !== "all") n++;
+    if (filterCount !== null) n++;
+    if (filterSearch.trim()) n++;
+    if (filterOperatorId) n++;
+    if (filterStoreId) n++;
+    if (filterBoxId) n++;
+    return n;
+  }, [filterStatus, filterCount, filterSearch, filterOperatorId, filterStoreId, filterBoxId]);
+
+  // Filtering logic: group passes if any book matches all book-level criteria
+  const displayGroups = useMemo(() => {
+    const search = filterSearch.toLowerCase().trim();
+    return groups.filter((group) => {
+      // Group-level: probability
+      if (filterProb !== null && (group.probability ?? 30) !== filterProb) return false;
+      // Group-level: count
+      if (filterCount !== null) {
+        if (filterCount === 4 ? group.books.length < 4 : group.books.length !== filterCount)
+          return false;
+      }
+      // Book-level: any book must satisfy all remaining filters
+      return group.books.some((book) => {
+        if (filterStatus === "published" && book.status !== BookStatus.PUBLISHED) return false;
+        if (filterStatus === "not_published" && book.status === BookStatus.PUBLISHED) return false;
+        if (
+          search &&
+          !book.title?.toLowerCase().includes(search) &&
+          !book.author?.toLowerCase().includes(search)
+        )
+          return false;
+        if (filterOperatorId && book.createdById !== filterOperatorId) return false;
+        if (filterStoreId && book.ozonProduct?.storeId !== filterStoreId) return false;
+        if (filterBoxId && book.boxId !== filterBoxId) return false;
+        return true;
+      });
+    });
+  }, [
+    groups,
+    filterProb,
+    filterStatus,
+    filterCount,
+    filterSearch,
+    filterOperatorId,
+    filterStoreId,
+    filterBoxId,
+  ]);
+
+  const resetFilters = useCallback(() => {
+    setFilterProb(null);
+    setFilterStatus("all");
+    setFilterCount(null);
+    setFilterSearch("");
+    setFilterOperatorId(null);
+    setFilterStoreId(null);
+    setFilterBoxId(null);
+  }, []);
 
   const navigate = useCallback(
     (bookId: string) => navigation.navigate("ProductDetail", { bookId, editable: true }),
@@ -241,32 +359,28 @@ export function DuplicatesScreen() {
   );
 
   const handleDelete = useCallback((book: Book) => {
-    Alert.alert(
-      "Удалить карточку?",
-      `"${book.title}" будет удалена безвозвратно.`,
-      [
-        { text: "Отмена", style: "cancel" },
-        {
-          text: "Удалить",
-          style: "destructive",
-          onPress: async () => {
-            setDeletingId(book.id);
-            try {
-              await booksService.deleteBook(book.id);
-              setGroups((prev) =>
-                prev
-                  .map((g) => ({ ...g, books: g.books.filter((b) => b.id !== book.id) }))
-                  .filter((g) => g.books.length >= 2),
-              );
-            } catch {
-              Alert.alert("Ошибка", "Не удалось удалить карточку");
-            } finally {
-              setDeletingId(null);
-            }
-          },
+    Alert.alert("Удалить карточку?", `"${book.title}" будет удалена безвозвратно.`, [
+      { text: "Отмена", style: "cancel" },
+      {
+        text: "Удалить",
+        style: "destructive",
+        onPress: async () => {
+          setDeletingId(book.id);
+          try {
+            await booksService.deleteBook(book.id);
+            setGroups((prev) =>
+              prev
+                .map((g) => ({ ...g, books: g.books.filter((b) => b.id !== book.id) }))
+                .filter((g) => g.books.length >= 2),
+            );
+          } catch {
+            Alert.alert("Ошибка", "Не удалось удалить карточку");
+          } finally {
+            setDeletingId(null);
+          }
         },
-      ],
-    );
+      },
+    ]);
   }, []);
 
   const handleMarkBookNotDuplicate = useCallback(async (bookId: string, group: DuplicateGroup) => {
@@ -309,16 +423,6 @@ export function DuplicatesScreen() {
     }
   }, []);
 
-  const displayGroups = filterProb === null
-    ? groups
-    : groups.filter((g) => (g.probability ?? 30) === filterProb);
-
-  const FILTERS: { label: string; value: number; color: string }[] = [
-    { label: "Высокая", value: 100, color: "#E53935" },
-    { label: "Средняя", value: 60, color: "#FB8C00" },
-    { label: "Малая", value: 30, color: "#F9A825" },
-  ];
-
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
@@ -327,7 +431,22 @@ export function DuplicatesScreen() {
     );
   }
 
+  const PROB_FILTERS = [
+    { label: "Высокая", value: 100, color: "#E53935" },
+    { label: "Средняя", value: 60, color: "#FB8C00" },
+    { label: "Малая", value: 30, color: "#F9A825" },
+  ];
+
+  const COUNT_OPTIONS = [
+    { label: "2", value: 2 },
+    { label: "3", value: 3 },
+    { label: "4+", value: 4 },
+  ];
+
+  const totalActive = filterProb !== null ? activeSecondaryCount + 1 : activeSecondaryCount;
+
   return (
+    <View style={styles.container}>
     <FlatList
       style={styles.container}
       data={displayGroups}
@@ -349,53 +468,274 @@ export function DuplicatesScreen() {
       refreshControl={
         <RefreshControl
           refreshing={refreshing}
-          onRefresh={() => { setRefreshing(true); fetchData(1, "refresh"); }}
+          onRefresh={() => {
+            setRefreshing(true);
+            fetchData();
+          }}
         />
       }
-      onEndReached={handleLoadMore}
-      onEndReachedThreshold={0.3}
       ListHeaderComponent={
-        <View>
+        <View style={styles.filterPanel}>
+          {/* Row: фильтры toggle + counter */}
           <View style={styles.filterRow}>
-            {FILTERS.map((f) => {
-              const active = filterProb === f.value;
-              return (
-                <TouchableOpacity
-                  key={f.value}
-                  style={[styles.filterChip, active && { backgroundColor: f.color, borderColor: f.color }]}
-                  onPress={() => setFilterProb(active ? null : f.value)}
-                  activeOpacity={0.7}
-                >
-                  <Text style={[styles.filterChipText, active && styles.filterChipTextActive]}>
-                    {f.label}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
+            <TouchableOpacity
+              style={[styles.filterToggleBtn, filtersOpen && styles.filterToggleBtnActive]}
+              onPress={() => setFiltersOpen((v) => !v)}
+              activeOpacity={0.7}
+            >
+              <Text style={[styles.filterToggleText, filtersOpen && styles.filterToggleTextActive]}>
+                Фильтры{totalActive > 0 ? ` (${totalActive})` : ""}
+                {filtersOpen ? " ▲" : " ▼"}
+              </Text>
+            </TouchableOpacity>
             <Text style={styles.filterCount}>
-              {filterProb !== null
-                ? `${displayGroups.length} из ${groups.length}`
-                : `${groups.length} из ${total}`}
+              {displayGroups.length} из {groups.length}
             </Text>
           </View>
+
+          {/* Expanded filter panel */}
+          {filtersOpen && (
+            <View style={styles.filterExpanded}>
+              {/* Probability */}
+              <Text style={styles.filterSectionLabel}>Вероятность дублирования</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipsScroll}>
+                <View style={styles.chipsRow}>
+                  <FilterChip
+                    label="Все"
+                    active={filterProb === null}
+                    onPress={() => setFilterProb(null)}
+                  />
+                  {PROB_FILTERS.map((f) => (
+                    <FilterChip
+                      key={f.value}
+                      label={f.label}
+                      active={filterProb === f.value}
+                      color={f.color}
+                      onPress={() => setFilterProb(filterProb === f.value ? null : f.value)}
+                    />
+                  ))}
+                </View>
+              </ScrollView>
+
+              {/* Search */}
+              <Text style={styles.filterSectionLabel}>Название / Автор</Text>
+              <TextInput
+                style={styles.searchInput}
+                value={filterSearch}
+                onChangeText={setFilterSearch}
+                placeholder="Поиск..."
+                placeholderTextColor="#bbb"
+                clearButtonMode="while-editing"
+              />
+
+              {/* Status */}
+              <Text style={styles.filterSectionLabel}>Статус</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipsScroll}>
+                <View style={styles.chipsRow}>
+                  {(
+                    [
+                      { label: "Все", value: "all" },
+                      { label: "Загружена", value: "published" },
+                      { label: "Не загружена", value: "not_published" },
+                    ] as { label: string; value: StatusFilter }[]
+                  ).map((opt) => (
+                    <FilterChip
+                      key={opt.value}
+                      label={opt.label}
+                      active={filterStatus === opt.value}
+                      onPress={() => setFilterStatus(opt.value)}
+                    />
+                  ))}
+                </View>
+              </ScrollView>
+
+              {/* Count */}
+              <Text style={styles.filterSectionLabel}>Кол-во дублей</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipsScroll}>
+                <View style={styles.chipsRow}>
+                  <FilterChip
+                    label="Все"
+                    active={filterCount === null}
+                    onPress={() => setFilterCount(null)}
+                  />
+                  {COUNT_OPTIONS.map((opt) => (
+                    <FilterChip
+                      key={opt.value}
+                      label={opt.label}
+                      active={filterCount === opt.value}
+                      onPress={() => setFilterCount(filterCount === opt.value ? null : opt.value)}
+                    />
+                  ))}
+                </View>
+              </ScrollView>
+
+              {/* Store */}
+              {stores.length > 0 && (
+                <>
+                  <Text style={styles.filterSectionLabel}>Магазин</Text>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipsScroll}>
+                    <View style={styles.chipsRow}>
+                      <FilterChip
+                        label="Все"
+                        active={filterStoreId === null}
+                        onPress={() => setFilterStoreId(null)}
+                      />
+                      {stores.map((s) => (
+                        <FilterChip
+                          key={s.id}
+                          label={s.name}
+                          active={filterStoreId === s.id}
+                          onPress={() => setFilterStoreId(filterStoreId === s.id ? null : s.id)}
+                        />
+                      ))}
+                    </View>
+                  </ScrollView>
+                </>
+              )}
+
+              {/* Operator */}
+              {operators.length > 0 && (
+                <>
+                  <Text style={styles.filterSectionLabel}>Оператор</Text>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipsScroll}>
+                    <View style={styles.chipsRow}>
+                      <FilterChip
+                        label="Все"
+                        active={filterOperatorId === null}
+                        onPress={() => setFilterOperatorId(null)}
+                      />
+                      {operators.map((op) => (
+                        <FilterChip
+                          key={op.id}
+                          label={op.name}
+                          active={filterOperatorId === op.id}
+                          onPress={() =>
+                            setFilterOperatorId(filterOperatorId === op.id ? null : op.id)
+                          }
+                        />
+                      ))}
+                    </View>
+                  </ScrollView>
+                </>
+              )}
+
+              {/* Box */}
+              {boxes.length > 0 && (
+                <>
+                  <Text style={styles.filterSectionLabel}>Коробка</Text>
+                  <TouchableOpacity
+                    style={styles.pickerRow}
+                    onPress={() => { setBoxPickerSearch(""); setBoxPickerOpen(true); }}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={filterBoxId ? styles.pickerRowValueActive : styles.pickerRowValuePlaceholder}>
+                      {filterBoxId ? boxes.find((b) => b.id === filterBoxId)?.boxNumber : "Все коробки"}
+                    </Text>
+                    <View style={styles.pickerRowRight}>
+                      {filterBoxId && (
+                        <TouchableOpacity
+                          onPress={(e) => { e.stopPropagation(); setFilterBoxId(null); }}
+                          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                        >
+                          <Text style={styles.pickerRowClear}>✕</Text>
+                        </TouchableOpacity>
+                      )}
+                      <Text style={styles.pickerRowArrow}>▼</Text>
+                    </View>
+                  </TouchableOpacity>
+                </>
+              )}
+
+              {/* Reset */}
+              {totalActive > 0 && (
+                <TouchableOpacity style={styles.resetBtn} onPress={resetFilters} activeOpacity={0.7}>
+                  <Text style={styles.resetBtnText}>✕ Сбросить все фильтры ({totalActive})</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          )}
         </View>
-      }
-      ListFooterComponent={
-        loadingMore ? (
-          <ActivityIndicator size="small" color="#1976D2" style={{ marginVertical: 16 }} />
-        ) : null
       }
       ListEmptyComponent={
         <View style={styles.emptyContainer}>
           <Text style={styles.emptyIcon}>✅</Text>
           <Text style={styles.empty}>
-            {filterProb !== null ? "Нет дублей с такой вероятностью" : "Дубликатов не найдено"}
+            {totalActive > 0 ? "Нет групп, подходящих под фильтры" : "Дубликатов не найдено"}
           </Text>
         </View>
       }
     />
+
+    {/* Box picker modal */}
+    <Modal
+      visible={boxPickerOpen}
+      transparent
+      animationType="slide"
+      onRequestClose={() => setBoxPickerOpen(false)}
+    >
+      <KeyboardAvoidingView
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        style={{ flex: 1 }}
+      >
+        <TouchableWithoutFeedback onPress={() => setBoxPickerOpen(false)}>
+          <View style={styles.pickerOverlay}>
+            <TouchableWithoutFeedback>
+              <View style={styles.pickerSheet}>
+                <View style={styles.pickerSheetHeader}>
+                  <Text style={styles.pickerSheetTitle}>Коробка</Text>
+                  <TouchableOpacity onPress={() => setBoxPickerOpen(false)}>
+                    <Text style={styles.pickerDoneBtn}>Закрыть</Text>
+                  </TouchableOpacity>
+                </View>
+                <TextInput
+                  style={styles.pickerSearchInput}
+                  placeholder="Поиск по номеру коробки..."
+                  placeholderTextColor="#aaa"
+                  value={boxPickerSearch}
+                  onChangeText={setBoxPickerSearch}
+                  autoFocus
+                  clearButtonMode="while-editing"
+                />
+                <FlatList
+                  data={[
+                    { id: "", boxNumber: "Все коробки" },
+                    ...boxes.filter((b) =>
+                      b.boxNumber.toLowerCase().includes(boxPickerSearch.toLowerCase()),
+                    ),
+                  ]}
+                  keyExtractor={(item) => item.id}
+                  style={styles.pickerList}
+                  keyboardShouldPersistTaps="handled"
+                  renderItem={({ item }) => {
+                    const isAll = item.id === "";
+                    const active = isAll ? !filterBoxId : filterBoxId === item.id;
+                    return (
+                      <TouchableOpacity
+                        style={[styles.pickerListItem, active && styles.pickerListItemActive]}
+                        onPress={() => {
+                          setFilterBoxId(isAll ? null : item.id);
+                          setBoxPickerOpen(false);
+                        }}
+                      >
+                        <Text style={[styles.pickerListItemText, active && styles.pickerListItemTextActive]}>
+                          {item.boxNumber}
+                        </Text>
+                        {active && <Text style={styles.pickerListCheckmark}>✓</Text>}
+                      </TouchableOpacity>
+                    );
+                  }}
+                />
+              </View>
+            </TouchableWithoutFeedback>
+          </View>
+        </TouchableWithoutFeedback>
+      </KeyboardAvoidingView>
+    </Modal>
+    </View>
   );
 }
+
+// ─── Styles ───────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
   container: {
@@ -411,12 +751,16 @@ const styles = StyleSheet.create({
     padding: 12,
     gap: 12,
   },
+  // Filter panel
+  filterPanel: {
+    marginBottom: 4,
+  },
   filterRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
-    marginBottom: 12,
+    gap: 6,
     flexWrap: "wrap",
+    marginBottom: 6,
   },
   filterChip: {
     paddingHorizontal: 12,
@@ -434,25 +778,84 @@ const styles = StyleSheet.create({
   filterChipTextActive: {
     color: "#fff",
   },
+  filterToggleBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    borderWidth: 1.5,
+    borderColor: "#ccc",
+    backgroundColor: "#fff",
+  },
+  filterToggleBtnActive: {
+    borderColor: "#1976D2",
+    backgroundColor: "#E3F2FD",
+  },
+  filterToggleText: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#666",
+  },
+  filterToggleTextActive: {
+    color: "#1976D2",
+  },
   filterCount: {
     fontSize: 12,
     color: "#999",
     marginLeft: "auto",
   },
-  header: {
-    marginBottom: 4,
+  filterExpanded: {
+    backgroundColor: "#fff",
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 8,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 3,
+    elevation: 1,
   },
-  headerTotal: {
+  filterSectionLabel: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#888",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+    marginTop: 10,
+    marginBottom: 6,
+  },
+  searchInput: {
+    height: 38,
+    borderWidth: 1.5,
+    borderColor: "#ddd",
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    fontSize: 14,
+    color: "#222",
+    backgroundColor: "#FAFAFA",
+  },
+  chipsScroll: {
+    flexGrow: 0,
+  },
+  chipsRow: {
+    flexDirection: "row",
+    gap: 6,
+    paddingBottom: 2,
+  },
+  resetBtn: {
+    marginTop: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    backgroundColor: "#FFF3E0",
+    borderWidth: 1,
+    borderColor: "#FFB74D",
+    alignItems: "center",
+  },
+  resetBtnText: {
     fontSize: 13,
     fontWeight: "600",
-    color: "#444",
-    marginBottom: 4,
+    color: "#E65100",
   },
-  headerSection: {
-    fontSize: 13,
-    color: "#666",
-    marginBottom: 4,
-  },
+  // Group card
   groupCard: {
     backgroundColor: "#fff",
     borderRadius: 12,
@@ -463,12 +866,6 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 2,
     borderLeftWidth: 4,
-  },
-  groupExact: {
-    borderLeftColor: "#E53935",
-  },
-  groupPossible: {
-    borderLeftColor: "#FB8C00",
   },
   groupHeader: {
     flexDirection: "row",
@@ -481,12 +878,6 @@ const styles = StyleSheet.create({
     paddingVertical: 3,
     borderRadius: 6,
   },
-  badgeExact: {
-    backgroundColor: "#FFEBEE",
-  },
-  badgePossible: {
-    backgroundColor: "#FFF3E0",
-  },
   badgeText: {
     fontSize: 12,
     fontWeight: "700",
@@ -497,10 +888,15 @@ const styles = StyleSheet.create({
     marginLeft: 4,
     flexShrink: 1,
   },
+  bookCount: {
+    fontSize: 11,
+    color: "#aaa",
+    marginLeft: "auto",
+  },
   groupKey: {
-    flex: 1,
     fontSize: 12,
     color: "#888",
+    marginBottom: 8,
   },
   booksScroll: {
     marginBottom: 12,
@@ -509,6 +905,7 @@ const styles = StyleSheet.create({
     gap: 10,
     paddingRight: 4,
   },
+  // Mini card
   miniCard: {
     width: 150,
     backgroundColor: "#FAFAFA",
@@ -588,6 +985,18 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "600",
   },
+  publishedLabel: {
+    marginTop: 8,
+    backgroundColor: "#E8F5E9",
+    borderRadius: 6,
+    paddingVertical: 6,
+    alignItems: "center",
+  },
+  publishedLabelText: {
+    color: "#2E7D32",
+    fontSize: 11,
+    fontWeight: "600",
+  },
   notDuplicateBtn: {
     marginTop: 6,
     borderWidth: 1,
@@ -633,16 +1042,111 @@ const styles = StyleSheet.create({
     color: "#999",
     fontSize: 16,
   },
-  publishedLabel: {
-    marginTop: 8,
-    backgroundColor: "#E8F5E9",
-    borderRadius: 6,
-    paddingVertical: 6,
+  // Picker row (box selector button)
+  pickerRow: {
+    flexDirection: "row",
     alignItems: "center",
+    justifyContent: "space-between",
+    borderWidth: 1.5,
+    borderColor: "#ddd",
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    backgroundColor: "#FAFAFA",
   },
-  publishedLabelText: {
-    color: "#2E7D32",
-    fontSize: 11,
+  pickerRowValueActive: {
+    fontSize: 14,
+    color: "#1976D2",
     fontWeight: "600",
+    flex: 1,
+  },
+  pickerRowValuePlaceholder: {
+    fontSize: 14,
+    color: "#aaa",
+    flex: 1,
+  },
+  pickerRowRight: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  pickerRowClear: {
+    fontSize: 13,
+    color: "#aaa",
+  },
+  pickerRowArrow: {
+    fontSize: 10,
+    color: "#aaa",
+  },
+  // Picker modal
+  pickerOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.4)",
+    justifyContent: "flex-end",
+  },
+  pickerSheet: {
+    backgroundColor: "#fff",
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    maxHeight: "70%",
+    paddingBottom: 20,
+  },
+  pickerSheetHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: "#f0f0f0",
+  },
+  pickerSheetTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#222",
+  },
+  pickerDoneBtn: {
+    fontSize: 14,
+    color: "#1976D2",
+    fontWeight: "600",
+  },
+  pickerSearchInput: {
+    margin: 12,
+    height: 40,
+    borderWidth: 1.5,
+    borderColor: "#ddd",
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    fontSize: 14,
+    color: "#222",
+    backgroundColor: "#FAFAFA",
+  },
+  pickerList: {
+    flexGrow: 0,
+  },
+  pickerListItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "#f5f5f5",
+  },
+  pickerListItemActive: {
+    backgroundColor: "#E3F2FD",
+  },
+  pickerListItemText: {
+    fontSize: 15,
+    color: "#333",
+  },
+  pickerListItemTextActive: {
+    color: "#1976D2",
+    fontWeight: "600",
+  },
+  pickerListCheckmark: {
+    fontSize: 14,
+    color: "#1976D2",
+    fontWeight: "700",
   },
 });
