@@ -22,11 +22,12 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from "react-native";
-import { AppText } from '../../components/AppText';
+import { AppText } from "../../components/AppText";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { Input } from "../../components/Input";
 import { DatePickerInput } from "../../components/DatePickerInput";
+import { FilterTag, FilterRow } from "../../components/FilterControls";
 import { adminService } from "../../services/admin.service";
 import type { OzonStore, OzonStoreLimits } from "../../services/admin.service";
 import { boxesService } from "../../services/boxes.service";
@@ -53,136 +54,6 @@ interface Filters {
   printRunMax?: string;
 }
 
-function FilterTag({
-  label,
-  onRemove,
-}: {
-  label: string;
-  onRemove: () => void;
-}) {
-  return (
-    <View style={tagStyles.tag}>
-      <AppText style={tagStyles.label} numberOfLines={1}>
-        {label}
-      </AppText>
-      <TouchableOpacity
-        onPress={onRemove}
-        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-      >
-        <AppText style={tagStyles.remove}>✕</AppText>
-      </TouchableOpacity>
-    </View>
-  );
-}
-
-const tagStyles = StyleSheet.create({
-  tag: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#E3F2FD",
-    borderRadius: 14,
-    paddingVertical: 5,
-    paddingLeft: 10,
-    paddingRight: 8,
-    marginRight: 6,
-  },
-  label: {
-    fontSize: 12,
-    color: "#1565C0",
-    maxWidth: 160,
-    marginRight: 5,
-  },
-  remove: {
-    fontSize: 10,
-    color: "#1976D2",
-    fontWeight: "700",
-  },
-});
-
-function FilterRow({
-  label,
-  value,
-  onOpen,
-  onClear,
-}: {
-  label: string;
-  value?: string;
-  onOpen: () => void;
-  onClear: () => void;
-}) {
-  return (
-    <View style={rowStyles.row}>
-      <AppText style={rowStyles.label}>{label}</AppText>
-      <AppText
-        style={[rowStyles.value, !value && rowStyles.valuePlaceholder]}
-        numberOfLines={1}
-      >
-        {value ?? "—"}
-      </AppText>
-      {value ? (
-        <TouchableOpacity
-          style={rowStyles.btn}
-          onPress={onClear}
-          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-        >
-          <AppText style={rowStyles.clearIcon}>✕</AppText>
-        </TouchableOpacity>
-      ) : (
-        <TouchableOpacity
-          style={rowStyles.btn}
-          onPress={onOpen}
-          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-        >
-          <AppText style={rowStyles.plusIcon}>+</AppText>
-        </TouchableOpacity>
-      )}
-    </View>
-  );
-}
-
-const rowStyles = StyleSheet.create({
-  row: {
-    flexDirection: "row",
-    alignItems: "center",
-    height: 46,
-    borderBottomWidth: 1,
-    borderBottomColor: "#f0f0f0",
-    paddingHorizontal: 2,
-  },
-  label: {
-    fontSize: 13,
-    color: "#555",
-    width: 130,
-  },
-  value: {
-    flex: 1,
-    fontSize: 13,
-    color: "#1976D2",
-    fontWeight: "500",
-    marginRight: 4,
-  },
-  valuePlaceholder: {
-    color: "#bbb",
-    fontWeight: "400",
-  },
-  btn: {
-    width: 28,
-    height: 28,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  plusIcon: {
-    fontSize: 22,
-    color: "#1976D2",
-    fontWeight: "300",
-    lineHeight: 26,
-  },
-  clearIcon: {
-    fontSize: 12,
-    color: "#999",
-    fontWeight: "700",
-  },
-});
 
 type Nav = NativeStackNavigationProp<AdminCardCreationParamList>;
 
@@ -246,7 +117,9 @@ const PendingBookItem = React.memo(function PendingBookItem({
         ) : null}
         <AppText style={styles.sku}>{item.sku}</AppText>
         {item.price != null && Number(item.price) > 0 && (
-          <AppText style={styles.price}>{Number(item.price).toFixed(0)} ₽</AppText>
+          <AppText style={styles.price}>
+            {Number(item.price).toFixed(0)} ₽
+          </AppText>
         )}
         {!selectMode && (
           <TouchableOpacity
@@ -269,7 +142,6 @@ const PendingBookItem = React.memo(function PendingBookItem({
     </TouchableOpacity>
   );
 });
-
 
 export function PendingReviewScreen() {
   const navigation = useNavigation<Nav>();
@@ -335,7 +207,6 @@ export function PendingReviewScreen() {
   const searchRef = useRef("");
   const filtersRef = useRef<Filters>({});
 
-
   // Load filter options once
   useEffect(() => {
     const loadOptions = async () => {
@@ -369,12 +240,18 @@ export function PendingReviewScreen() {
   );
   const isReturningRef = useRef(false);
 
-  useEffect(() => { searchRef.current = search; }, [search]);
-  useEffect(() => { filtersRef.current = filters; }, [filters]);
+  useEffect(() => {
+    searchRef.current = search;
+  }, [search]);
+  useEffect(() => {
+    filtersRef.current = filters;
+  }, [filters]);
 
   useEffect(() => {
     return bookEvents.onBookUpdated((updatedBook) => {
-      setBooks((prev) => prev.map((b) => b.id === updatedBook.id ? updatedBook : b));
+      setBooks((prev) =>
+        prev.map((b) => (b.id === updatedBook.id ? updatedBook : b)),
+      );
     });
   }, []);
 
@@ -429,7 +306,6 @@ export function PendingReviewScreen() {
     setSelectedIds(new Set());
   }, []);
 
-
   useLayoutEffect(() => {
     if (selectMode) {
       navigation.setOptions({
@@ -437,14 +313,14 @@ export function PendingReviewScreen() {
           <TouchableOpacity
             onPress={exitSelectMode}
             style={{
-              width: 44,
               height: 44,
+              paddingHorizontal: 14,
               backgroundColor: "#1976D2",
               alignItems: "center",
               justifyContent: "center",
             }}
           >
-            <AppText style={{ color: "#fff", fontSize: 15, fontWeight: "600" }}>
+            <AppText style={{ color: "#fff", fontSize: 15, fontWeight: "600" }} numberOfLines={1}>
               Отмена
             </AppText>
           </TouchableOpacity>
@@ -508,8 +384,10 @@ export function PendingReviewScreen() {
         if (currentFilters.priceMax) params.priceMax = currentFilters.priceMax;
         if (currentFilters.yearFrom) params.yearFrom = currentFilters.yearFrom;
         if (currentFilters.yearTo) params.yearTo = currentFilters.yearTo;
-        if (currentFilters.printRunMin) params.printRunMin = currentFilters.printRunMin;
-        if (currentFilters.printRunMax) params.printRunMax = currentFilters.printRunMax;
+        if (currentFilters.printRunMin)
+          params.printRunMin = currentFilters.printRunMin;
+        if (currentFilters.printRunMax)
+          params.printRunMax = currentFilters.printRunMax;
         if (query) params.search = query;
 
         const res = await adminService.getPendingReviewBooks(
@@ -869,7 +747,6 @@ export function PendingReviewScreen() {
     [stores],
   );
 
-
   const handleNavigateToPending = useCallback(
     (bookId: string) => {
       isReturningRef.current = true;
@@ -921,8 +798,7 @@ export function PendingReviewScreen() {
 
       if (hasActiveFilters) {
         const allSelected =
-          loadedIds.length > 0 &&
-          loadedIds.every((id) => selectedIds.has(id));
+          loadedIds.length > 0 && loadedIds.every((id) => selectedIds.has(id));
         setSelectedIds((prev) => {
           const next = new Set(prev);
           if (allSelected) {
@@ -1056,7 +932,6 @@ export function PendingReviewScreen() {
     );
   };
 
-
   const renderItem = useCallback(
     ({ item }: { item: Book }) => (
       <PendingBookItem
@@ -1174,7 +1049,9 @@ export function PendingReviewScreen() {
                     setSelectMode(true);
                   }}
                 >
-                  <AppText style={styles.menuItemText}>Выбрать несколько</AppText>
+                  <AppText style={styles.menuItemText}>
+                    Выбрать несколько
+                  </AppText>
                 </TouchableOpacity>
               </View>
             </TouchableWithoutFeedback>
@@ -1183,30 +1060,30 @@ export function PendingReviewScreen() {
       </Modal>
 
       <View style={styles.searchBar}>
-          <Input
-            label=""
-            placeholder="Поиск по названию, автору, ISBN..."
-            value={search}
-            onChangeText={handleSearch}
-            style={{ marginBottom: 0 }}
-          />
-          <TouchableOpacity
+        <Input
+          label=""
+          placeholder="Поиск по названию, автору, ISBN..."
+          value={search}
+          onChangeText={handleSearch}
+          style={{ marginBottom: 0 }}
+        />
+        <TouchableOpacity
+          style={[
+            styles.filterBtn,
+            activeFilterCount > 0 && styles.filterBtnActive,
+          ]}
+          onPress={() => setShowFilters(!showFilters)}
+        >
+          <AppText
             style={[
-              styles.filterBtn,
-              activeFilterCount > 0 && styles.filterBtnActive,
+              styles.filterBtnText,
+              activeFilterCount > 0 && styles.filterBtnTextActive,
             ]}
-            onPress={() => setShowFilters(!showFilters)}
           >
-            <AppText
-              style={[
-                styles.filterBtnText,
-                activeFilterCount > 0 && styles.filterBtnTextActive,
-              ]}
-            >
-              Фильтры{activeFilterCount > 0 ? ` (${activeFilterCount})` : ""}
-            </AppText>
-          </TouchableOpacity>
-        </View>
+            Фильтры{activeFilterCount > 0 ? ` (${activeFilterCount})` : ""}
+          </AppText>
+        </TouchableOpacity>
+      </View>
 
       {showFilters && (
         <View style={styles.filterPanel}>
@@ -1660,13 +1537,17 @@ export function PendingReviewScreen() {
           windowSize={7}
           ListEmptyComponent={
             <View style={styles.emptyContainer}>
-              <AppText style={styles.empty}>Нет карточек ожидающих проверки</AppText>
+              <AppText style={styles.empty}>
+                Нет карточек ожидающих проверки
+              </AppText>
               {activeFilterCount > 0 && (
                 <TouchableOpacity
                   style={styles.emptyResetBtn}
                   onPress={resetFilters}
                 >
-                  <AppText style={styles.emptyResetText}>Сбросить фильтры</AppText>
+                  <AppText style={styles.emptyResetText}>
+                    Сбросить фильтры
+                  </AppText>
                 </TouchableOpacity>
               )}
             </View>
@@ -1721,7 +1602,9 @@ export function PendingReviewScreen() {
                     <AppText style={styles.bulkActionIcon}>📤</AppText>
                   )}
                   <View>
-                    <AppText style={styles.bulkActionLabel}>Загрузить в Озон</AppText>
+                    <AppText style={styles.bulkActionLabel}>
+                      Загрузить в Озон
+                    </AppText>
                     <AppText style={styles.bulkActionDesc}>
                       Отправить выбранные карточки на публикацию
                     </AppText>
@@ -1804,7 +1687,9 @@ export function PendingReviewScreen() {
       )}
       {selectMode && !polling && (
         <View style={styles.bottomBar}>
-          <AppText style={styles.bottomBarCount}>Выбрано: {selectedIds.size}</AppText>
+          <AppText style={styles.bottomBarCount}>
+            Выбрано: {selectedIds.size}
+          </AppText>
           <TouchableOpacity
             style={[
               styles.bottomBarBtn,

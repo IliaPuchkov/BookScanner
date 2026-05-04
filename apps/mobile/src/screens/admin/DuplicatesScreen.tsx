@@ -447,37 +447,8 @@ export function DuplicatesScreen() {
 
   return (
     <View style={styles.container}>
-    <FlatList
-      style={styles.container}
-      data={displayGroups}
-      keyExtractor={(item) => `${item.type}:${item.key}`}
-      renderItem={({ item }) => (
-        <DuplicateGroupCard
-          group={item}
-          onNavigate={navigate}
-          onDelete={handleDelete}
-          onResolve={handleResolve}
-          onMarkBookNotDuplicate={handleMarkBookNotDuplicate}
-          deletingId={deletingId}
-          resolvingKey={resolvingKey}
-          markingNotDuplicateId={markingNotDuplicateId}
-          stores={stores}
-        />
-      )}
-      contentContainerStyle={styles.listContent}
-      refreshControl={
-        <RefreshControl
-          refreshing={refreshing}
-          onRefresh={() => {
-            setRefreshing(true);
-            fetchData();
-          }}
-        />
-      }
-      ListHeaderComponent={
-        <View style={styles.filterPanel}>
-          {/* Row: фильтры toggle + counter */}
-          <View style={styles.filterRow}>
+      <View style={styles.filterPanel}>
+        <View style={styles.filterRow}>
             <TouchableOpacity
               style={[styles.filterToggleBtn, filtersOpen && styles.filterToggleBtnActive]}
               onPress={() => setFiltersOpen((v) => !v)}
@@ -654,17 +625,43 @@ export function DuplicatesScreen() {
               )}
             </View>
           )}
-        </View>
-      }
-      ListEmptyComponent={
-        <View style={styles.emptyContainer}>
-          <AppText style={styles.emptyIcon}>✅</AppText>
-          <AppText style={styles.empty}>
-            {totalActive > 0 ? "Нет групп, подходящих под фильтры" : "Дубликатов не найдено"}
-          </AppText>
-        </View>
-      }
-    />
+      </View>
+      <FlatList
+        style={styles.container}
+        data={displayGroups}
+        keyExtractor={(item) => `${item.type}:${item.key}`}
+        renderItem={({ item }) => (
+          <DuplicateGroupCard
+            group={item}
+            onNavigate={navigate}
+            onDelete={handleDelete}
+            onResolve={handleResolve}
+            onMarkBookNotDuplicate={handleMarkBookNotDuplicate}
+            deletingId={deletingId}
+            resolvingKey={resolvingKey}
+            markingNotDuplicateId={markingNotDuplicateId}
+            stores={stores}
+          />
+        )}
+        contentContainerStyle={styles.listContent}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={() => {
+              setRefreshing(true);
+              fetchData();
+            }}
+          />
+        }
+        ListEmptyComponent={
+          <View style={styles.emptyContainer}>
+            <AppText style={styles.emptyIcon}>✅</AppText>
+            <AppText style={styles.empty}>
+              {totalActive > 0 ? "Нет групп, подходящих под фильтры" : "Дубликатов не найдено"}
+            </AppText>
+          </View>
+        }
+      />
 
     {/* Box picker modal */}
     <Modal
@@ -753,21 +750,25 @@ const styles = StyleSheet.create({
   },
   // Filter panel
   filterPanel: {
-    marginBottom: 4,
+    backgroundColor: "#fff",
+    paddingHorizontal: 16,
+    paddingTop: 8,
+    paddingBottom: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: "#eee",
   },
   filterRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
     flexWrap: "wrap",
-    marginBottom: 6,
   },
   filterChip: {
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 16,
-    borderWidth: 1.5,
-    borderColor: "#ccc",
+    borderWidth: 1,
+    borderColor: "#ddd",
     backgroundColor: "#fff",
   },
   filterChipText: {
@@ -779,11 +780,11 @@ const styles = StyleSheet.create({
     color: "#fff",
   },
   filterToggleBtn: {
-    paddingHorizontal: 12,
+    paddingHorizontal: 14,
     paddingVertical: 6,
     borderRadius: 16,
-    borderWidth: 1.5,
-    borderColor: "#ccc",
+    borderWidth: 1,
+    borderColor: "#ddd",
     backgroundColor: "#fff",
   },
   filterToggleBtnActive: {
@@ -804,15 +805,8 @@ const styles = StyleSheet.create({
     marginLeft: "auto",
   },
   filterExpanded: {
-    backgroundColor: "#fff",
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 8,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.06,
-    shadowRadius: 3,
-    elevation: 1,
+    paddingTop: 10,
+    paddingBottom: 4,
   },
   filterSectionLabel: {
     fontSize: 11,
@@ -844,16 +838,15 @@ const styles = StyleSheet.create({
   resetBtn: {
     marginTop: 12,
     paddingVertical: 8,
+    paddingHorizontal: 16,
     borderRadius: 8,
-    backgroundColor: "#FFF3E0",
-    borderWidth: 1,
-    borderColor: "#FFB74D",
+    backgroundColor: "#1976D2",
     alignItems: "center",
   },
   resetBtnText: {
     fontSize: 13,
     fontWeight: "600",
-    color: "#E65100",
+    color: "#fff",
   },
   // Group card
   groupCard: {
@@ -1101,14 +1094,13 @@ const styles = StyleSheet.create({
     borderBottomColor: "#f0f0f0",
   },
   pickerSheetTitle: {
-    fontSize: 16,
-    fontWeight: "700",
+    fontSize: 15,
+    fontWeight: "600",
     color: "#222",
   },
   pickerDoneBtn: {
-    fontSize: 14,
-    color: "#1976D2",
-    fontWeight: "600",
+    fontSize: 15,
+    color: "#999",
   },
   pickerSearchInput: {
     margin: 12,
