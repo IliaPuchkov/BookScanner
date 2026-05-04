@@ -3,7 +3,6 @@ import {
   View,
   FlatList,
   StyleSheet,
-  Text,
   TextInput,
   TouchableOpacity,
   Image,
@@ -12,6 +11,7 @@ import {
   Alert,
   ScrollView,
 } from "react-native";
+import { AppText } from '../../components/AppText';
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { adminService, type OzonStore } from "../../services/admin.service";
@@ -51,35 +51,35 @@ function UnderpricedBookItem({
             <Image source={{ uri: coverPhoto.fileUrl }} style={styles.image} />
           ) : (
             <View style={[styles.image, styles.placeholder]}>
-              <Text style={styles.placeholderText}>Нет фото</Text>
+              <AppText style={styles.placeholderText}>Нет фото</AppText>
             </View>
           )}
         </View>
         <View style={styles.info}>
-          <Text style={styles.title} numberOfLines={2}>{item.title}</Text>
+          <AppText style={styles.title} numberOfLines={2}>{item.title}</AppText>
           {item.author ? (
-            <Text style={styles.author} numberOfLines={1}>{item.author}</Text>
+            <AppText style={styles.author} numberOfLines={1}>{item.author}</AppText>
           ) : null}
-          <Text style={styles.sku}>{item.sku}</Text>
+          <AppText style={styles.sku}>{item.sku}</AppText>
           <View style={styles.metaRow}>
             {item.yearPublished ? (
-              <Text style={styles.metaChip}>📅 {item.yearPublished}</Text>
+              <AppText style={styles.metaChip}>📅 {item.yearPublished}</AppText>
             ) : null}
             {item.printRun ? (
-              <Text style={styles.metaChip}>📦 {item.printRun.toLocaleString()} экз.</Text>
+              <AppText style={styles.metaChip}>📦 {item.printRun.toLocaleString()} экз.</AppText>
             ) : null}
             {isPublished ? (
-              <Text style={styles.publishedChip}>
+              <AppText style={styles.publishedChip}>
                 {storeName ? `Ozon: ${storeName}` : "Ozon ✓"}
-              </Text>
+              </AppText>
             ) : item.status === "pending_review" ? (
-              <Text style={styles.pendingChip}>На проверке</Text>
+              <AppText style={styles.pendingChip}>На проверке</AppText>
             ) : null}
           </View>
           {item.price != null ? (
-            <Text style={styles.price}>{Number(item.price).toFixed(0)} ₽</Text>
+            <AppText style={styles.price}>{Number(item.price).toFixed(0)} ₽</AppText>
           ) : null}
-          <Text style={styles.editHint}>Нажмите, чтобы изменить цену</Text>
+          <AppText style={styles.editHint}>Нажмите, чтобы изменить цену</AppText>
         </View>
       </TouchableOpacity>
       <View style={styles.cardActions}>
@@ -92,7 +92,7 @@ function UnderpricedBookItem({
           {markingReviewed ? (
             <ActivityIndicator size="small" color="#2E7D32" />
           ) : (
-            <Text style={styles.reviewedBtnText}>✓ Цена скорректирована</Text>
+            <AppText style={styles.reviewedBtnText}>✓ Цена скорректирована</AppText>
           )}
         </TouchableOpacity>
       </View>
@@ -120,9 +120,9 @@ function Checkbox({
   return (
     <TouchableOpacity style={styles.checkboxRow} onPress={onToggle} activeOpacity={0.7}>
       <View style={[styles.checkboxBox, checked && styles.checkboxBoxChecked]}>
-        {checked && <Text style={styles.checkboxMark}>✓</Text>}
+        {checked && <AppText style={styles.checkboxMark}>✓</AppText>}
       </View>
-      <Text style={styles.checkboxLabel}>{label}</Text>
+      <AppText style={styles.checkboxLabel}>{label}</AppText>
     </TouchableOpacity>
   );
 }
@@ -363,12 +363,12 @@ export function UnderpricedScreen() {
         <View style={styles.infoBanner}>
           {editingCriteria ? (
             <ScrollView showsVerticalScrollIndicator={false}>
-              <Text style={styles.infoBannerText}>✏️ Критерии отбора</Text>
+              <AppText style={styles.infoBannerText}>✏️ Критерии отбора</AppText>
 
-              <Text style={styles.sectionLabel}>Год издания</Text>
+              <AppText style={styles.sectionLabel}>Год издания</AppText>
               <View style={styles.rangeRow}>
                 <View style={styles.rangeField}>
-                  <Text style={styles.rangeFieldLabel}>От</Text>
+                  <AppText style={styles.rangeFieldLabel}>От</AppText>
                   <TextInput
                     style={styles.criteriaInput}
                     value={draftMinYear}
@@ -381,7 +381,7 @@ export function UnderpricedScreen() {
                   />
                 </View>
                 <View style={styles.rangeField}>
-                  <Text style={styles.rangeFieldLabel}>До</Text>
+                  <AppText style={styles.rangeFieldLabel}>До</AppText>
                   <TextInput
                     style={styles.criteriaInput}
                     value={draftMaxYear}
@@ -393,7 +393,7 @@ export function UnderpricedScreen() {
                 </View>
               </View>
 
-              <Text style={styles.sectionLabel}>Тираж (не более)</Text>
+              <AppText style={styles.sectionLabel}>Тираж (не более)</AppText>
               <TextInput
                 style={[styles.criteriaInput, styles.criteriaInputFull]}
                 value={draftPrintRun}
@@ -402,10 +402,10 @@ export function UnderpricedScreen() {
                 editable={!savingCriteria}
               />
 
-              <Text style={styles.sectionLabel}>Цена, ₽</Text>
+              <AppText style={styles.sectionLabel}>Цена, ₽</AppText>
               <View style={styles.rangeRow}>
                 <View style={styles.rangeField}>
-                  <Text style={styles.rangeFieldLabel}>От</Text>
+                  <AppText style={styles.rangeFieldLabel}>От</AppText>
                   <TextInput
                     style={styles.criteriaInput}
                     value={draftPriceMin}
@@ -417,7 +417,7 @@ export function UnderpricedScreen() {
                   />
                 </View>
                 <View style={styles.rangeField}>
-                  <Text style={styles.rangeFieldLabel}>До</Text>
+                  <AppText style={styles.rangeFieldLabel}>До</AppText>
                   <TextInput
                     style={styles.criteriaInput}
                     value={draftPriceMax}
@@ -430,7 +430,7 @@ export function UnderpricedScreen() {
                 </View>
               </View>
 
-              <Text style={styles.sectionLabel}>Статус / Магазин</Text>
+              <AppText style={styles.sectionLabel}>Статус / Магазин</AppText>
               <Checkbox
                 checked={draftIncludePendingReview}
                 onToggle={() => setDraftIncludePendingReview((v) => !v)}
@@ -445,7 +445,7 @@ export function UnderpricedScreen() {
                 />
               ))}
               {stores.length === 0 && (
-                <Text style={styles.noStoresHint}>Магазины не настроены</Text>
+                <AppText style={styles.noStoresHint}>Магазины не настроены</AppText>
               )}
 
               <View style={styles.criteriaActions}>
@@ -454,7 +454,7 @@ export function UnderpricedScreen() {
                   onPress={() => setEditingCriteria(false)}
                   disabled={savingCriteria}
                 >
-                  <Text style={styles.criteriaCancelText}>Отмена</Text>
+                  <AppText style={styles.criteriaCancelText}>Отмена</AppText>
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={[styles.criteriaSaveBtn, savingCriteria && { opacity: 0.6 }]}
@@ -464,7 +464,7 @@ export function UnderpricedScreen() {
                   {savingCriteria ? (
                     <ActivityIndicator size="small" color="#fff" />
                   ) : (
-                    <Text style={styles.criteriaSaveText}>Сохранить</Text>
+                    <AppText style={styles.criteriaSaveText}>Сохранить</AppText>
                   )}
                 </TouchableOpacity>
               </View>
@@ -472,25 +472,25 @@ export function UnderpricedScreen() {
           ) : (
             <>
               <View style={styles.criteriaHeaderRow}>
-                <Text style={styles.infoBannerText}>📌 Критерии редких книг</Text>
+                <AppText style={styles.infoBannerText}>📌 Критерии редких книг</AppText>
                 <TouchableOpacity onPress={openEditing}>
-                  <Text style={styles.criteriaEditLink}>Изменить</Text>
+                  <AppText style={styles.criteriaEditLink}>Изменить</AppText>
                 </TouchableOpacity>
               </View>
-              <Text style={styles.criteriaLine}>
+              <AppText style={styles.criteriaLine}>
                 Год: {rareMinYear > 0 ? `${rareMinYear}–${rareMaxYear}` : `≤ ${rareMaxYear}`}
                 {"  "}Тираж: &lt; {rareMaxPrintRun.toLocaleString()}
-              </Text>
+              </AppText>
               {(rarePriceMin > 0 || rarePriceMax > 0) && (
-                <Text style={styles.criteriaLine}>
+                <AppText style={styles.criteriaLine}>
                   Цена:{rarePriceMin > 0 ? ` от ${rarePriceMin} ₽` : ""}
                   {rarePriceMax > 0 ? ` до ${rarePriceMax} ₽` : ""}
-                </Text>
+                </AppText>
               )}
-              <Text style={styles.criteriaLine}>Статус: {storeSummary()}</Text>
-              <Text style={styles.infoBannerSub}>
+              <AppText style={styles.criteriaLine}>Статус: {storeSummary()}</AppText>
+              <AppText style={styles.infoBannerSub}>
                 Скорректируйте цену или нажмите "Цена скорректирована" чтобы убрать из списка.
-              </Text>
+              </AppText>
             </>
           )}
         </View>
@@ -498,8 +498,8 @@ export function UnderpricedScreen() {
       ListEmptyComponent={
         loading ? null : (
           <View style={styles.emptyContainer}>
-            <Text style={styles.emptyIcon}>✅</Text>
-            <Text style={styles.empty}>Книг с некорректной ценой не найдено</Text>
+            <AppText style={styles.emptyIcon}>✅</AppText>
+            <AppText style={styles.empty}>Книг с некорректной ценой не найдено</AppText>
           </View>
         )
       }

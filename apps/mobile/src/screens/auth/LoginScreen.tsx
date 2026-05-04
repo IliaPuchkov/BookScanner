@@ -1,7 +1,6 @@
 import React, { useState } from "react";
 import {
   View,
-  Text,
   StyleSheet,
   KeyboardAvoidingView,
   Platform,
@@ -10,6 +9,7 @@ import {
   Image,
   TouchableOpacity,
 } from "react-native";
+import { AppText } from '../../components/AppText';
 import { FontAwesome5 } from "@expo/vector-icons";
 import { type NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useNavigation } from "@react-navigation/native";
@@ -65,8 +65,8 @@ export function LoginScreen() {
             style={styles.logo}
             resizeMode="contain"
           />
-          <Text style={styles.title}>Jolly Book</Text>
-          <Text style={styles.subtitle}>Вход в систему</Text>
+          <AppText style={styles.title}>Jolly Book</AppText>
+          <AppText style={styles.subtitle}>Вход в систему</AppText>
         </View>
 
         <View style={styles.form}>

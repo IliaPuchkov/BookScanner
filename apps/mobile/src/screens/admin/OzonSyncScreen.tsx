@@ -3,12 +3,12 @@ import {
   View,
   FlatList,
   StyleSheet,
-  Text,
   TouchableOpacity,
   ActivityIndicator,
   RefreshControl,
   Alert,
 } from 'react-native';
+import { AppText } from '../../components/AppText';
 import { adminService } from '../../services/admin.service';
 import type { OzonStore } from '../../services/admin.service';
 
@@ -182,16 +182,16 @@ export default function OzonSyncScreen() {
         activeOpacity={0.7}
       >
         <View style={[styles.checkbox, isSelected && styles.checkboxSelected]}>
-          {isSelected && <Text style={styles.checkmark}>✓</Text>}
+          {isSelected && <AppText style={styles.checkmark}>✓</AppText>}
         </View>
         <View style={styles.listItemContent}>
-          <Text style={styles.listItemTitle} numberOfLines={2}>{item.name || '—'}</Text>
-          <Text style={styles.listItemSub}>{item.offerId}</Text>
+          <AppText style={styles.listItemTitle} numberOfLines={2}>{item.name || '—'}</AppText>
+          <AppText style={styles.listItemSub}>{item.offerId}</AppText>
         </View>
         <View style={[styles.badge, item.visibility === 'ARCHIVED' && styles.badgeArchived]}>
-          <Text style={[styles.badgeText, item.visibility === 'ARCHIVED' && styles.badgeTextArchived]}>
+          <AppText style={[styles.badgeText, item.visibility === 'ARCHIVED' && styles.badgeTextArchived]}>
             {item.visibility === 'ACTIVE' ? 'активный' : 'архив'}
-          </Text>
+          </AppText>
         </View>
       </TouchableOpacity>
     );
@@ -200,13 +200,13 @@ export default function OzonSyncScreen() {
   const renderSystemItem = ({ item }: { item: SystemItem }) => (
     <View style={styles.listItem}>
       <View style={styles.listItemContent}>
-        <Text style={styles.listItemTitle} numberOfLines={2}>{item.title || '—'}</Text>
-        <Text style={styles.listItemSub}>{item.sku}</Text>
+        <AppText style={styles.listItemTitle} numberOfLines={2}>{item.title || '—'}</AppText>
+        <AppText style={styles.listItemSub}>{item.sku}</AppText>
       </View>
       <View style={[styles.badge, item.status === 'ARCHIVED' && styles.badgeArchived]}>
-        <Text style={[styles.badgeText, item.status === 'ARCHIVED' && styles.badgeTextArchived]}>
+        <AppText style={[styles.badgeText, item.status === 'ARCHIVED' && styles.badgeTextArchived]}>
           {item.status === 'PUBLISHED' ? 'опублик.' : 'архив'}
-        </Text>
+        </AppText>
       </View>
     </View>
   );
@@ -224,9 +224,9 @@ export default function OzonSyncScreen() {
             style={[styles.storeChip, !activeStoreId && styles.storeChipActive]}
             onPress={() => handleStoreChange(undefined)}
           >
-            <Text style={[styles.storeChipText, !activeStoreId && styles.storeChipTextActive]}>
+            <AppText style={[styles.storeChipText, !activeStoreId && styles.storeChipTextActive]}>
               Все
-            </Text>
+            </AppText>
           </TouchableOpacity>
           {stores.map((s) => (
             <TouchableOpacity
@@ -234,9 +234,9 @@ export default function OzonSyncScreen() {
               style={[styles.storeChip, activeStoreId === s.id && styles.storeChipActive]}
               onPress={() => handleStoreChange(s.id)}
             >
-              <Text style={[styles.storeChipText, activeStoreId === s.id && styles.storeChipTextActive]}>
+              <AppText style={[styles.storeChipText, activeStoreId === s.id && styles.storeChipTextActive]}>
                 {s.name}
-              </Text>
+              </AppText>
             </TouchableOpacity>
           ))}
         </View>
@@ -245,43 +245,43 @@ export default function OzonSyncScreen() {
       {loading ? (
         <View style={styles.loaderBox}>
           <ActivityIndicator size="large" color="#1976D2" />
-          <Text style={styles.loaderText}>Загружаем данные с Озона…</Text>
+          <AppText style={styles.loaderText}>Загружаем данные с Озона…</AppText>
         </View>
       ) : diff ? (
         <>
           {/* Counts grid */}
           <View style={styles.grid}>
             <View style={[styles.tile, styles.tileBlue]}>
-              <Text style={styles.tileNum}>{diff.counts.ozonActive}</Text>
-              <Text style={styles.tileLabel}>Ozon{'\n'}активные</Text>
+              <AppText style={styles.tileNum}>{diff.counts.ozonActive}</AppText>
+              <AppText style={styles.tileLabel}>Ozon{'\n'}активные</AppText>
             </View>
             <View style={[styles.tile, styles.tileGrey]}>
-              <Text style={styles.tileNum}>{diff.counts.ozonArchived}</Text>
-              <Text style={styles.tileLabel}>Ozon{'\n'}в архиве</Text>
+              <AppText style={styles.tileNum}>{diff.counts.ozonArchived}</AppText>
+              <AppText style={styles.tileLabel}>Ozon{'\n'}в архиве</AppText>
             </View>
             <View style={[styles.tile, styles.tileGreen]}>
-              <Text style={styles.tileNum}>{diff.counts.systemPublished}</Text>
-              <Text style={styles.tileLabel}>Система{'\n'}опублик.</Text>
+              <AppText style={styles.tileNum}>{diff.counts.systemPublished}</AppText>
+              <AppText style={styles.tileLabel}>Система{'\n'}опублик.</AppText>
             </View>
             <View style={[styles.tile, styles.tileOrange]}>
-              <Text style={styles.tileNum}>{diff.counts.systemArchived}</Text>
-              <Text style={styles.tileLabel}>Система{'\n'}в архиве</Text>
+              <AppText style={styles.tileNum}>{diff.counts.systemArchived}</AppText>
+              <AppText style={styles.tileLabel}>Система{'\n'}в архиве</AppText>
             </View>
           </View>
 
           {/* Summary badges */}
           <View style={styles.summaryRow}>
             <View style={[styles.summaryBadge, diff.onOzonNotInSystem.length > 0 && styles.summaryBadgeWarn]}>
-              <Text style={[styles.summaryNum, diff.onOzonNotInSystem.length > 0 && styles.summaryNumWarn]}>
+              <AppText style={[styles.summaryNum, diff.onOzonNotInSystem.length > 0 && styles.summaryNumWarn]}>
                 {diff.onOzonNotInSystem.length}
-              </Text>
-              <Text style={styles.summaryLabel}>на Ozon,{'\n'}нет в системе</Text>
+              </AppText>
+              <AppText style={styles.summaryLabel}>на Ozon,{'\n'}нет в системе</AppText>
             </View>
             <View style={[styles.summaryBadge, diff.inSystemNotOnOzon.length > 0 && styles.summaryBadgeWarn]}>
-              <Text style={[styles.summaryNum, diff.inSystemNotOnOzon.length > 0 && styles.summaryNumWarn]}>
+              <AppText style={[styles.summaryNum, diff.inSystemNotOnOzon.length > 0 && styles.summaryNumWarn]}>
                 {diff.inSystemNotOnOzon.length}
-              </Text>
-              <Text style={styles.summaryLabel}>в системе,{'\n'}нет на Ozon</Text>
+              </AppText>
+              <AppText style={styles.summaryLabel}>в системе,{'\n'}нет на Ozon</AppText>
             </View>
           </View>
 
@@ -291,28 +291,28 @@ export default function OzonSyncScreen() {
               style={[styles.tabBtn, tab === 'ozon' && styles.tabBtnActive]}
               onPress={() => setTab('ozon')}
             >
-              <Text style={[styles.tabBtnText, tab === 'ozon' && styles.tabBtnTextActive]}>
+              <AppText style={[styles.tabBtnText, tab === 'ozon' && styles.tabBtnTextActive]}>
                 На Ozon ({diff.onOzonNotInSystem.length})
-              </Text>
+              </AppText>
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.tabBtn, tab === 'system' && styles.tabBtnActive]}
               onPress={() => setTab('system')}
             >
-              <Text style={[styles.tabBtnText, tab === 'system' && styles.tabBtnTextActive]}>
+              <AppText style={[styles.tabBtnText, tab === 'system' && styles.tabBtnTextActive]}>
                 В системе ({diff.inSystemNotOnOzon.length})
-              </Text>
+              </AppText>
             </TouchableOpacity>
           </View>
 
           {/* Select all row (only for ozon tab) */}
           {tab === 'ozon' && diff.onOzonNotInSystem.length > 0 && (
             <View style={styles.selectAllRow}>
-              <Text style={styles.selectAllCount}>Выбрано: {selected.size}</Text>
+              <AppText style={styles.selectAllCount}>Выбрано: {selected.size}</AppText>
               <TouchableOpacity onPress={allSelected ? deselectAll : selectAll}>
-                <Text style={styles.selectAllBtn}>
+                <AppText style={styles.selectAllBtn}>
                   {allSelected ? 'Снять всё' : 'Выбрать все'}
-                </Text>
+                </AppText>
               </TouchableOpacity>
             </View>
           )}
@@ -340,7 +340,7 @@ export default function OzonSyncScreen() {
             }
             contentContainerStyle={listData.length === 0 ? styles.emptyContainer : styles.listContent}
             ListEmptyComponent={
-              <Text style={styles.emptyText}>Расхождений нет</Text>
+              <AppText style={styles.emptyText}>Расхождений нет</AppText>
             }
           />
         </>
@@ -355,15 +355,15 @@ export default function OzonSyncScreen() {
             disabled={importing}
           >
             {importing ? (
-              <Text style={styles.importBtnText}>
+              <AppText style={styles.importBtnText}>
                 {importProgress
                   ? `Импорт… ${importProgress.done} / ${importProgress.total}`
                   : 'Подготовка…'}
-              </Text>
+              </AppText>
             ) : (
-              <Text style={styles.importBtnText}>
+              <AppText style={styles.importBtnText}>
                 Импортировать выбранные ({selected.size})
-              </Text>
+              </AppText>
             )}
           </TouchableOpacity>
         </View>

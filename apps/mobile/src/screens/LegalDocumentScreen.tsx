@@ -1,5 +1,6 @@
 import React from 'react';
-import { View, Text, ScrollView, StyleSheet } from 'react-native';
+import { View, ScrollView, StyleSheet } from 'react-native';
+import { AppText } from '../components/AppText';
 import { useRoute, RouteProp } from '@react-navigation/native';
 import type { AuthStackParamList } from '../navigation/AuthNavigator';
 
@@ -11,7 +12,7 @@ export function LegalDocumentScreen() {
   return (
     <View style={styles.container}>
       <ScrollView contentContainerStyle={styles.scroll}>
-        <Text style={styles.body}>{params.text}</Text>
+        <AppText style={styles.body}>{params.text}</AppText>
       </ScrollView>
     </View>
   );

@@ -1,11 +1,11 @@
 import React from 'react';
 import {
   TouchableOpacity,
-  Text,
   StyleSheet,
   ActivityIndicator,
   type ViewStyle,
 } from 'react-native';
+import { AppText } from './AppText';
 
 interface Props {
   title: string;
@@ -49,7 +49,7 @@ export function Button({
       {loading ? (
         <ActivityIndicator color={textColor} />
       ) : (
-        <Text style={[styles.text, { color: textColor }]}>{title}</Text>
+        <AppText style={[styles.text, { color: textColor }]}>{title}</AppText>
       )}
     </TouchableOpacity>
   );

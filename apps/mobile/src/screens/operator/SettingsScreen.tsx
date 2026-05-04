@@ -1,7 +1,6 @@
 import React, { useEffect, useState, useCallback } from "react";
 import {
   View,
-  Text,
   StyleSheet,
   Alert,
   TextInput,
@@ -13,6 +12,7 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from "react-native";
+import { AppText } from '../../components/AppText';
 import { useNavigation } from "@react-navigation/native";
 import { useAuth } from "../../hooks/useAuth";
 import { adminService } from "../../services/admin.service";
@@ -481,14 +481,14 @@ export function SettingsScreen() {
             >
               <View style={[styles.sectionHeader, { marginBottom: 0 }]}>
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.sectionTitle}>
+                  <AppText style={styles.sectionTitle}>
                     Управление пользователями
-                  </Text>
-                  <Text style={styles.sectionDesc}>
+                  </AppText>
+                  <AppText style={styles.sectionDesc}>
                     Создание, редактирование и удаление пользователей.
-                  </Text>
+                  </AppText>
                 </View>
-                <Text style={styles.userMgmtArrow}>›</Text>
+                <AppText style={styles.userMgmtArrow}>›</AppText>
               </View>
             </TouchableOpacity>
 
@@ -500,13 +500,13 @@ export function SettingsScreen() {
             >
               <View style={[styles.sectionHeader, { marginBottom: 0 }]}>
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.sectionTitle}>Магазины Ozon</Text>
-                  <Text style={styles.sectionDesc}>
+                  <AppText style={styles.sectionTitle}>Магазины Ozon</AppText>
+                  <AppText style={styles.sectionDesc}>
                     Подключённые магазины. Выбор магазина происходит при
                     загрузке товаров.
-                  </Text>
+                  </AppText>
                 </View>
-                <Text style={{ fontSize: 20, color: "#1976D2" }}>›</Text>
+                <AppText style={{ fontSize: 20, color: "#1976D2" }}>›</AppText>
               </View>
             </TouchableOpacity>
 
@@ -518,13 +518,13 @@ export function SettingsScreen() {
             >
               <View style={[styles.sectionHeader, { marginBottom: 0 }]}>
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.sectionTitle}>Сверка с Озоном</Text>
-                  <Text style={styles.sectionDesc}>
+                  <AppText style={styles.sectionTitle}>Сверка с Озоном</AppText>
+                  <AppText style={styles.sectionDesc}>
                     Сравнение количества товаров на Ozon и в системе. Показывает
                     расхождения по конкретным SKU.
-                  </Text>
+                  </AppText>
                 </View>
-                <Text style={{ fontSize: 20, color: "#1976D2" }}>›</Text>
+                <AppText style={{ fontSize: 20, color: "#1976D2" }}>›</AppText>
               </View>
             </TouchableOpacity>
 
@@ -536,13 +536,13 @@ export function SettingsScreen() {
             >
               <View style={[styles.sectionHeader, { marginBottom: 0 }]}>
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.sectionTitle}>Импорт с Озона</Text>
-                  <Text style={styles.sectionDesc}>
+                  <AppText style={styles.sectionTitle}>Импорт с Озона</AppText>
+                  <AppText style={styles.sectionDesc}>
                     Загрузить в систему товары, уже опубликованные в магазине на
                     Озоне
-                  </Text>
+                  </AppText>
                 </View>
-                <Text style={{ fontSize: 20, color: "#1976D2" }}>›</Text>
+                <AppText style={{ fontSize: 20, color: "#1976D2" }}>›</AppText>
               </View>
             </TouchableOpacity> */}
 
@@ -588,18 +588,18 @@ export function SettingsScreen() {
             >
               <View style={[styles.sectionHeader, { marginBottom: 0 }]}>
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.sectionTitle}>
+                  <AppText style={styles.sectionTitle}>
                     Сбросить зависшие публикации
-                  </Text>
-                  <Text style={styles.sectionDesc}>
+                  </AppText>
+                  <AppText style={styles.sectionDesc}>
                     Исправить книги, застрявшие в статусе «Публикуется в Ozon»
                     более 24 часов
-                  </Text>
+                  </AppText>
                 </View>
                 {resettingStuck ? (
                   <ActivityIndicator size="small" color="#1976D2" />
                 ) : (
-                  <Text style={{ fontSize: 20, color: "#1976D2" }}>›</Text>
+                  <AppText style={{ fontSize: 20, color: "#1976D2" }}>›</AppText>
                 )}
               </View>
             </TouchableOpacity> */}
@@ -640,18 +640,18 @@ export function SettingsScreen() {
             >
               <View style={[styles.sectionHeader, { marginBottom: 0 }]}>
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.sectionTitle}>
+                  <AppText style={styles.sectionTitle}>
                     Восстановить failed карточки
-                  </Text>
-                  <Text style={styles.sectionDesc}>
+                  </AppText>
+                  <AppText style={styles.sectionDesc}>
                     Найти карточки с ошибкой публикации, которые реально
                     опубликованы на Ozon
-                  </Text>
+                  </AppText>
                 </View>
                 {repairing ? (
                   <ActivityIndicator size="small" color="#1976D2" />
                 ) : (
-                  <Text style={{ fontSize: 20, color: "#1976D2" }}>›</Text>
+                  <AppText style={{ fontSize: 20, color: "#1976D2" }}>›</AppText>
                 )}
               </View>
             </TouchableOpacity> */}
@@ -693,18 +693,18 @@ export function SettingsScreen() {
             >
               <View style={[styles.sectionHeader, { marginBottom: 0 }]}>
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.sectionTitle}>
+                  <AppText style={styles.sectionTitle}>
                     Привязать магазины к карточкам
-                  </Text>
-                  <Text style={styles.sectionDesc}>
+                  </AppText>
+                  <AppText style={styles.sectionDesc}>
                     Проставить магазин для карточек, опубликованных до
                     добавления этой функции
-                  </Text>
+                  </AppText>
                 </View>
                 {backfilling ? (
                   <ActivityIndicator size="small" color="#1976D2" />
                 ) : (
-                  <Text style={{ fontSize: 20, color: "#1976D2" }}>›</Text>
+                  <AppText style={{ fontSize: 20, color: "#1976D2" }}>›</AppText>
                 )}
               </View>
             </TouchableOpacity> */}
@@ -743,17 +743,17 @@ export function SettingsScreen() {
             >
               <View style={[styles.sectionHeader, { marginBottom: 0 }]}>
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.sectionTitle}>
+                  <AppText style={styles.sectionTitle}>
                     Синхронизировать с Ozon
-                  </Text>
-                  <Text style={styles.sectionDesc}>
+                  </AppText>
+                  <AppText style={styles.sectionDesc}>
                     Обновить статусы товаров: опубликован или в архиве
-                  </Text>
+                  </AppText>
                 </View>
                 {syncingOzon ? (
                   <ActivityIndicator size="small" color="#1976D2" />
                 ) : (
-                  <Text style={{ fontSize: 20, color: "#1976D2" }}>›</Text>
+                  <AppText style={{ fontSize: 20, color: "#1976D2" }}>›</AppText>
                 )}
               </View>
             </TouchableOpacity>
@@ -762,12 +762,12 @@ export function SettingsScreen() {
             <View style={styles.card}>
               <View style={styles.sectionHeader}>
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.sectionTitle}>
+                  <AppText style={styles.sectionTitle}>
                     Максимальное количество фото
-                  </Text>
-                  <Text style={styles.sectionDesc}>
+                  </AppText>
+                  <AppText style={styles.sectionDesc}>
                     Сколько фотографий оператор может загрузить для одной книги.
-                  </Text>
+                  </AppText>
                 </View>
               </View>
 
@@ -790,7 +790,7 @@ export function SettingsScreen() {
                       onPress={handleCancelMaxPhotos}
                       disabled={savingMaxPhotos}
                     >
-                      <Text style={styles.cancelBtnText}>Отмена</Text>
+                      <AppText style={styles.cancelBtnText}>Отмена</AppText>
                     </TouchableOpacity>
                     <TouchableOpacity
                       style={[
@@ -804,7 +804,7 @@ export function SettingsScreen() {
                       {savingMaxPhotos ? (
                         <ActivityIndicator size="small" color="#fff" />
                       ) : (
-                        <Text style={styles.saveBtnText}>Сохранить</Text>
+                        <AppText style={styles.saveBtnText}>Сохранить</AppText>
                       )}
                     </TouchableOpacity>
                   </View>
@@ -812,13 +812,13 @@ export function SettingsScreen() {
               ) : (
                 <View style={styles.inlineValueRow}>
                   <View style={styles.numberBadge}>
-                    <Text style={styles.numberBadgeText}>{maxPhotos}</Text>
+                    <AppText style={styles.numberBadgeText}>{maxPhotos}</AppText>
                   </View>
                   <TouchableOpacity
                     style={styles.editBtn}
                     onPress={handleStartEditMaxPhotos}
                   >
-                    <Text style={styles.editBtnText}>Изменить</Text>
+                    <AppText style={styles.editBtnText}>Изменить</AppText>
                   </TouchableOpacity>
                 </View>
               )}
@@ -828,18 +828,18 @@ export function SettingsScreen() {
             <View style={styles.card}>
               <View style={styles.sectionHeader}>
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.sectionTitle}>Формула расчёта цены</Text>
-                  <Text style={styles.sectionDesc}>
+                  <AppText style={styles.sectionTitle}>Формула расчёта цены</AppText>
+                  <AppText style={styles.sectionDesc}>
                     Параметры по которым рассчитывается итоговая цена на основе
                     данных от ИИ.
-                  </Text>
+                  </AppText>
                 </View>
               </View>
 
               {editingPrice ? (
                 <>
                   <View style={styles.priceRow}>
-                    <Text style={styles.priceLabel}>Цена не найдена (₽)</Text>
+                    <AppText style={styles.priceLabel}>Цена не найдена (₽)</AppText>
                     <TextInput
                       style={styles.priceInput}
                       value={draftPriceDefault}
@@ -849,7 +849,7 @@ export function SettingsScreen() {
                     />
                   </View>
                   <View style={styles.priceRow}>
-                    <Text style={styles.priceLabel}>Минимальная цена (₽)</Text>
+                    <AppText style={styles.priceLabel}>Минимальная цена (₽)</AppText>
                     <TextInput
                       style={styles.priceInput}
                       value={draftPriceMin}
@@ -859,7 +859,7 @@ export function SettingsScreen() {
                     />
                   </View>
                   <View style={styles.priceRow}>
-                    <Text style={styles.priceLabel}>Порог скидки (₽)</Text>
+                    <AppText style={styles.priceLabel}>Порог скидки (₽)</AppText>
                     <TextInput
                       style={styles.priceInput}
                       value={draftPriceDiscountThreshold}
@@ -869,9 +869,9 @@ export function SettingsScreen() {
                     />
                   </View>
                   <View style={styles.priceRow}>
-                    <Text style={styles.priceLabel}>
+                    <AppText style={styles.priceLabel}>
                       Скидка выше порога (%)
-                    </Text>
+                    </AppText>
                     <TextInput
                       style={styles.priceInput}
                       value={draftPriceDiscountPercent}
@@ -881,7 +881,7 @@ export function SettingsScreen() {
                     />
                   </View>
                   <View style={styles.priceRow}>
-                    <Text style={styles.priceLabel}>Коэффициент ИИ ×</Text>
+                    <AppText style={styles.priceLabel}>Коэффициент ИИ ×</AppText>
                     <TextInput
                       style={styles.priceInput}
                       value={draftPriceAiMultiplier}
@@ -896,7 +896,7 @@ export function SettingsScreen() {
                       onPress={handleCancelPrice}
                       disabled={savingPrice}
                     >
-                      <Text style={styles.cancelBtnText}>Отмена</Text>
+                      <AppText style={styles.cancelBtnText}>Отмена</AppText>
                     </TouchableOpacity>
                     <TouchableOpacity
                       style={[
@@ -910,7 +910,7 @@ export function SettingsScreen() {
                       {savingPrice ? (
                         <ActivityIndicator size="small" color="#fff" />
                       ) : (
-                        <Text style={styles.saveBtnText}>Сохранить</Text>
+                        <AppText style={styles.saveBtnText}>Сохранить</AppText>
                       )}
                     </TouchableOpacity>
                   </View>
@@ -918,40 +918,40 @@ export function SettingsScreen() {
               ) : (
                 <>
                   <View style={styles.priceFormulaBox}>
-                    <Text style={styles.priceFormulaLine}>
+                    <AppText style={styles.priceFormulaLine}>
                       Цена не найдена →{" "}
-                      <Text style={styles.priceFormulaValue}>
+                      <AppText style={styles.priceFormulaValue}>
                         {priceDefault} ₽
-                      </Text>
-                    </Text>
-                    <Text style={styles.priceFormulaLine}>
+                      </AppText>
+                    </AppText>
+                    <AppText style={styles.priceFormulaLine}>
                       Цена &lt; {priceMin} ₽ →{" "}
-                      <Text style={styles.priceFormulaValue}>{priceMin} ₽</Text>
-                    </Text>
-                    <Text style={styles.priceFormulaLine}>
+                      <AppText style={styles.priceFormulaValue}>{priceMin} ₽</AppText>
+                    </AppText>
+                    <AppText style={styles.priceFormulaLine}>
                       Цена &gt; {priceDiscountThreshold} ₽ →{" "}
-                      <Text style={styles.priceFormulaValue}>
+                      <AppText style={styles.priceFormulaValue}>
                         цена − {priceDiscountPercent}%
-                      </Text>
-                    </Text>
-                    <Text style={styles.priceFormulaLine}>
+                      </AppText>
+                    </AppText>
+                    <AppText style={styles.priceFormulaLine}>
                       Иначе →{" "}
-                      <Text style={styles.priceFormulaValue}>
+                      <AppText style={styles.priceFormulaValue}>
                         цена без изменений
-                      </Text>
-                    </Text>
-                    <Text style={[styles.priceFormulaLine, { marginTop: 6 }]}>
+                      </AppText>
+                    </AppText>
+                    <AppText style={[styles.priceFormulaLine, { marginTop: 6 }]}>
                       Коэффициент ИИ →{" "}
-                      <Text style={styles.priceFormulaValue}>
+                      <AppText style={styles.priceFormulaValue}>
                         ×{priceAiMultiplier}
-                      </Text>
-                    </Text>
+                      </AppText>
+                    </AppText>
                   </View>
                   <TouchableOpacity
                     style={styles.editBtn}
                     onPress={handleStartEditPrice}
                   >
-                    <Text style={styles.editBtnText}>Изменить</Text>
+                    <AppText style={styles.editBtnText}>Изменить</AppText>
                   </TouchableOpacity>
                 </>
               )}
@@ -961,13 +961,13 @@ export function SettingsScreen() {
             <View style={styles.card}>
               <View style={styles.sectionHeader}>
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.sectionTitle}>
+                  <AppText style={styles.sectionTitle}>
                     AI-промпт для распознавания
-                  </Text>
-                  <Text style={styles.sectionDesc}>
+                  </AppText>
+                  <AppText style={styles.sectionDesc}>
                     Этот промпт передаётся в ИИ при извлечении данных из
                     фотографий книг.
-                  </Text>
+                  </AppText>
                 </View>
               </View>
 
@@ -990,7 +990,7 @@ export function SettingsScreen() {
                       onPress={handleCancelPrompt}
                       disabled={savingPrompt}
                     >
-                      <Text style={styles.cancelBtnText}>Отмена</Text>
+                      <AppText style={styles.cancelBtnText}>Отмена</AppText>
                     </TouchableOpacity>
                     <TouchableOpacity
                       style={[
@@ -1004,7 +1004,7 @@ export function SettingsScreen() {
                       {savingPrompt ? (
                         <ActivityIndicator size="small" color="#fff" />
                       ) : (
-                        <Text style={styles.saveBtnText}>Сохранить</Text>
+                        <AppText style={styles.saveBtnText}>Сохранить</AppText>
                       )}
                     </TouchableOpacity>
                   </View>
@@ -1012,15 +1012,15 @@ export function SettingsScreen() {
               ) : (
                 <>
                   <View style={styles.promptTextBox}>
-                    <Text style={styles.promptText}>
+                    <AppText style={styles.promptText}>
                       {aiPrompt || "Промпт не задан"}
-                    </Text>
+                    </AppText>
                   </View>
                   <TouchableOpacity
                     style={styles.editBtn}
                     onPress={handleStartEditPrompt}
                   >
-                    <Text style={styles.editBtnText}>Изменить</Text>
+                    <AppText style={styles.editBtnText}>Изменить</AppText>
                   </TouchableOpacity>
                 </>
               )}
@@ -1030,16 +1030,16 @@ export function SettingsScreen() {
             <View style={styles.card}>
               <View style={styles.sectionHeader}>
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.sectionTitle}>Технические работы</Text>
-                  <Text style={styles.sectionDesc}>
+                  <AppText style={styles.sectionTitle}>Технические работы</AppText>
+                  <AppText style={styles.sectionDesc}>
                     Управление режимом обслуживания сервера. При включении
                     пользователи увидят экран технических работ.
-                  </Text>
+                  </AppText>
                 </View>
               </View>
 
               <View style={styles.maintenanceToggleRow}>
-                <Text
+                <AppText
                   style={[
                     styles.maintenanceToggleLabel,
                     maintenanceEnabled && styles.maintenanceToggleLabelActive,
@@ -1048,7 +1048,7 @@ export function SettingsScreen() {
                   {maintenanceEnabled
                     ? "🔴  Технические работы ВКЛЮЧЕНЫ"
                     : "🟢  Технические работы выключены"}
-                </Text>
+                </AppText>
                 <Switch
                   value={maintenanceEnabled}
                   onValueChange={setMaintenanceEnabled}
@@ -1057,9 +1057,9 @@ export function SettingsScreen() {
                 />
               </View>
 
-              <Text style={styles.maintenanceFieldLabel}>
+              <AppText style={styles.maintenanceFieldLabel}>
                 Дата и время начала (ДД.ММ.ГГГГ ЧЧ:ММ)
-              </Text>
+              </AppText>
               <View style={styles.maintenanceDateRow}>
                 <TextInput
                   style={[
@@ -1092,14 +1092,14 @@ export function SettingsScreen() {
                     }}
                     activeOpacity={0.7}
                   >
-                    <Text style={styles.maintenanceDateChipText}>{label}</Text>
+                    <AppText style={styles.maintenanceDateChipText}>{label}</AppText>
                   </TouchableOpacity>
                 ))}
               </View>
 
-              <Text style={[styles.maintenanceFieldLabel, { marginTop: 8 }]}>
+              <AppText style={[styles.maintenanceFieldLabel, { marginTop: 8 }]}>
                 Примерное окончание (ДД.ММ.ГГГГ ЧЧ:ММ)
-              </Text>
+              </AppText>
               <TextInput
                 style={styles.maintenanceInput}
                 value={maintenanceEndAt}
@@ -1127,14 +1127,14 @@ export function SettingsScreen() {
                     }}
                     activeOpacity={0.7}
                   >
-                    <Text style={styles.maintenanceDateChipText}>{label}</Text>
+                    <AppText style={styles.maintenanceDateChipText}>{label}</AppText>
                   </TouchableOpacity>
                 ))}
               </View>
 
-              <Text style={styles.maintenanceFieldLabel}>
+              <AppText style={styles.maintenanceFieldLabel}>
                 За сколько минут показывать предупреждение
-              </Text>
+              </AppText>
               <TextInput
                 style={styles.maintenanceInput}
                 value={maintenanceWarningMinutes}
@@ -1144,9 +1144,9 @@ export function SettingsScreen() {
                 keyboardType="number-pad"
               />
 
-              <Text style={styles.maintenanceFieldLabel}>
+              <AppText style={styles.maintenanceFieldLabel}>
                 Причина / сообщение для пользователей
-              </Text>
+              </AppText>
               <TextInput
                 style={[styles.maintenanceInput, styles.maintenanceTextArea]}
                 value={maintenanceMessage}
@@ -1157,9 +1157,9 @@ export function SettingsScreen() {
                 numberOfLines={3}
               />
 
-              <Text style={styles.maintenanceFieldLabel}>
+              <AppText style={styles.maintenanceFieldLabel}>
                 Инструкции для пользователей (необязательно)
-              </Text>
+              </AppText>
               <TextInput
                 style={[styles.maintenanceInput, styles.maintenanceTextArea]}
                 value={maintenanceInstructions}
@@ -1184,7 +1184,7 @@ export function SettingsScreen() {
                 {savingMaintenance ? (
                   <ActivityIndicator size="small" color="#fff" />
                 ) : (
-                  <Text style={styles.maintenanceSaveBtnText}>Сохранить</Text>
+                  <AppText style={styles.maintenanceSaveBtnText}>Сохранить</AppText>
                 )}
               </TouchableOpacity>
             </View>

@@ -3,7 +3,6 @@ import {
   View,
   FlatList,
   StyleSheet,
-  Text,
   TouchableOpacity,
   Image,
   Alert,
@@ -12,6 +11,7 @@ import {
   TouchableWithoutFeedback,
   RefreshControl,
 } from "react-native";
+import { AppText } from '../../components/AppText';
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { adminService, type OzonStore, type OzonStoreLimits } from "../../services/admin.service";
@@ -49,19 +49,19 @@ const OcrBookItem = React.memo(function OcrBookItem({
           <Image source={{ uri: coverPhoto.fileUrl }} style={styles.image} />
         ) : (
           <View style={[styles.image, styles.placeholder]}>
-            <Text style={styles.placeholderText}>Нет фото</Text>
+            <AppText style={styles.placeholderText}>Нет фото</AppText>
           </View>
         )}
         {selectMode && (
           <View style={[styles.checkbox, isSelected && styles.checkboxSelected]}>
-            {isSelected && <Text style={styles.checkmark}>✓</Text>}
+            {isSelected && <AppText style={styles.checkmark}>✓</AppText>}
           </View>
         )}
       </View>
       <View style={styles.info}>
-        <Text style={styles.title} numberOfLines={2}>{item.title}</Text>
-        <Text style={styles.sku}>{item.sku}</Text>
-        <Text style={styles.errorBadge}>ИИ не определил книгу</Text>
+        <AppText style={styles.title} numberOfLines={2}>{item.title}</AppText>
+        <AppText style={styles.sku}>{item.sku}</AppText>
+        <AppText style={styles.errorBadge}>ИИ не определил книгу</AppText>
       </View>
     </TouchableOpacity>
   );
@@ -98,20 +98,20 @@ const OzonFailedItem = React.memo(function OzonFailedItem({
           <Image source={{ uri: coverPhoto.fileUrl }} style={styles.image} />
         ) : (
           <View style={[styles.image, styles.placeholder]}>
-            <Text style={styles.placeholderText}>Нет фото</Text>
+            <AppText style={styles.placeholderText}>Нет фото</AppText>
           </View>
         )}
         {selectMode && (
           <View style={[styles.checkbox, isSelected && styles.checkboxSelected]}>
-            {isSelected && <Text style={styles.checkmark}>✓</Text>}
+            {isSelected && <AppText style={styles.checkmark}>✓</AppText>}
           </View>
         )}
       </View>
       <View style={styles.info}>
-        <Text style={styles.title} numberOfLines={2}>{item.title}</Text>
-        <Text style={styles.sku}>{item.sku}</Text>
+        <AppText style={styles.title} numberOfLines={2}>{item.title}</AppText>
+        <AppText style={styles.sku}>{item.sku}</AppText>
         {item.ozonProduct?.errorMessage ? (
-          <Text style={styles.errorText} numberOfLines={2}>{item.ozonProduct.errorMessage}</Text>
+          <AppText style={styles.errorText} numberOfLines={2}>{item.ozonProduct.errorMessage}</AppText>
         ) : null}
         {!selectMode && (
           <TouchableOpacity
@@ -123,7 +123,7 @@ const OzonFailedItem = React.memo(function OzonFailedItem({
             {isRetrying ? (
               <ActivityIndicator size="small" color="#fff" />
             ) : (
-              <Text style={styles.retryBtnText}>Повторить</Text>
+              <AppText style={styles.retryBtnText}>Повторить</AppText>
             )}
           </TouchableOpacity>
         )}
@@ -185,7 +185,7 @@ export function ErrorsScreen() {
             onPress={exitSelectMode}
             style={{ width: 44, height: 44, backgroundColor: "#1976D2", alignItems: "center", justifyContent: "center" }}
           >
-            <Text style={{ color: "#fff", fontSize: 15, fontWeight: "600" }}>Отмена</Text>
+            <AppText style={{ color: "#fff", fontSize: 15, fontWeight: "600" }}>Отмена</AppText>
           </TouchableOpacity>
         ),
       });
@@ -196,7 +196,7 @@ export function ErrorsScreen() {
             onPress={() => setMenuVisible(true)}
             style={{ width: 44, height: 44, backgroundColor: "#1976D2", alignItems: "center", justifyContent: "center" }}
           >
-            <Text style={{ color: "#fff", fontSize: 22, fontWeight: "700", letterSpacing: 1 }}>⋮</Text>
+            <AppText style={{ color: "#fff", fontSize: 22, fontWeight: "700", letterSpacing: 1 }}>⋮</AppText>
           </TouchableOpacity>
         ),
       });
@@ -494,7 +494,7 @@ export function ErrorsScreen() {
                     setActiveSelectMode(true);
                   }}
                 >
-                  <Text style={styles.menuItemText}>Выбрать несколько</Text>
+                  <AppText style={styles.menuItemText}>Выбрать несколько</AppText>
                 </TouchableOpacity>
               </View>
             </TouchableWithoutFeedback>
@@ -513,7 +513,7 @@ export function ErrorsScreen() {
           <View style={styles.menuOverlay}>
             <TouchableWithoutFeedback>
               <View style={styles.menuContainer}>
-                <Text style={styles.storePickerTitle}>Выберите магазин Ozon</Text>
+                <AppText style={styles.storePickerTitle}>Выберите магазин Ozon</AppText>
                 {stores.map((store) => {
                   const count = pendingPublishAction
                     ? pendingPublishAction.type === "single" ? 1 : pendingPublishAction.ids.length
@@ -541,8 +541,8 @@ export function ErrorsScreen() {
                         }
                       }}
                     >
-                      <Text style={[styles.menuItemText, blocked && styles.storeItemBlockedText]}>{store.name}</Text>
-                      <Text style={[styles.storeLimitText, warn && styles.storeLimitWarn]}>{label}</Text>
+                      <AppText style={[styles.menuItemText, blocked && styles.storeItemBlockedText]}>{store.name}</AppText>
+                      <AppText style={[styles.storeLimitText, warn && styles.storeLimitWarn]}>{label}</AppText>
                     </TouchableOpacity>
                   );
                 })}
@@ -564,7 +564,7 @@ export function ErrorsScreen() {
             <TouchableWithoutFeedback>
               <View style={styles.bulkSheet}>
                 <View style={styles.bulkHandle} />
-                <Text style={styles.bulkTitle}>Выбрано: {activeSelectedIds.size}</Text>
+                <AppText style={styles.bulkTitle}>Выбрано: {activeSelectedIds.size}</AppText>
                 <TouchableOpacity
                   style={styles.bulkItem}
                   activeOpacity={0.7}
@@ -573,11 +573,11 @@ export function ErrorsScreen() {
                   {bulkPublishing ? (
                     <ActivityIndicator size="small" color="#43A047" style={styles.bulkIcon} />
                   ) : (
-                    <Text style={styles.bulkIcon}>📤</Text>
+                    <AppText style={styles.bulkIcon}>📤</AppText>
                   )}
                   <View>
-                    <Text style={styles.bulkLabel}>Загрузить в Озон</Text>
-                    <Text style={styles.bulkDesc}>Отправить выбранные карточки на публикацию</Text>
+                    <AppText style={styles.bulkLabel}>Загрузить в Озон</AppText>
+                    <AppText style={styles.bulkDesc}>Отправить выбранные карточки на публикацию</AppText>
                   </View>
                 </TouchableOpacity>
                 <TouchableOpacity
@@ -588,11 +588,11 @@ export function ErrorsScreen() {
                   {bulkReExtracting ? (
                     <ActivityIndicator size="small" color="#1976D2" style={styles.bulkIcon} />
                   ) : (
-                    <Text style={styles.bulkIcon}>🔍</Text>
+                    <AppText style={styles.bulkIcon}>🔍</AppText>
                   )}
                   <View>
-                    <Text style={styles.bulkLabel}>Распознать заново</Text>
-                    <Text style={styles.bulkDesc}>ИИ перезапишет данные из фотографий</Text>
+                    <AppText style={styles.bulkLabel}>Распознать заново</AppText>
+                    <AppText style={styles.bulkDesc}>ИИ перезапишет данные из фотографий</AppText>
                   </View>
                 </TouchableOpacity>
                 <TouchableOpacity
@@ -603,11 +603,11 @@ export function ErrorsScreen() {
                   {bulkDeleting ? (
                     <ActivityIndicator size="small" color="#E53935" style={styles.bulkIcon} />
                   ) : (
-                    <Text style={styles.bulkIcon}>🗑️</Text>
+                    <AppText style={styles.bulkIcon}>🗑️</AppText>
                   )}
                   <View>
-                    <Text style={[styles.bulkLabel, styles.bulkLabelDanger]}>Удалить</Text>
-                    <Text style={styles.bulkDesc}>Безвозвратно удалить выбранные карточки</Text>
+                    <AppText style={[styles.bulkLabel, styles.bulkLabelDanger]}>Удалить</AppText>
+                    <AppText style={styles.bulkDesc}>Безвозвратно удалить выбранные карточки</AppText>
                   </View>
                 </TouchableOpacity>
               </View>
@@ -623,18 +623,18 @@ export function ErrorsScreen() {
           onPress={() => { exitSelectMode(); setActiveTab("ocr"); }}
           activeOpacity={0.7}
         >
-          <Text style={[styles.tabText, activeTab === "ocr" && styles.tabTextActive]}>
+          <AppText style={[styles.tabText, activeTab === "ocr" && styles.tabTextActive]}>
             Не распознаны{ocrBooks.length > 0 ? ` (${ocrBooks.length})` : ""}
-          </Text>
+          </AppText>
         </TouchableOpacity>
         <TouchableOpacity
           style={[styles.tab, activeTab === "ozon" && styles.tabActive]}
           onPress={() => { exitSelectMode(); setActiveTab("ozon"); }}
           activeOpacity={0.7}
         >
-          <Text style={[styles.tabText, activeTab === "ozon" && styles.tabTextActive]}>
+          <AppText style={[styles.tabText, activeTab === "ozon" && styles.tabTextActive]}>
             Ошибки Ozon{ozonBooks.length > 0 ? ` (${ozonBooks.length})` : ""}
-          </Text>
+          </AppText>
         </TouchableOpacity>
       </View>
 
@@ -657,7 +657,7 @@ export function ErrorsScreen() {
                 onRefresh={() => { setRefreshingOcr(true); fetchOcrBooks(); }}
               />
             }
-            ListEmptyComponent={<Text style={styles.empty}>Нет ошибок распознавания</Text>}
+            ListEmptyComponent={<AppText style={styles.empty}>Нет ошибок распознавания</AppText>}
           />
         )
       )}
@@ -681,7 +681,7 @@ export function ErrorsScreen() {
                 onRefresh={() => { setRefreshingOzon(true); fetchOzonBooks(); }}
               />
             }
-            ListEmptyComponent={<Text style={styles.empty}>Нет ошибок публикации</Text>}
+            ListEmptyComponent={<AppText style={styles.empty}>Нет ошибок публикации</AppText>}
           />
         )
       )}
@@ -689,7 +689,7 @@ export function ErrorsScreen() {
       {/* Bottom bar (select mode) */}
       {activeSelectMode && (
         <View style={styles.bottomBar}>
-          <Text style={styles.bottomBarCount}>Выбрано: {activeSelectedIds.size}</Text>
+          <AppText style={styles.bottomBarCount}>Выбрано: {activeSelectedIds.size}</AppText>
           <TouchableOpacity
             style={[
               styles.bottomBarBtn,
@@ -702,7 +702,7 @@ export function ErrorsScreen() {
             {isAnyBulkBusy ? (
               <ActivityIndicator size="small" color="#fff" />
             ) : (
-              <Text style={styles.bottomBarBtnText}>Действия</Text>
+              <AppText style={styles.bottomBarBtnText}>Действия</AppText>
             )}
           </TouchableOpacity>
         </View>

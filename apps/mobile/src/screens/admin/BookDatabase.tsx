@@ -4,7 +4,6 @@ import {
   FlatList,
   StyleSheet,
   RefreshControl,
-  Text,
   TouchableOpacity,
   ScrollView,
   ActivityIndicator,
@@ -15,6 +14,7 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from "react-native";
+import { AppText } from '../../components/AppText';
 import {
   useFocusEffect,
   useNavigation,
@@ -45,14 +45,14 @@ function FilterTag({
 }) {
   return (
     <View style={tagStyles.tag}>
-      <Text style={tagStyles.label} numberOfLines={1}>
+      <AppText style={tagStyles.label} numberOfLines={1}>
         {label}
-      </Text>
+      </AppText>
       <TouchableOpacity
         onPress={onRemove}
         hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
       >
-        <Text style={tagStyles.remove}>✕</Text>
+        <AppText style={tagStyles.remove}>✕</AppText>
       </TouchableOpacity>
     </View>
   );
@@ -95,20 +95,20 @@ function FilterRow({
 }) {
   return (
     <View style={rowStyles.row}>
-      <Text style={rowStyles.label}>{label}</Text>
-      <Text
+      <AppText style={rowStyles.label}>{label}</AppText>
+      <AppText
         style={[rowStyles.value, !value && rowStyles.valuePlaceholder]}
         numberOfLines={1}
       >
         {value ?? "—"}
-      </Text>
+      </AppText>
       {value ? (
         <TouchableOpacity
           style={rowStyles.btn}
           onPress={onClear}
           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
         >
-          <Text style={rowStyles.clearIcon}>✕</Text>
+          <AppText style={rowStyles.clearIcon}>✕</AppText>
         </TouchableOpacity>
       ) : (
         <TouchableOpacity
@@ -116,7 +116,7 @@ function FilterRow({
           onPress={onOpen}
           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
         >
-          <Text style={rowStyles.plusIcon}>+</Text>
+          <AppText style={rowStyles.plusIcon}>+</AppText>
         </TouchableOpacity>
       )}
     </View>
@@ -517,14 +517,14 @@ export function BookDatabaseScreen() {
           ]}
           onPress={() => setShowFilters(!showFilters)}
         >
-          <Text
+          <AppText
             style={[
               styles.filterBtnText,
               activeFilterCount > 0 && styles.filterBtnTextActive,
             ]}
           >
             Фильтры{activeFilterCount > 0 ? ` (${activeFilterCount})` : ""}
-          </Text>
+          </AppText>
         </TouchableOpacity>
       </View>
 
@@ -614,7 +614,7 @@ export function BookDatabaseScreen() {
           />
           {activeFilterCount > 0 && (
             <TouchableOpacity style={styles.resetBtn} onPress={resetFilters}>
-              <Text style={styles.resetBtnText}>Сбросить фильтры</Text>
+              <AppText style={styles.resetBtnText}>Сбросить фильтры</AppText>
             </TouchableOpacity>
           )}
         </View>
@@ -636,7 +636,7 @@ export function BookDatabaseScreen() {
             <TouchableWithoutFeedback>
               <View style={styles.pickerSheet}>
                 <View style={styles.pickerSheetHeader}>
-                  <Text style={styles.pickerSheetTitle}>
+                  <AppText style={styles.pickerSheetTitle}>
                     {activePickerFilter === "status"
                       ? "Статус"
                       : activePickerFilter === "boxId"
@@ -650,9 +650,9 @@ export function BookDatabaseScreen() {
                               : activePickerFilter === "year"
                                 ? "Год издания"
                                 : "Тираж"}
-                  </Text>
+                  </AppText>
                   <TouchableOpacity onPress={() => setActivePickerFilter(null)}>
-                    <Text style={styles.pickerDoneBtn}>Закрыть</Text>
+                    <AppText style={styles.pickerDoneBtn}>Закрыть</AppText>
                   </TouchableOpacity>
                 </View>
 
@@ -685,14 +685,14 @@ export function BookDatabaseScreen() {
                               setActivePickerFilter(null);
                             }}
                           >
-                            <Text
+                            <AppText
                               style={[
                                 styles.chipText,
                                 active && styles.chipTextActive,
                               ]}
                             >
                               {label}
-                            </Text>
+                            </AppText>
                           </TouchableOpacity>
                         );
                       })}
@@ -744,16 +744,16 @@ export function BookDatabaseScreen() {
                               setActivePickerFilter(null);
                             }}
                           >
-                            <Text
+                            <AppText
                               style={[
                                 styles.pickerListItemText,
                                 active && styles.pickerListItemTextActive,
                               ]}
                             >
                               {item.boxNumber}
-                            </Text>
+                            </AppText>
                             {active && (
-                              <Text style={styles.pickerListCheckmark}>✓</Text>
+                              <AppText style={styles.pickerListCheckmark}>✓</AppText>
                             )}
                           </TouchableOpacity>
                         );
@@ -806,16 +806,16 @@ export function BookDatabaseScreen() {
                               setActivePickerFilter(null);
                             }}
                           >
-                            <Text
+                            <AppText
                               style={[
                                 styles.pickerListItemText,
                                 active && styles.pickerListItemTextActive,
                               ]}
                             >
                               {item.fullName}
-                            </Text>
+                            </AppText>
                             {active && (
-                              <Text style={styles.pickerListCheckmark}>✓</Text>
+                              <AppText style={styles.pickerListCheckmark}>✓</AppText>
                             )}
                           </TouchableOpacity>
                         );
@@ -836,7 +836,7 @@ export function BookDatabaseScreen() {
                           tempDateTo ? new Date(tempDateTo) : undefined
                         }
                       />
-                      <Text style={styles.rangeSep}>—</Text>
+                      <AppText style={styles.rangeSep}>—</AppText>
                       <DatePickerInput
                         value={tempDateTo}
                         onChange={setTempDateTo}
@@ -850,7 +850,7 @@ export function BookDatabaseScreen() {
                       style={[styles.applyBtn, { marginTop: 16 }]}
                       onPress={() => applyRangeFilter("date")}
                     >
-                      <Text style={styles.applyBtnText}>Применить</Text>
+                      <AppText style={styles.applyBtnText}>Применить</AppText>
                     </TouchableOpacity>
                   </View>
                 )}
@@ -869,7 +869,7 @@ export function BookDatabaseScreen() {
                           style={{ marginBottom: 0 }}
                         />
                       </View>
-                      <Text style={styles.rangeSep}>—</Text>
+                      <AppText style={styles.rangeSep}>—</AppText>
                       <View style={{ flex: 1 }}>
                         <Input
                           label=""
@@ -885,7 +885,7 @@ export function BookDatabaseScreen() {
                       style={[styles.applyBtn, { marginTop: 16 }]}
                       onPress={() => applyRangeFilter("price")}
                     >
-                      <Text style={styles.applyBtnText}>Применить</Text>
+                      <AppText style={styles.applyBtnText}>Применить</AppText>
                     </TouchableOpacity>
                   </View>
                 )}
@@ -904,7 +904,7 @@ export function BookDatabaseScreen() {
                           style={{ marginBottom: 0 }}
                         />
                       </View>
-                      <Text style={styles.rangeSep}>—</Text>
+                      <AppText style={styles.rangeSep}>—</AppText>
                       <View style={{ flex: 1 }}>
                         <Input
                           label=""
@@ -920,7 +920,7 @@ export function BookDatabaseScreen() {
                       style={[styles.applyBtn, { marginTop: 16 }]}
                       onPress={() => applyRangeFilter("year")}
                     >
-                      <Text style={styles.applyBtnText}>Применить</Text>
+                      <AppText style={styles.applyBtnText}>Применить</AppText>
                     </TouchableOpacity>
                   </View>
                 )}
@@ -939,7 +939,7 @@ export function BookDatabaseScreen() {
                           style={{ marginBottom: 0 }}
                         />
                       </View>
-                      <Text style={styles.rangeSep}>—</Text>
+                      <AppText style={styles.rangeSep}>—</AppText>
                       <View style={{ flex: 1 }}>
                         <Input
                           label=""
@@ -955,7 +955,7 @@ export function BookDatabaseScreen() {
                       style={[styles.applyBtn, { marginTop: 16 }]}
                       onPress={() => applyRangeFilter("printRun")}
                     >
-                      <Text style={styles.applyBtnText}>Применить</Text>
+                      <AppText style={styles.applyBtnText}>Применить</AppText>
                     </TouchableOpacity>
                   </View>
                 )}
@@ -997,13 +997,13 @@ export function BookDatabaseScreen() {
           onEndReachedThreshold={0.3}
           ListEmptyComponent={
             <View style={styles.emptyContainer}>
-              <Text style={styles.empty}>Нет результатов</Text>
+              <AppText style={styles.empty}>Нет результатов</AppText>
               {activeFilterCount > 0 && (
                 <TouchableOpacity
                   style={styles.emptyResetBtn}
                   onPress={resetFilters}
                 >
-                  <Text style={styles.emptyResetText}>Сбросить фильтры</Text>
+                  <AppText style={styles.emptyResetText}>Сбросить фильтры</AppText>
                 </TouchableOpacity>
               )}
             </View>

@@ -1,12 +1,12 @@
 import React, { useState } from "react";
 import {
   View,
-  Text,
   StyleSheet,
   TouchableOpacity,
   ScrollView,
   SafeAreaView,
 } from "react-native";
+import { AppText } from '../components/AppText';
 import { NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 
@@ -96,12 +96,12 @@ function DevMenu({ onSelect }: { onSelect: (key: string) => void }) {
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView contentContainerStyle={styles.scroll}>
-        <Text style={styles.header}>DEV PANEL</Text>
-        <Text style={styles.hint}>Нажмите на экран для просмотра</Text>
+        <AppText style={styles.header}>DEV PANEL</AppText>
+        <AppText style={styles.hint}>Нажмите на экран для просмотра</AppText>
 
         {groups.map((group) => (
           <View key={group} style={styles.group}>
-            <Text style={styles.groupTitle}>{group}</Text>
+            <AppText style={styles.groupTitle}>{group}</AppText>
             {SCREENS.filter((s) => s.group === group).map((screen) => (
               <TouchableOpacity
                 key={screen.key}
@@ -109,8 +109,8 @@ function DevMenu({ onSelect }: { onSelect: (key: string) => void }) {
                 onPress={() => onSelect(screen.key)}
                 activeOpacity={0.6}
               >
-                <Text style={styles.itemText}>{screen.title}</Text>
-                <Text style={styles.arrow}>›</Text>
+                <AppText style={styles.itemText}>{screen.title}</AppText>
+                <AppText style={styles.arrow}>›</AppText>
               </TouchableOpacity>
             ))}
           </View>
@@ -146,9 +146,9 @@ export function DevNavigator() {
             title: `[DEV] ${screen.title}`,
             headerLeft: () => (
               <TouchableOpacity onPress={() => setActiveScreen(null)}>
-                <Text style={{ color: "#fff", fontSize: 16, marginRight: 12 }}>
+                <AppText style={{ color: "#fff", fontSize: 16, marginRight: 12 }}>
                   ← Меню
-                </Text>
+                </AppText>
               </TouchableOpacity>
             ),
           }}

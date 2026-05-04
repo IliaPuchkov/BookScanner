@@ -4,11 +4,11 @@ import {
   SectionList,
   StyleSheet,
   RefreshControl,
-  Text,
   TouchableOpacity,
   Alert,
   ActivityIndicator,
 } from "react-native";
+import { AppText } from '../../components/AppText';
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import { type NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { BookCard } from "../../components/Card";
@@ -195,19 +195,19 @@ export function CardsListScreen() {
   if (!session) {
     return (
       <View style={styles.centered}>
-        <Text style={styles.noSessionTitle}>Нет активной сессии</Text>
-        <Text style={styles.noSessionHint}>
+        <AppText style={styles.noSessionTitle}>Нет активной сессии</AppText>
+        <AppText style={styles.noSessionHint}>
           Начните рабочую сессию, чтобы создавать карточки книг
-        </Text>
+        </AppText>
         <TouchableOpacity
           style={styles.startButton}
           onPress={handleStartSession}
           activeOpacity={0.8}
           disabled={starting}
         >
-          <Text style={styles.startButtonText}>
+          <AppText style={styles.startButtonText}>
             {starting ? "Запуск..." : "Начать рабочую сессию"}
-          </Text>
+          </AppText>
         </TouchableOpacity>
       </View>
     );
@@ -223,15 +223,15 @@ export function CardsListScreen() {
     <View style={styles.container}>
       <View style={styles.sessionHeader}>
         <View style={styles.sessionInfo}>
-          <Text style={styles.sessionLabel}>Сессия с {sessionStart}</Text>
-          <Text style={styles.sessionCount}>Карточек: {totalCount}</Text>
+          <AppText style={styles.sessionLabel}>Сессия с {sessionStart}</AppText>
+          <AppText style={styles.sessionCount}>Карточек: {totalCount}</AppText>
         </View>
         <TouchableOpacity
           style={styles.endButton}
           onPress={handleEndSession}
           activeOpacity={0.8}
         >
-          <Text style={styles.endButtonText}>Завершить</Text>
+          <AppText style={styles.endButtonText}>Завершить</AppText>
         </TouchableOpacity>
       </View>
 
@@ -255,10 +255,10 @@ export function CardsListScreen() {
             : section.data.length;
           return (
             <View style={styles.sectionHeader}>
-              <Text style={styles.sectionHeaderText}>
+              <AppText style={styles.sectionHeaderText}>
                 📦 Коробка {section.title}
-              </Text>
-              <Text style={styles.sectionHeaderCount}>{count} шт.</Text>
+              </AppText>
+              <AppText style={styles.sectionHeaderCount}>{count} шт.</AppText>
             </View>
           );
         }}
@@ -271,8 +271,8 @@ export function CardsListScreen() {
         stickySectionHeadersEnabled={false}
         ListEmptyComponent={
           <View style={styles.empty}>
-            <Text style={styles.emptyText}>Нет карточек в этой сессии</Text>
-            <Text style={styles.emptyHint}>Нажмите + чтобы создать первую</Text>
+            <AppText style={styles.emptyText}>Нет карточек в этой сессии</AppText>
+            <AppText style={styles.emptyHint}>Нажмите + чтобы создать первую</AppText>
           </View>
         }
       />
@@ -284,7 +284,7 @@ export function CardsListScreen() {
         }
         activeOpacity={0.8}
       >
-        <Text style={styles.fabText}>+</Text>
+        <AppText style={styles.fabText}>+</AppText>
       </TouchableOpacity>
     </View>
   );

@@ -1,7 +1,6 @@
 import React, { useState } from "react";
 import {
   View,
-  Text,
   StyleSheet,
   KeyboardAvoidingView,
   Platform,
@@ -9,6 +8,7 @@ import {
   Alert,
   TouchableOpacity,
 } from "react-native";
+import { AppText } from '../../components/AppText';
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { Input } from "../../components/Input";
@@ -95,10 +95,10 @@ export function RegisterScreen() {
         contentContainerStyle={styles.scroll}
         keyboardShouldPersistTaps="handled"
       >
-        <Text style={styles.title}>Регистрация</Text>
-        <Text style={styles.subtitle}>
+        <AppText style={styles.title}>Регистрация</AppText>
+        <AppText style={styles.subtitle}>
           После регистрации необходимо подтверждение администратора
-        </Text>
+        </AppText>
 
         <View style={styles.form}>
           <Input
@@ -203,16 +203,16 @@ function ConsentRow({
     <View style={styles.consentRow}>
       <TouchableOpacity onPress={onToggle} activeOpacity={0.7} style={styles.checkboxWrapper}>
         <View style={[styles.checkbox, checked && styles.checkboxChecked]}>
-          {checked && <Text style={styles.checkmark}>✓</Text>}
+          {checked && <AppText style={styles.checkmark}>✓</AppText>}
         </View>
       </TouchableOpacity>
-      <Text style={styles.consentText}>
-        <Text onPress={onToggle}>{label}</Text>
-        <Text style={styles.consentLink} onPress={onLinkPress} suppressHighlighting>
+      <AppText style={styles.consentText}>
+        <AppText onPress={onToggle}>{label}</AppText>
+        <AppText style={styles.consentLink} onPress={onLinkPress} suppressHighlighting>
           {linkText}
-        </Text>
-        {suffix ? <Text onPress={onToggle}>{suffix}</Text> : null}
-      </Text>
+        </AppText>
+        {suffix ? <AppText onPress={onToggle}>{suffix}</AppText> : null}
+      </AppText>
     </View>
   );
 }

@@ -4,7 +4,6 @@ import {
   View,
   ScrollView,
   StyleSheet,
-  Text,
   Image,
   Alert,
   Dimensions,
@@ -16,6 +15,7 @@ import {
   Modal,
   TouchableWithoutFeedback,
 } from "react-native";
+import { AppText } from '../../components/AppText';
 import {
   useRoute,
   useNavigation,
@@ -637,7 +637,7 @@ export function ProductDetailScreen() {
   if (!book) {
     return (
       <View style={styles.center}>
-        <Text style={{ color: "#999" }}>Карточка не найдена</Text>
+        <AppText style={{ color: "#999" }}>Карточка не найдена</AppText>
       </View>
     );
   }
@@ -663,7 +663,7 @@ export function ProductDetailScreen() {
             style={styles.lightboxClose}
             onPress={() => setLightboxVisible(false)}
           >
-            <Text style={styles.lightboxCloseText}>✕</Text>
+            <AppText style={styles.lightboxCloseText}>✕</AppText>
           </TouchableOpacity>
           <ScrollView
             ref={lightboxScrollRef}
@@ -692,9 +692,9 @@ export function ProductDetailScreen() {
           <View style={styles.storeOverlay}>
             <TouchableWithoutFeedback>
               <View style={styles.storeContainer}>
-                <Text style={styles.storePickerTitle}>
+                <AppText style={styles.storePickerTitle}>
                   Выберите магазин Ozon
-                </Text>
+                </AppText>
                 {stores.map((store) => {
                   const { blocked, label, warn } = getLimitStatus(store.id);
                   return (
@@ -721,22 +721,22 @@ export function ProductDetailScreen() {
                         );
                       }}
                     >
-                      <Text
+                      <AppText
                         style={[
                           styles.storeItemName,
                           blocked && styles.storeItemBlockedText,
                         ]}
                       >
                         {store.name}
-                      </Text>
-                      <Text
+                      </AppText>
+                      <AppText
                         style={[
                           styles.storeItemLimits,
                           warn && styles.storeItemLimitWarn,
                         ]}
                       >
                         {label}
-                      </Text>
+                      </AppText>
                     </TouchableOpacity>
                   );
                 })}
@@ -756,7 +756,7 @@ export function ProductDetailScreen() {
       >
         <View style={styles.previewOverlay}>
           <View style={styles.previewContainer}>
-            <Text style={styles.previewTitle}>Результат распознавания</Text>
+            <AppText style={styles.previewTitle}>Результат распознавания</AppText>
             {sortedPhotos.length > 0 && (
               <ScrollView
                 horizontal
@@ -795,20 +795,20 @@ export function ProductDetailScreen() {
                       key={field.key}
                       style={[styles.diffRow, changed && styles.diffRowChanged]}
                     >
-                      <Text style={styles.diffLabel}>{field.label}</Text>
+                      <AppText style={styles.diffLabel}>{field.label}</AppText>
                       <View style={styles.diffValues}>
-                        <Text style={styles.diffCurrent} numberOfLines={lines}>
+                        <AppText style={styles.diffCurrent} numberOfLines={lines}>
                           {cur || "—"}
-                        </Text>
+                        </AppText>
                         {changed && (
                           <>
-                            <Text style={styles.diffArrow}> → </Text>
-                            <Text
+                            <AppText style={styles.diffArrow}> → </AppText>
+                            <AppText
                               style={styles.diffSuggested}
                               numberOfLines={lines}
                             >
                               {sug || "—"}
-                            </Text>
+                            </AppText>
                           </>
                         )}
                       </View>
@@ -839,7 +839,7 @@ export function ProductDetailScreen() {
                   style={styles.lightboxClose}
                   onPress={() => setPreviewLightboxIndex(null)}
                 >
-                  <Text style={styles.lightboxCloseText}>✕</Text>
+                  <AppText style={styles.lightboxCloseText}>✕</AppText>
                 </TouchableOpacity>
                 <ScrollView
                   ref={previewLightboxScrollRef}
@@ -945,7 +945,7 @@ export function ProductDetailScreen() {
                   onChangeText={setEditWeight}
                   keyboardType="numeric"
                 />
-                <Text style={styles.sectionTitle}>Размеры (мм)</Text>
+                <AppText style={styles.sectionTitle}>Размеры (мм)</AppText>
                 <View style={styles.dimRow}>
                   <EditField
                     label="Д"
@@ -1012,23 +1012,23 @@ export function ProductDetailScreen() {
             ) : (
               <>
                 {/* Header */}
-                <Text style={styles.title}>{ozon.name}</Text>
+                <AppText style={styles.title}>{ozon.name}</AppText>
                 <View style={styles.headerMeta}>
-                  <Text style={styles.sku}>SKU: {ozon.offerId}</Text>
+                  <AppText style={styles.sku}>SKU: {ozon.offerId}</AppText>
                   <View
                     style={[styles.badge, { backgroundColor: statusCfg.bg }]}
                   >
-                    <Text
+                    <AppText
                       style={[styles.badgeText, { color: statusCfg.color }]}
                     >
                       {statusCfg.label}
-                    </Text>
+                    </AppText>
                   </View>
                 </View>
 
                 {/* Ozon card attributes */}
                 <View style={styles.section}>
-                  <Text style={styles.sectionTitle}>Карточка Озон</Text>
+                  <AppText style={styles.sectionTitle}>Карточка Озон</AppText>
                   <InfoRow label="Название" value={ozon.name} />
                   <InfoRow
                     label="Автор на обложке"
@@ -1063,34 +1063,34 @@ export function ProductDetailScreen() {
 
                 {/* Annotation with prefix */}
                 <View style={styles.section}>
-                  <Text style={styles.sectionTitle}>Аннотация (Озон)</Text>
+                  <AppText style={styles.sectionTitle}>Аннотация (Озон)</AppText>
                   <View style={styles.annotationBox}>
-                    <Text style={styles.annotationText}>{ozon.annotation}</Text>
+                    <AppText style={styles.annotationText}>{ozon.annotation}</AppText>
                   </View>
                 </View>
 
                 {/* Hashtags */}
                 {ozon.hashtags.length > 0 && (
                   <View style={styles.section}>
-                    <Text style={styles.sectionTitle}>Хэштеги</Text>
-                    <Text style={styles.hashtagsText}>{ozon.hashtags}</Text>
+                    <AppText style={styles.sectionTitle}>Хэштеги</AppText>
+                    <AppText style={styles.hashtagsText}>{ozon.hashtags}</AppText>
                   </View>
                 )}
 
                 {/* Metadata */}
                 <View style={styles.metaSection}>
                   {book.createdBy && (
-                    <Text style={styles.metaText}>
+                    <AppText style={styles.metaText}>
                       Оператор: {book.createdBy.fullName}
-                    </Text>
+                    </AppText>
                   )}
-                  <Text style={styles.metaText}>
+                  <AppText style={styles.metaText}>
                     Создана: {formatDate(book.createdAt)}
-                  </Text>
+                  </AppText>
                   {book.publishedToOzon && (
-                    <Text style={styles.metaText}>
+                    <AppText style={styles.metaText}>
                       Опубликована: {formatDate(book.publishedToOzon)}
-                    </Text>
+                    </AppText>
                   )}
                 </View>
 
@@ -1153,10 +1153,10 @@ export function ProductDetailScreen() {
 function InfoRow({ label, value }: { label: string; value?: string }) {
   return (
     <View style={styles.row}>
-      <Text style={styles.rowLabel}>{label}</Text>
-      <Text style={[styles.rowValue, !value && styles.rowValueEmpty]}>
+      <AppText style={styles.rowLabel}>{label}</AppText>
+      <AppText style={[styles.rowValue, !value && styles.rowValueEmpty]}>
         {value || "—"}
-      </Text>
+      </AppText>
     </View>
   );
 }
@@ -1174,7 +1174,7 @@ function SegmentPicker({
 }) {
   return (
     <View style={styles.editField}>
-      <Text style={styles.editLabel}>{label}</Text>
+      <AppText style={styles.editLabel}>{label}</AppText>
       <View style={styles.segmentRow}>
         {options.map((opt) => (
           <TouchableOpacity
@@ -1185,14 +1185,14 @@ function SegmentPicker({
             ]}
             onPress={() => onChange(opt)}
           >
-            <Text
+            <AppText
               style={[
                 styles.segmentText,
                 value === opt && styles.segmentTextActive,
               ]}
             >
               {opt}
-            </Text>
+            </AppText>
           </TouchableOpacity>
         ))}
       </View>
@@ -1217,7 +1217,7 @@ function EditField({
 }) {
   return (
     <View style={[styles.editField, style]}>
-      <Text style={styles.editLabel}>{label}</Text>
+      <AppText style={styles.editLabel}>{label}</AppText>
       <TextInput
         style={[styles.editInput, multiline && styles.editInputMultiline]}
         value={value}

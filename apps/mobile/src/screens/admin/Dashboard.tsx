@@ -1,12 +1,12 @@
 import React, { useState, useCallback } from "react";
 import {
   View,
-  Text,
   StyleSheet,
   ScrollView,
   RefreshControl,
   TouchableOpacity,
 } from "react-native";
+import { AppText } from '../../components/AppText';
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import { type NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { adminService } from "../../services/admin.service";
@@ -81,10 +81,10 @@ export function DashboardScreen() {
           activeOpacity={0.75}
           onPress={() => tabsNavigation.navigate("CardCreationTab")}
         >
-          <Text style={styles.gridCardTitle}>На проверке</Text>
-          <Text style={[styles.gridCardCount, { color: "#E53935" }]}>
+          <AppText style={styles.gridCardTitle}>На проверке</AppText>
+          <AppText style={[styles.gridCardCount, { color: "#E53935" }]}>
             {pendingCount}
-          </Text>
+          </AppText>
         </TouchableOpacity>
 
         {/* Cell 2: Дубли */}
@@ -93,10 +93,10 @@ export function DashboardScreen() {
           activeOpacity={0.75}
           onPress={() => navigation.navigate("Duplicates")}
         >
-          <Text style={styles.gridCardTitle}>Дубли</Text>
-          <Text style={[styles.gridCardCount, { color: "#00838F" }]}>
+          <AppText style={styles.gridCardTitle}>Дубли</AppText>
+          <AppText style={[styles.gridCardCount, { color: "#00838F" }]}>
             {duplicatesCount}
-          </Text>
+          </AppText>
         </TouchableOpacity>
 
         {/* Cell 3: Заниженная цена */}
@@ -105,10 +105,10 @@ export function DashboardScreen() {
           activeOpacity={0.75}
           onPress={() => navigation.navigate("Underpriced")}
         >
-          <Text style={styles.gridCardTitle}>Редкие книги</Text>
-          <Text style={[styles.gridCardCount, { color: "#F57F17" }]}>
+          <AppText style={styles.gridCardTitle}>Редкие книги</AppText>
+          <AppText style={[styles.gridCardCount, { color: "#F57F17" }]}>
             {underpricedCount}
-          </Text>
+          </AppText>
         </TouchableOpacity>
 
         {/* Cell 4: Ошибки */}
@@ -117,10 +117,10 @@ export function DashboardScreen() {
           activeOpacity={0.75}
           onPress={() => navigation.navigate("Errors")}
         >
-          <Text style={styles.gridCardTitle}>Ошибки</Text>
-          <Text style={[styles.gridCardCount, { color: "#BF360C" }]}>
+          <AppText style={styles.gridCardTitle}>Ошибки</AppText>
+          <AppText style={[styles.gridCardCount, { color: "#BF360C" }]}>
             {errorsCount}
-          </Text>
+          </AppText>
         </TouchableOpacity>
       </View>
 
@@ -131,58 +131,58 @@ export function DashboardScreen() {
         onPress={() => navigation.navigate("Statistics")}
       >
         <View style={styles.wideCardHeader}>
-          <Text style={styles.wideCardTitle}>Статистика</Text>
-          <Text style={styles.cardArrow}>›</Text>
+          <AppText style={styles.wideCardTitle}>Статистика</AppText>
+          <AppText style={styles.cardArrow}>›</AppText>
         </View>
 
         {/* Количество карточек */}
-        <Text style={styles.subSectionTitle}>Карточки</Text>
+        <AppText style={styles.subSectionTitle}>Карточки</AppText>
         <View style={styles.statsRow}>
           <View style={styles.statItem}>
-            <Text style={[styles.statValue, { color: "#1976D2" }]}>
+            <AppText style={[styles.statValue, { color: "#1976D2" }]}>
               {stats?.totalCards?.toString() ?? "—"}
-            </Text>
-            <Text style={styles.statLabel}>Всего</Text>
+            </AppText>
+            <AppText style={styles.statLabel}>Всего</AppText>
           </View>
           <View style={styles.statDivider} />
           <View style={styles.statItem}>
-            <Text style={[styles.statValue, { color: "#FB8C00" }]}>
+            <AppText style={[styles.statValue, { color: "#FB8C00" }]}>
               {stats?.cardsToday?.toString() ?? "—"}
-            </Text>
-            <Text style={styles.statLabel}>Сегодня</Text>
+            </AppText>
+            <AppText style={styles.statLabel}>Сегодня</AppText>
           </View>
           <View style={styles.statDivider} />
           <View style={styles.statItem}>
-            <Text style={[styles.statValue, { color: "#FB8C00" }]}>
+            <AppText style={[styles.statValue, { color: "#FB8C00" }]}>
               {stats?.cardsThisWeek?.toString() ?? "—"}
-            </Text>
-            <Text style={styles.statLabel}>За неделю</Text>
+            </AppText>
+            <AppText style={styles.statLabel}>За неделю</AppText>
           </View>
         </View>
 
         {/* Пользователи */}
         <View style={styles.sectionDivider} />
-        <Text style={styles.subSectionTitle}>Пользователи</Text>
+        <AppText style={styles.subSectionTitle}>Пользователи</AppText>
         <View style={styles.statsRow}>
           <View style={styles.statItem}>
-            <Text style={[styles.statValue, { color: "#43A047" }]}>
+            <AppText style={[styles.statValue, { color: "#43A047" }]}>
               {stats?.totalAdmins?.toString() ?? "—"}
-            </Text>
-            <Text style={styles.statLabel}>Админов</Text>
+            </AppText>
+            <AppText style={styles.statLabel}>Админов</AppText>
           </View>
           <View style={styles.statDivider} />
           <View style={styles.statItem}>
-            <Text style={[styles.statValue, { color: "#43A047" }]}>
+            <AppText style={[styles.statValue, { color: "#43A047" }]}>
               {stats?.totalOperators?.toString() ?? "—"}
-            </Text>
-            <Text style={styles.statLabel}>Фотографов</Text>
+            </AppText>
+            <AppText style={styles.statLabel}>Фотографов</AppText>
           </View>
           <View style={styles.statDivider} />
           <View style={styles.statItem}>
-            <Text style={[styles.statValue, { color: "#43A047" }]}>
+            <AppText style={[styles.statValue, { color: "#43A047" }]}>
               {stats?.totalUsers?.toString() ?? "—"}
-            </Text>
-            <Text style={styles.statLabel}>Всего</Text>
+            </AppText>
+            <AppText style={styles.statLabel}>Всего</AppText>
           </View>
         </View>
 
@@ -190,14 +190,14 @@ export function DashboardScreen() {
         {stats?.perUser && stats.perUser.length > 0 && (
           <>
             <View style={styles.sectionDivider} />
-            <Text style={styles.subSectionTitle}>Производительность</Text>
+            <AppText style={styles.subSectionTitle}>Производительность</AppText>
             {stats.perUser.slice(0, 3).map((u, i) => (
               <View key={u.userId} style={styles.perfRow}>
-                <Text style={styles.perfRank}>#{i + 1}</Text>
-                <Text style={styles.perfName} numberOfLines={1}>
+                <AppText style={styles.perfRank}>#{i + 1}</AppText>
+                <AppText style={styles.perfName} numberOfLines={1}>
                   {u.fullName}
-                </Text>
-                <Text style={styles.perfCount}>{u.cardsCount}</Text>
+                </AppText>
+                <AppText style={styles.perfCount}>{u.cardsCount}</AppText>
               </View>
             ))}
           </>
@@ -211,21 +211,21 @@ export function DashboardScreen() {
         onPress={() => navigation.navigate("BookDatabase")}
       >
         <View style={styles.wideCardHeader}>
-          <Text style={styles.wideCardTitle}>База книг</Text>
-          <Text style={styles.cardArrow}>›</Text>
+          <AppText style={styles.wideCardTitle}>База книг</AppText>
+          <AppText style={styles.cardArrow}>›</AppText>
         </View>
         {recentBooks.length === 0 ? (
-          <Text style={styles.emptyBooks}>Нет книг</Text>
+          <AppText style={styles.emptyBooks}>Нет книг</AppText>
         ) : (
           recentBooks.map((book) => (
             <View key={book.id} style={styles.bookRow}>
-              <Text style={styles.bookTitle} numberOfLines={1}>
+              <AppText style={styles.bookTitle} numberOfLines={1}>
                 {book.title}
-              </Text>
+              </AppText>
               {book.author ? (
-                <Text style={styles.bookAuthor} numberOfLines={1}>
+                <AppText style={styles.bookAuthor} numberOfLines={1}>
                   {book.author}
-                </Text>
+                </AppText>
               ) : null}
             </View>
           ))

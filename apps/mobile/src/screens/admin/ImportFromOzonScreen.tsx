@@ -3,12 +3,12 @@ import {
   View,
   FlatList,
   StyleSheet,
-  Text,
   TouchableOpacity,
   Alert,
   ActivityIndicator,
   RefreshControl,
 } from 'react-native';
+import { AppText } from '../../components/AppText';
 import { adminService } from '../../services/admin.service';
 import type { OzonStore } from '../../services/admin.service';
 
@@ -172,24 +172,24 @@ export default function ImportFromOzonScreen() {
         <View style={styles.itemLeft}>
           {!item.alreadyImported && (
             <View style={[styles.checkbox, isSelected && styles.checkboxSelected]}>
-              {isSelected && <Text style={styles.checkmark}>✓</Text>}
+              {isSelected && <AppText style={styles.checkmark}>✓</AppText>}
             </View>
           )}
           {item.alreadyImported && (
             <View style={styles.checkboxDone}>
-              <Text style={styles.checkmarkDone}>✓</Text>
+              <AppText style={styles.checkmarkDone}>✓</AppText>
             </View>
           )}
           <View style={styles.itemTextBlock}>
-            <Text style={styles.itemName} numberOfLines={2}>
+            <AppText style={styles.itemName} numberOfLines={2}>
               {item.name}
-            </Text>
-            <Text style={styles.itemOfferId}>{item.offerId}</Text>
+            </AppText>
+            <AppText style={styles.itemOfferId}>{item.offerId}</AppText>
           </View>
         </View>
         {item.alreadyImported && (
           <View style={styles.importedBadge}>
-            <Text style={styles.importedBadgeText}>В системе</Text>
+            <AppText style={styles.importedBadgeText}>В системе</AppText>
           </View>
         )}
       </TouchableOpacity>
@@ -203,18 +203,18 @@ export default function ImportFromOzonScreen() {
       {/* Store selector */}
       {stores.length > 1 && (
         <View style={styles.storeRow}>
-          <Text style={styles.storeLabel}>Магазин:</Text>
+          <AppText style={styles.storeLabel}>Магазин:</AppText>
           {stores.map((s) => (
             <TouchableOpacity
               key={s.id}
               style={[styles.storeChip, activeStoreId === s.id && styles.storeChipActive]}
               onPress={() => setActiveStoreId(s.id)}
             >
-              <Text
+              <AppText
                 style={[styles.storeChipText, activeStoreId === s.id && styles.storeChipTextActive]}
               >
                 {s.name}
-              </Text>
+              </AppText>
             </TouchableOpacity>
           ))}
         </View>
@@ -226,31 +226,31 @@ export default function ImportFromOzonScreen() {
           style={[styles.visibilityBtn, !showArchived && styles.visibilityBtnActive]}
           onPress={() => setShowArchived(false)}
         >
-          <Text style={[styles.visibilityBtnText, !showArchived && styles.visibilityBtnTextActive]}>
+          <AppText style={[styles.visibilityBtnText, !showArchived && styles.visibilityBtnTextActive]}>
             Активные
-          </Text>
+          </AppText>
         </TouchableOpacity>
         <TouchableOpacity
           style={[styles.visibilityBtn, showArchived && styles.visibilityBtnActive]}
           onPress={() => setShowArchived(true)}
         >
-          <Text style={[styles.visibilityBtnText, showArchived && styles.visibilityBtnTextActive]}>
+          <AppText style={[styles.visibilityBtnText, showArchived && styles.visibilityBtnTextActive]}>
             В архиве
-          </Text>
+          </AppText>
         </TouchableOpacity>
       </View>
 
       {/* Stats row */}
       {!loading && (
         <View style={styles.statsRow}>
-          <Text style={styles.statsText}>
+          <AppText style={styles.statsText}>
             Всего на Озоне: {total} · Новых: {items.filter((i) => !i.alreadyImported).length}{items.length < total ? '+' : ''} · Выбрано: {selected.size}
-          </Text>
+          </AppText>
           {items.some((i) => !i.alreadyImported) && (
             <TouchableOpacity onPress={selectAllNew} disabled={selectingAll}>
               {selectingAll
                 ? <ActivityIndicator size="small" color="#1976D2" />
-                : <Text style={styles.selectAllText}>Выбрать все новые</Text>
+                : <AppText style={styles.selectAllText}>Выбрать все новые</AppText>
               }
             </TouchableOpacity>
           )}
@@ -279,7 +279,7 @@ export default function ImportFromOzonScreen() {
             loadingMore ? <ActivityIndicator style={styles.footerLoader} color="#1976D2" /> : null
           }
           ListEmptyComponent={
-            <Text style={styles.emptyText}>Товаров на Озоне не найдено</Text>
+            <AppText style={styles.emptyText}>Товаров на Озоне не найдено</AppText>
           }
           contentContainerStyle={items.length === 0 ? styles.emptyContainer : undefined}
         />
@@ -294,15 +294,15 @@ export default function ImportFromOzonScreen() {
             disabled={importing}
           >
             {importing ? (
-              <Text style={styles.importBtnText}>
+              <AppText style={styles.importBtnText}>
                 {importProgress
                   ? `Импорт... ${importProgress.done} / ${importProgress.total}`
                   : 'Подготовка...'}
-              </Text>
+              </AppText>
             ) : (
-              <Text style={styles.importBtnText}>
+              <AppText style={styles.importBtnText}>
                 Импортировать выбранные ({selected.size})
-              </Text>
+              </AppText>
             )}
           </TouchableOpacity>
         </View>

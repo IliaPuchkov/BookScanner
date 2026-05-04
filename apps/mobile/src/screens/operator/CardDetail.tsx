@@ -3,7 +3,6 @@ import {
   View,
   ScrollView,
   StyleSheet,
-  Text,
   Image,
   Alert,
   Dimensions,
@@ -12,6 +11,7 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from "react-native";
+import { AppText } from '../../components/AppText';
 import {
   useRoute,
   useNavigation,
@@ -178,7 +178,7 @@ export function CardDetailScreen() {
   if (!book) {
     return (
       <View style={styles.center}>
-        <Text style={{ color: "#999" }}>Карточка не найдена</Text>
+        <AppText style={{ color: "#999" }}>Карточка не найдена</AppText>
       </View>
     );
   }
@@ -224,12 +224,12 @@ export function CardDetailScreen() {
           {/* Meta info — always read-only */}
           <View style={styles.metaBlock}>
             <View style={styles.metaRow}>
-              <Text style={styles.metaLabel}>Артикул</Text>
-              <Text style={styles.metaValue}>{book.sku ?? "—"}</Text>
+              <AppText style={styles.metaLabel}>Артикул</AppText>
+              <AppText style={styles.metaValue}>{book.sku ?? "—"}</AppText>
             </View>
             <View style={[styles.metaRow, { borderBottomWidth: 0 }]}>
-              <Text style={styles.metaLabel}>Коробка</Text>
-              <Text style={styles.metaValue}>{book.box?.boxNumber ?? "—"}</Text>
+              <AppText style={styles.metaLabel}>Коробка</AppText>
+              <AppText style={styles.metaValue}>{book.box?.boxNumber ?? "—"}</AppText>
             </View>
           </View>
 
@@ -282,10 +282,10 @@ export function CardDetailScreen() {
           {/* Dimensions — split into 3 inputs when editing */}
           {editing ? (
             <View>
-              <Text style={styles.fieldLabel}>Размеры (мм)</Text>
-              <Text style={styles.fieldLabelDimNames}>
+              <AppText style={styles.fieldLabel}>Размеры (мм)</AppText>
+              <AppText style={styles.fieldLabelDimNames}>
                 Длина х Ширина х Высота
-              </Text>
+              </AppText>
               <View style={styles.dimRow}>
                 <TextInput
                   style={[styles.input, { flex: 1 }]}
@@ -295,7 +295,7 @@ export function CardDetailScreen() {
                   placeholder="В"
                   placeholderTextColor="#bbb"
                 />
-                <Text style={styles.dimSep}>×</Text>
+                <AppText style={styles.dimSep}>×</AppText>
                 <TextInput
                   style={[styles.input, { flex: 1 }]}
                   value={editWidth}
@@ -304,7 +304,7 @@ export function CardDetailScreen() {
                   placeholder="Ш"
                   placeholderTextColor="#bbb"
                 />
-                <Text style={styles.dimSep}>×</Text>
+                <AppText style={styles.dimSep}>×</AppText>
 
                 <TextInput
                   style={[styles.input, { flex: 1 }]}
@@ -417,7 +417,7 @@ function Field({
 }) {
   return (
     <View style={[styles.fieldRow, last && { borderBottomWidth: 0 }]}>
-      <Text style={styles.fieldLabel}>{label}</Text>
+      <AppText style={styles.fieldLabel}>{label}</AppText>
       {editing ? (
         <TextInput
           style={styles.input}
@@ -428,7 +428,7 @@ function Field({
           placeholderTextColor="#bbb"
         />
       ) : (
-        <Text style={styles.fieldValue}>{value || "—"}</Text>
+        <AppText style={styles.fieldValue}>{value || "—"}</AppText>
       )}
     </View>
   );

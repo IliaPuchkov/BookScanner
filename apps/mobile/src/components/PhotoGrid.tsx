@@ -4,11 +4,11 @@ import {
   Image,
   StyleSheet,
   TouchableOpacity,
-  Text,
   Dimensions,
   PanResponder,
   Animated,
 } from "react-native";
+import { AppText } from './AppText';
 
 const SCREEN_WIDTH = Dimensions.get("window").width;
 const ITEM_SIZE = (SCREEN_WIDTH - 48 - 16) / 3;
@@ -207,14 +207,14 @@ export function PhotoGrid({
             )}
             {index < 4 && (
               <View style={styles.badge} pointerEvents="none">
-                <Text style={styles.badgeText}>
+                <AppText style={styles.badgeText}>
                   {index === 0 ? "Обложка" : "Инфо " + index}
-                </Text>
+                </AppText>
               </View>
             )}
             {photo.isSmall && (
               <View style={styles.smallWarning} pointerEvents="none">
-                <Text style={styles.smallWarningText}>⚠ Мало пикселей</Text>
+                <AppText style={styles.smallWarningText}>⚠ Мало пикселей</AppText>
               </View>
             )}
             {onRemove && !isDragging && (
@@ -222,7 +222,7 @@ export function PhotoGrid({
                 style={styles.removeBtn}
                 onPress={() => onRemove(index)}
               >
-                <Text style={styles.removeText}>✕</Text>
+                <AppText style={styles.removeText}>✕</AppText>
               </TouchableOpacity>
             )}
             {onRotate && !isDragging && (
@@ -230,12 +230,12 @@ export function PhotoGrid({
                 style={styles.rotateBtn}
                 onPress={() => onRotate(index)}
               >
-                <Text style={styles.rotateBtnText}>↻</Text>
+                <AppText style={styles.rotateBtnText}>↻</AppText>
               </TouchableOpacity>
             )}
             {onReorder && (
               <View style={styles.dragIndicator} pointerEvents="none">
-                <Text style={styles.dragIndicatorIcon}>⠿</Text>
+                <AppText style={styles.dragIndicatorIcon}>⠿</AppText>
               </View>
             )}
           </View>
@@ -250,8 +250,8 @@ export function PhotoGrid({
           ]}
           onPress={onAdd}
         >
-          <Text style={styles.addText}>+</Text>
-          <Text style={styles.addLabel}>Добавить</Text>
+          <AppText style={styles.addText}>+</AppText>
+          <AppText style={styles.addLabel}>Добавить</AppText>
         </TouchableOpacity>
       )}
 

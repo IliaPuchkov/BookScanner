@@ -12,7 +12,6 @@ import {
   FlatList,
   StyleSheet,
   RefreshControl,
-  Text,
   TouchableOpacity,
   Image,
   Alert,
@@ -23,6 +22,7 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from "react-native";
+import { AppText } from '../../components/AppText';
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { Input } from "../../components/Input";
@@ -62,14 +62,14 @@ function FilterTag({
 }) {
   return (
     <View style={tagStyles.tag}>
-      <Text style={tagStyles.label} numberOfLines={1}>
+      <AppText style={tagStyles.label} numberOfLines={1}>
         {label}
-      </Text>
+      </AppText>
       <TouchableOpacity
         onPress={onRemove}
         hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
       >
-        <Text style={tagStyles.remove}>✕</Text>
+        <AppText style={tagStyles.remove}>✕</AppText>
       </TouchableOpacity>
     </View>
   );
@@ -112,20 +112,20 @@ function FilterRow({
 }) {
   return (
     <View style={rowStyles.row}>
-      <Text style={rowStyles.label}>{label}</Text>
-      <Text
+      <AppText style={rowStyles.label}>{label}</AppText>
+      <AppText
         style={[rowStyles.value, !value && rowStyles.valuePlaceholder]}
         numberOfLines={1}
       >
         {value ?? "—"}
-      </Text>
+      </AppText>
       {value ? (
         <TouchableOpacity
           style={rowStyles.btn}
           onPress={onClear}
           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
         >
-          <Text style={rowStyles.clearIcon}>✕</Text>
+          <AppText style={rowStyles.clearIcon}>✕</AppText>
         </TouchableOpacity>
       ) : (
         <TouchableOpacity
@@ -133,7 +133,7 @@ function FilterRow({
           onPress={onOpen}
           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
         >
-          <Text style={rowStyles.plusIcon}>+</Text>
+          <AppText style={rowStyles.plusIcon}>+</AppText>
         </TouchableOpacity>
       )}
     </View>
@@ -224,29 +224,29 @@ const PendingBookItem = React.memo(function PendingBookItem({
           <Image source={{ uri: coverPhoto.fileUrl }} style={styles.image} />
         ) : (
           <View style={[styles.image, styles.placeholder]}>
-            <Text style={styles.placeholderText}>Нет фото</Text>
+            <AppText style={styles.placeholderText}>Нет фото</AppText>
           </View>
         )}
         {selectMode && (
           <View
             style={[styles.checkbox, isSelected && styles.checkboxSelected]}
           >
-            {isSelected && <Text style={styles.checkmark}>✓</Text>}
+            {isSelected && <AppText style={styles.checkmark}>✓</AppText>}
           </View>
         )}
       </View>
       <View style={styles.info}>
-        <Text style={styles.title} numberOfLines={2}>
+        <AppText style={styles.title} numberOfLines={2}>
           {item.title}
-        </Text>
+        </AppText>
         {item.author ? (
-          <Text style={styles.author} numberOfLines={1}>
+          <AppText style={styles.author} numberOfLines={1}>
             {item.author}
-          </Text>
+          </AppText>
         ) : null}
-        <Text style={styles.sku}>{item.sku}</Text>
+        <AppText style={styles.sku}>{item.sku}</AppText>
         {item.price != null && Number(item.price) > 0 && (
-          <Text style={styles.price}>{Number(item.price).toFixed(0)} ₽</Text>
+          <AppText style={styles.price}>{Number(item.price).toFixed(0)} ₽</AppText>
         )}
         {!selectMode && (
           <TouchableOpacity
@@ -261,7 +261,7 @@ const PendingBookItem = React.memo(function PendingBookItem({
             {isPublishing ? (
               <ActivityIndicator size="small" color="#fff" />
             ) : (
-              <Text style={styles.publishBtnText}>Загрузить в Озон</Text>
+              <AppText style={styles.publishBtnText}>Загрузить в Озон</AppText>
             )}
           </TouchableOpacity>
         )}
@@ -444,9 +444,9 @@ export function PendingReviewScreen() {
               justifyContent: "center",
             }}
           >
-            <Text style={{ color: "#fff", fontSize: 15, fontWeight: "600" }}>
+            <AppText style={{ color: "#fff", fontSize: 15, fontWeight: "600" }}>
               Отмена
-            </Text>
+            </AppText>
           </TouchableOpacity>
         ),
       });
@@ -463,7 +463,7 @@ export function PendingReviewScreen() {
               justifyContent: "center",
             }}
           >
-            <Text
+            <AppText
               style={{
                 color: "#fff",
                 fontSize: 22,
@@ -472,7 +472,7 @@ export function PendingReviewScreen() {
               }}
             >
               ⋮
-            </Text>
+            </AppText>
           </TouchableOpacity>
         ),
       });
@@ -1091,9 +1091,9 @@ export function PendingReviewScreen() {
           <View style={styles.menuOverlay}>
             <TouchableWithoutFeedback>
               <View style={styles.menuContainer}>
-                <Text style={styles.storePickerTitle}>
+                <AppText style={styles.storePickerTitle}>
                   Выберите магазин Ozon
-                </Text>
+                </AppText>
                 {stores.map((store) => {
                   const count = pendingPublishAction
                     ? pendingPublishAction.type === "single"
@@ -1132,22 +1132,22 @@ export function PendingReviewScreen() {
                         }
                       }}
                     >
-                      <Text
+                      <AppText
                         style={[
                           styles.menuItemText,
                           blocked && styles.storeItemBlockedText,
                         ]}
                       >
                         {store.name}
-                      </Text>
-                      <Text
+                      </AppText>
+                      <AppText
                         style={[
                           styles.storeItemClientId,
                           warn && styles.storeItemLimitWarn,
                         ]}
                       >
                         {label}
-                      </Text>
+                      </AppText>
                     </TouchableOpacity>
                   );
                 })}
@@ -1174,7 +1174,7 @@ export function PendingReviewScreen() {
                     setSelectMode(true);
                   }}
                 >
-                  <Text style={styles.menuItemText}>Выбрать несколько</Text>
+                  <AppText style={styles.menuItemText}>Выбрать несколько</AppText>
                 </TouchableOpacity>
               </View>
             </TouchableWithoutFeedback>
@@ -1197,14 +1197,14 @@ export function PendingReviewScreen() {
             ]}
             onPress={() => setShowFilters(!showFilters)}
           >
-            <Text
+            <AppText
               style={[
                 styles.filterBtnText,
                 activeFilterCount > 0 && styles.filterBtnTextActive,
               ]}
             >
               Фильтры{activeFilterCount > 0 ? ` (${activeFilterCount})` : ""}
-            </Text>
+            </AppText>
           </TouchableOpacity>
         </View>
 
@@ -1273,7 +1273,7 @@ export function PendingReviewScreen() {
           />
           {activeFilterCount > 0 && (
             <TouchableOpacity style={styles.resetBtn} onPress={resetFilters}>
-              <Text style={styles.resetBtnText}>Сбросить фильтры</Text>
+              <AppText style={styles.resetBtnText}>Сбросить фильтры</AppText>
             </TouchableOpacity>
           )}
         </View>
@@ -1295,7 +1295,7 @@ export function PendingReviewScreen() {
               <TouchableWithoutFeedback>
                 <View style={styles.pickerSheet}>
                   <View style={styles.pickerSheetHeader}>
-                    <Text style={styles.pickerSheetTitle}>
+                    <AppText style={styles.pickerSheetTitle}>
                       {activePickerFilter === "boxId"
                         ? "Коробка"
                         : activePickerFilter === "createdById"
@@ -1307,11 +1307,11 @@ export function PendingReviewScreen() {
                               : activePickerFilter === "year"
                                 ? "Год издания"
                                 : "Тираж"}
-                    </Text>
+                    </AppText>
                     <TouchableOpacity
                       onPress={() => setActivePickerFilter(null)}
                     >
-                      <Text style={styles.pickerDoneBtn}>Закрыть</Text>
+                      <AppText style={styles.pickerDoneBtn}>Закрыть</AppText>
                     </TouchableOpacity>
                   </View>
 
@@ -1358,18 +1358,18 @@ export function PendingReviewScreen() {
                                 setActivePickerFilter(null);
                               }}
                             >
-                              <Text
+                              <AppText
                                 style={[
                                   styles.pickerListItemText,
                                   active && styles.pickerListItemTextActive,
                                 ]}
                               >
                                 {item.boxNumber}
-                              </Text>
+                              </AppText>
                               {active && (
-                                <Text style={styles.pickerListCheckmark}>
+                                <AppText style={styles.pickerListCheckmark}>
                                   ✓
-                                </Text>
+                                </AppText>
                               )}
                             </TouchableOpacity>
                           );
@@ -1421,18 +1421,18 @@ export function PendingReviewScreen() {
                                 setActivePickerFilter(null);
                               }}
                             >
-                              <Text
+                              <AppText
                                 style={[
                                   styles.pickerListItemText,
                                   active && styles.pickerListItemTextActive,
                                 ]}
                               >
                                 {item.fullName}
-                              </Text>
+                              </AppText>
                               {active && (
-                                <Text style={styles.pickerListCheckmark}>
+                                <AppText style={styles.pickerListCheckmark}>
                                   ✓
-                                </Text>
+                                </AppText>
                               )}
                             </TouchableOpacity>
                           );
@@ -1452,7 +1452,7 @@ export function PendingReviewScreen() {
                             tempDateTo ? new Date(tempDateTo) : undefined
                           }
                         />
-                        <Text style={styles.rangeSep}>—</Text>
+                        <AppText style={styles.rangeSep}>—</AppText>
                         <DatePickerInput
                           value={tempDateTo}
                           onChange={setTempDateTo}
@@ -1466,7 +1466,7 @@ export function PendingReviewScreen() {
                         style={[styles.applyBtn, { marginTop: 16 }]}
                         onPress={() => applyRangeFilter("date")}
                       >
-                        <Text style={styles.applyBtnText}>Применить</Text>
+                        <AppText style={styles.applyBtnText}>Применить</AppText>
                       </TouchableOpacity>
                     </View>
                   )}
@@ -1484,7 +1484,7 @@ export function PendingReviewScreen() {
                             style={{ marginBottom: 0 }}
                           />
                         </View>
-                        <Text style={styles.rangeSep}>—</Text>
+                        <AppText style={styles.rangeSep}>—</AppText>
                         <View style={{ flex: 1 }}>
                           <Input
                             label=""
@@ -1500,7 +1500,7 @@ export function PendingReviewScreen() {
                         style={[styles.applyBtn, { marginTop: 16 }]}
                         onPress={() => applyRangeFilter("price")}
                       >
-                        <Text style={styles.applyBtnText}>Применить</Text>
+                        <AppText style={styles.applyBtnText}>Применить</AppText>
                       </TouchableOpacity>
                     </View>
                   )}
@@ -1518,7 +1518,7 @@ export function PendingReviewScreen() {
                             style={{ marginBottom: 0 }}
                           />
                         </View>
-                        <Text style={styles.rangeSep}>—</Text>
+                        <AppText style={styles.rangeSep}>—</AppText>
                         <View style={{ flex: 1 }}>
                           <Input
                             label=""
@@ -1534,7 +1534,7 @@ export function PendingReviewScreen() {
                         style={[styles.applyBtn, { marginTop: 16 }]}
                         onPress={() => applyRangeFilter("year")}
                       >
-                        <Text style={styles.applyBtnText}>Применить</Text>
+                        <AppText style={styles.applyBtnText}>Применить</AppText>
                       </TouchableOpacity>
                     </View>
                   )}
@@ -1553,7 +1553,7 @@ export function PendingReviewScreen() {
                             style={{ marginBottom: 0 }}
                           />
                         </View>
-                        <Text style={styles.rangeSep}>—</Text>
+                        <AppText style={styles.rangeSep}>—</AppText>
                         <View style={{ flex: 1 }}>
                           <Input
                             label=""
@@ -1569,7 +1569,7 @@ export function PendingReviewScreen() {
                         style={[styles.applyBtn, { marginTop: 16 }]}
                         onPress={() => applyRangeFilter("printRun")}
                       >
-                        <Text style={styles.applyBtnText}>Применить</Text>
+                        <AppText style={styles.applyBtnText}>Применить</AppText>
                       </TouchableOpacity>
                     </View>
                   )}
@@ -1604,20 +1604,20 @@ export function PendingReviewScreen() {
             return (
               <View style={styles.sectionHeader}>
                 <View style={styles.sectionHeaderLeft}>
-                  <Text style={styles.sectionHeaderText}>
+                  <AppText style={styles.sectionHeaderText}>
                     📦 Коробка {s.title}
-                  </Text>
+                  </AppText>
                   <View style={styles.sectionHeaderMeta}>
                     {s.operatorName ? (
-                      <Text style={styles.sectionHeaderMetaText}>
+                      <AppText style={styles.sectionHeaderMetaText}>
                         {s.operatorName}
-                      </Text>
+                      </AppText>
                     ) : null}
                     {s.sectionDate ? (
-                      <Text style={styles.sectionHeaderMetaText}>
+                      <AppText style={styles.sectionHeaderMetaText}>
                         {s.operatorName ? "  ·  " : ""}
                         {formatDate(s.sectionDate)}
-                      </Text>
+                      </AppText>
                     ) : null}
                   </View>
                 </View>
@@ -1630,19 +1630,19 @@ export function PendingReviewScreen() {
                     ]}
                     activeOpacity={0.7}
                   >
-                    <Text
+                    <AppText
                       style={[
                         styles.selectBoxBtnText,
                         allSelected && styles.selectBoxBtnTextActive,
                       ]}
                     >
                       {allSelected ? "Снять все" : "Выбрать всё"}
-                    </Text>
+                    </AppText>
                   </TouchableOpacity>
                 ) : (
-                  <Text style={styles.sectionHeaderCount}>
+                  <AppText style={styles.sectionHeaderCount}>
                     {sectionCount} шт.
-                  </Text>
+                  </AppText>
                 )}
               </View>
             );
@@ -1660,13 +1660,13 @@ export function PendingReviewScreen() {
           windowSize={7}
           ListEmptyComponent={
             <View style={styles.emptyContainer}>
-              <Text style={styles.empty}>Нет карточек ожидающих проверки</Text>
+              <AppText style={styles.empty}>Нет карточек ожидающих проверки</AppText>
               {activeFilterCount > 0 && (
                 <TouchableOpacity
                   style={styles.emptyResetBtn}
                   onPress={resetFilters}
                 >
-                  <Text style={styles.emptyResetText}>Сбросить фильтры</Text>
+                  <AppText style={styles.emptyResetText}>Сбросить фильтры</AppText>
                 </TouchableOpacity>
               )}
             </View>
@@ -1687,7 +1687,7 @@ export function PendingReviewScreen() {
         onPress={() => navigation.navigate("CreateCard")}
         activeOpacity={0.8}
       >
-        <Text style={styles.fabText}>+</Text>
+        <AppText style={styles.fabText}>+</AppText>
       </TouchableOpacity>
       <Modal
         visible={bulkActionsVisible}
@@ -1700,9 +1700,9 @@ export function PendingReviewScreen() {
             <TouchableWithoutFeedback>
               <View style={styles.bulkActionsSheet}>
                 <View style={styles.bulkActionsHandle} />
-                <Text style={styles.bulkActionsTitle}>
+                <AppText style={styles.bulkActionsTitle}>
                   Выбрано: {selectedIds.size}
-                </Text>
+                </AppText>
                 <TouchableOpacity
                   style={styles.bulkActionItem}
                   activeOpacity={0.7}
@@ -1718,13 +1718,13 @@ export function PendingReviewScreen() {
                       style={styles.bulkActionIcon}
                     />
                   ) : (
-                    <Text style={styles.bulkActionIcon}>📤</Text>
+                    <AppText style={styles.bulkActionIcon}>📤</AppText>
                   )}
                   <View>
-                    <Text style={styles.bulkActionLabel}>Загрузить в Озон</Text>
-                    <Text style={styles.bulkActionDesc}>
+                    <AppText style={styles.bulkActionLabel}>Загрузить в Озон</AppText>
+                    <AppText style={styles.bulkActionDesc}>
                       Отправить выбранные карточки на публикацию
-                    </Text>
+                    </AppText>
                   </View>
                 </TouchableOpacity>
                 <TouchableOpacity
@@ -1742,15 +1742,15 @@ export function PendingReviewScreen() {
                       style={styles.bulkActionIcon}
                     />
                   ) : (
-                    <Text style={styles.bulkActionIcon}>🔍</Text>
+                    <AppText style={styles.bulkActionIcon}>🔍</AppText>
                   )}
                   <View>
-                    <Text style={styles.bulkActionLabel}>
+                    <AppText style={styles.bulkActionLabel}>
                       Распознать заново
-                    </Text>
-                    <Text style={styles.bulkActionDesc}>
+                    </AppText>
+                    <AppText style={styles.bulkActionDesc}>
                       ИИ перезапишет данные из фотографий
-                    </Text>
+                    </AppText>
                   </View>
                 </TouchableOpacity>
                 <TouchableOpacity
@@ -1768,20 +1768,20 @@ export function PendingReviewScreen() {
                       style={styles.bulkActionIcon}
                     />
                   ) : (
-                    <Text style={styles.bulkActionIcon}>🗑️</Text>
+                    <AppText style={styles.bulkActionIcon}>🗑️</AppText>
                   )}
                   <View>
-                    <Text
+                    <AppText
                       style={[
                         styles.bulkActionLabel,
                         styles.bulkActionLabelDanger,
                       ]}
                     >
                       Удалить
-                    </Text>
-                    <Text style={styles.bulkActionDesc}>
+                    </AppText>
+                    <AppText style={styles.bulkActionDesc}>
                       Безвозвратно удалить выбранные карточки
-                    </Text>
+                    </AppText>
                   </View>
                 </TouchableOpacity>
               </View>
@@ -1796,15 +1796,15 @@ export function PendingReviewScreen() {
             color="#1976D2"
             style={{ marginRight: 10 }}
           />
-          <Text style={styles.bottomBarCount}>
+          <AppText style={styles.bottomBarCount}>
             Распознавание: {polling.completed + polling.failed}/{polling.total}
             {polling.failed > 0 ? `  (ошибок: ${polling.failed})` : ""}
-          </Text>
+          </AppText>
         </View>
       )}
       {selectMode && !polling && (
         <View style={styles.bottomBar}>
-          <Text style={styles.bottomBarCount}>Выбрано: {selectedIds.size}</Text>
+          <AppText style={styles.bottomBarCount}>Выбрано: {selectedIds.size}</AppText>
           <TouchableOpacity
             style={[
               styles.bottomBarBtn,
@@ -1826,7 +1826,7 @@ export function PendingReviewScreen() {
             {bulkPublishing || bulkDeleting || bulkReExtracting ? (
               <ActivityIndicator size="small" color="#fff" />
             ) : (
-              <Text style={styles.bottomBarBtnText}>Действия</Text>
+              <AppText style={styles.bottomBarBtnText}>Действия</AppText>
             )}
           </TouchableOpacity>
         </View>

@@ -1,7 +1,6 @@
 import React, { useCallback, useEffect, useState } from "react";
 import {
   View,
-  Text,
   StyleSheet,
   Alert,
   TextInput,
@@ -12,6 +11,7 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from "react-native";
+import { AppText } from '../../components/AppText';
 import {
   adminService,
   type OzonStore,
@@ -162,9 +162,9 @@ export function OzonStoresScreen() {
           ) : (
             <>
               {ozonStores.length === 0 && !addingStore && (
-                <Text style={styles.emptyStoresText}>
+                <AppText style={styles.emptyStoresText}>
                   Нет подключённых магазинов
-                </Text>
+                </AppText>
               )}
 
               {ozonStores.map((store) => {
@@ -183,12 +183,12 @@ export function OzonStoresScreen() {
                 return (
                   <View key={store.id} style={styles.storeRow}>
                     <View style={styles.storeInfo}>
-                      <Text style={styles.storeName}>{store.name}</Text>
-                      <Text style={styles.storeDetails}>
+                      <AppText style={styles.storeName}>{store.name}</AppText>
+                      <AppText style={styles.storeDetails}>
                         ID: {store.clientId} · Key: {store.apiKeyMasked}
-                      </Text>
+                      </AppText>
                       {expiryDate !== null && (
-                        <Text
+                        <AppText
                           style={[
                             styles.storeExpiry,
                             isExpired && styles.storeExpiryExpired,
@@ -197,15 +197,15 @@ export function OzonStoresScreen() {
                           {isExpired
                             ? "Ключ просрочен. Обновите его в личном кабинете Ozon."
                             : `Ключ активен до ${expiryDate.toLocaleDateString("ru-RU", { day: "2-digit", month: "2-digit", year: "numeric" })}`}
-                        </Text>
+                        </AppText>
                       )}
                       {limits === undefined ? null : limits === null ? (
-                        <Text style={styles.limitsError}>
+                        <AppText style={styles.limitsError}>
                           Лимиты недоступны
-                        </Text>
+                        </AppText>
                       ) : (
                         <View style={styles.limitsBlock}>
-                          <Text
+                          <AppText
                             style={[
                               styles.limitsRow,
                               totalExhausted && styles.limitsExhausted,
@@ -213,8 +213,8 @@ export function OzonStoresScreen() {
                           >
                             Доступно пустых мест в магазине:{" "}
                             {limits.total.limit - limits.total.usage}
-                          </Text>
-                          <Text
+                          </AppText>
+                          <AppText
                             style={[
                               styles.limitsRow,
                               createExhausted && styles.limitsExhausted,
@@ -224,14 +224,14 @@ export function OzonStoresScreen() {
                             {limits.daily_create.limit -
                               limits.daily_create.usage}{" "}
                             сегодня
-                          </Text>
-                          <Text style={styles.limitsRow}>
+                          </AppText>
+                          <AppText style={styles.limitsRow}>
                             Можно обновить товаров сегодня:{" "}
                             {limits.daily_update.limit -
                               limits.daily_update.usage}{" "}
                             сегодня
-                          </Text>
-                          <Text
+                          </AppText>
+                          <AppText
                             style={[
                               styles.limitsRow,
                               totalExhausted && styles.limitsExhausted,
@@ -239,7 +239,7 @@ export function OzonStoresScreen() {
                           >
                             Занято/всего мест в магазине: {limits.total.usage}/
                             {limits.total.limit > 0 ? limits.total.limit : "∞"}
-                          </Text>
+                          </AppText>
                         </View>
                       )}
                     </View>
@@ -249,7 +249,7 @@ export function OzonStoresScreen() {
                       onPress={() => handleDeleteStore(store)}
                       hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                     >
-                      <Text style={styles.storeDeleteIcon}>✕</Text>
+                      <AppText style={styles.storeDeleteIcon}>✕</AppText>
                     </TouchableOpacity>
                   </View>
                 );
@@ -290,7 +290,7 @@ export function OzonStoresScreen() {
                       onPress={handleCancelAddStore}
                       disabled={savingStore}
                     >
-                      <Text style={styles.cancelBtnText}>Отмена</Text>
+                      <AppText style={styles.cancelBtnText}>Отмена</AppText>
                     </TouchableOpacity>
                     <TouchableOpacity
                       style={[
@@ -304,7 +304,7 @@ export function OzonStoresScreen() {
                       {savingStore ? (
                         <ActivityIndicator size="small" color="#fff" />
                       ) : (
-                        <Text style={styles.saveBtnText}>Добавить</Text>
+                        <AppText style={styles.saveBtnText}>Добавить</AppText>
                       )}
                     </TouchableOpacity>
                   </View>
@@ -314,7 +314,7 @@ export function OzonStoresScreen() {
                   style={styles.addStoreBtn}
                   onPress={() => setAddingStore(true)}
                 >
-                  <Text style={styles.addStoreBtnText}>+ Добавить магазин</Text>
+                  <AppText style={styles.addStoreBtnText}>+ Добавить магазин</AppText>
                 </TouchableOpacity>
               )}
             </>

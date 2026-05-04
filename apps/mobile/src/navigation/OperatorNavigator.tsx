@@ -7,7 +7,8 @@ import { CardDetailScreen } from "../screens/operator/CardDetail";
 import { PhotoUploadScreen } from "../screens/operator/PhotoUpload";
 import { SettingsScreen } from "../screens/operator/SettingsScreen";
 import { ProfileScreen } from "../screens/ProfileScreen";
-import { Text, Pressable } from "react-native";
+import { Pressable } from "react-native";
+import { AppText } from '../components/AppText';
 
 export type OperatorStackParamList = {
   CardsList: undefined;
@@ -41,7 +42,7 @@ function CardsStack() {
                 justifyContent: "center",
               }}
             >
-              <Text style={{ color: "#fff", fontSize: 32 }}>‹</Text>
+              <AppText style={{ color: "#fff", fontSize: 32 }}>‹</AppText>
             </Pressable>
           ) : null,
       })}
@@ -72,9 +73,9 @@ function CardsStack() {
 
 function TabIcon({ label, focused }: { label: string; focused: boolean }) {
   return (
-    <Text style={{ fontSize: 11, color: focused ? "#1976D2" : "#999" }}>
+    <AppText style={{ fontSize: 11, color: focused ? "#1976D2" : "#999" }}>
       {label}
-    </Text>
+    </AppText>
   );
 }
 

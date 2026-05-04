@@ -4,7 +4,6 @@ import {
   FlatList,
   ScrollView,
   StyleSheet,
-  Text,
   TextInput,
   TouchableOpacity,
   Image,
@@ -16,6 +15,7 @@ import {
   TouchableWithoutFeedback,
   Platform,
 } from "react-native";
+import { AppText } from '../../components/AppText';
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { adminService, type OzonStore } from "../../services/admin.service";
@@ -58,23 +58,23 @@ function BookMiniCard({
           <Image source={{ uri: coverPhoto.fileUrl }} style={styles.miniImage} />
         ) : (
           <View style={[styles.miniImage, styles.miniPlaceholder]}>
-            <Text style={styles.miniPlaceholderText}>Нет фото</Text>
+            <AppText style={styles.miniPlaceholderText}>Нет фото</AppText>
           </View>
         )}
-        <Text style={styles.miniTitle} numberOfLines={2}>{book.title}</Text>
+        <AppText style={styles.miniTitle} numberOfLines={2}>{book.title}</AppText>
         {book.author ? (
-          <Text style={styles.miniAuthor} numberOfLines={1}>{book.author}</Text>
+          <AppText style={styles.miniAuthor} numberOfLines={1}>{book.author}</AppText>
         ) : null}
-        <Text style={styles.miniSku}>{book.sku}</Text>
+        <AppText style={styles.miniSku}>{book.sku}</AppText>
         {book.yearPublished ? (
-          <Text style={styles.miniMeta}>{book.yearPublished}</Text>
+          <AppText style={styles.miniMeta}>{book.yearPublished}</AppText>
         ) : null}
         {book.price != null && Number(book.price) > 0 ? (
-          <Text style={styles.miniPrice}>{Number(book.price).toFixed(0)} ₽</Text>
+          <AppText style={styles.miniPrice}>{Number(book.price).toFixed(0)} ₽</AppText>
         ) : null}
         {storeName ? (
           <View style={[styles.storeBadge, isPublished && styles.storeBadgePublished]}>
-            <Text style={styles.storeBadgeText} numberOfLines={1}>{storeName}</Text>
+            <AppText style={styles.storeBadgeText} numberOfLines={1}>{storeName}</AppText>
           </View>
         ) : null}
       </TouchableOpacity>
@@ -88,12 +88,12 @@ function BookMiniCard({
           {deleting ? (
             <ActivityIndicator size="small" color="#fff" />
           ) : (
-            <Text style={styles.deleteBtnText}>Удалить</Text>
+            <AppText style={styles.deleteBtnText}>Удалить</AppText>
           )}
         </TouchableOpacity>
       ) : (
         <View style={styles.publishedLabel}>
-          <Text style={styles.publishedLabelText}>Опубликована на Ozon</Text>
+          <AppText style={styles.publishedLabelText}>Опубликована на Ozon</AppText>
         </View>
       )}
       <TouchableOpacity
@@ -105,7 +105,7 @@ function BookMiniCard({
         {markingNotDuplicate ? (
           <ActivityIndicator size="small" color="#888" />
         ) : (
-          <Text style={styles.notDuplicateBtnText}>Не дубль</Text>
+          <AppText style={styles.notDuplicateBtnText}>Не дубль</AppText>
         )}
       </TouchableOpacity>
     </View>
@@ -151,14 +151,14 @@ function DuplicateGroupCard({
     <View style={[styles.groupCard, { borderLeftColor: meta.border }]}>
       <View style={styles.groupHeader}>
         <View style={[styles.badge, { backgroundColor: meta.badge }]}>
-          <Text style={[styles.badgeText, { color: meta.text }]}>{meta.label}</Text>
+          <AppText style={[styles.badgeText, { color: meta.text }]}>{meta.label}</AppText>
         </View>
-        <Text style={[styles.badgeFields, { color: meta.text }]}>{fieldsLabel}</Text>
-        <Text style={styles.bookCount}>{group.books.length} шт.</Text>
+        <AppText style={[styles.badgeFields, { color: meta.text }]}>{fieldsLabel}</AppText>
+        <AppText style={styles.bookCount}>{group.books.length} шт.</AppText>
       </View>
-      <Text style={styles.groupKey} numberOfLines={1}>
+      <AppText style={styles.groupKey} numberOfLines={1}>
         {group.type === "isbn" ? `ISBN: ${group.key}` : group.key}
-      </Text>
+      </AppText>
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
@@ -187,7 +187,7 @@ function DuplicateGroupCard({
         {resolvingKey === group.key ? (
           <ActivityIndicator size="small" color="#555" />
         ) : (
-          <Text style={styles.resolveBtnText}>Это не дубль — пропустить</Text>
+          <AppText style={styles.resolveBtnText}>Это не дубль — пропустить</AppText>
         )}
       </TouchableOpacity>
     </View>
@@ -215,7 +215,7 @@ function FilterChip({
       onPress={onPress}
       activeOpacity={0.7}
     >
-      <Text style={[styles.filterChipText, active && styles.filterChipTextActive]}>{label}</Text>
+      <AppText style={[styles.filterChipText, active && styles.filterChipTextActive]}>{label}</AppText>
     </TouchableOpacity>
   );
 }
@@ -483,21 +483,21 @@ export function DuplicatesScreen() {
               onPress={() => setFiltersOpen((v) => !v)}
               activeOpacity={0.7}
             >
-              <Text style={[styles.filterToggleText, filtersOpen && styles.filterToggleTextActive]}>
+              <AppText style={[styles.filterToggleText, filtersOpen && styles.filterToggleTextActive]}>
                 Фильтры{totalActive > 0 ? ` (${totalActive})` : ""}
                 {filtersOpen ? " ▲" : " ▼"}
-              </Text>
+              </AppText>
             </TouchableOpacity>
-            <Text style={styles.filterCount}>
+            <AppText style={styles.filterCount}>
               {displayGroups.length} из {groups.length}
-            </Text>
+            </AppText>
           </View>
 
           {/* Expanded filter panel */}
           {filtersOpen && (
             <View style={styles.filterExpanded}>
               {/* Probability */}
-              <Text style={styles.filterSectionLabel}>Вероятность дублирования</Text>
+              <AppText style={styles.filterSectionLabel}>Вероятность дублирования</AppText>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipsScroll}>
                 <View style={styles.chipsRow}>
                   <FilterChip
@@ -518,7 +518,7 @@ export function DuplicatesScreen() {
               </ScrollView>
 
               {/* Search */}
-              <Text style={styles.filterSectionLabel}>Название / Автор</Text>
+              <AppText style={styles.filterSectionLabel}>Название / Автор</AppText>
               <TextInput
                 style={styles.searchInput}
                 value={filterSearch}
@@ -529,7 +529,7 @@ export function DuplicatesScreen() {
               />
 
               {/* Status */}
-              <Text style={styles.filterSectionLabel}>Статус</Text>
+              <AppText style={styles.filterSectionLabel}>Статус</AppText>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipsScroll}>
                 <View style={styles.chipsRow}>
                   {(
@@ -550,7 +550,7 @@ export function DuplicatesScreen() {
               </ScrollView>
 
               {/* Count */}
-              <Text style={styles.filterSectionLabel}>Кол-во дублей</Text>
+              <AppText style={styles.filterSectionLabel}>Кол-во дублей</AppText>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipsScroll}>
                 <View style={styles.chipsRow}>
                   <FilterChip
@@ -572,7 +572,7 @@ export function DuplicatesScreen() {
               {/* Store */}
               {stores.length > 0 && (
                 <>
-                  <Text style={styles.filterSectionLabel}>Магазин</Text>
+                  <AppText style={styles.filterSectionLabel}>Магазин</AppText>
                   <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipsScroll}>
                     <View style={styles.chipsRow}>
                       <FilterChip
@@ -596,7 +596,7 @@ export function DuplicatesScreen() {
               {/* Operator */}
               {operators.length > 0 && (
                 <>
-                  <Text style={styles.filterSectionLabel}>Оператор</Text>
+                  <AppText style={styles.filterSectionLabel}>Оператор</AppText>
                   <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipsScroll}>
                     <View style={styles.chipsRow}>
                       <FilterChip
@@ -622,25 +622,25 @@ export function DuplicatesScreen() {
               {/* Box */}
               {boxes.length > 0 && (
                 <>
-                  <Text style={styles.filterSectionLabel}>Коробка</Text>
+                  <AppText style={styles.filterSectionLabel}>Коробка</AppText>
                   <TouchableOpacity
                     style={styles.pickerRow}
                     onPress={() => { setBoxPickerSearch(""); setBoxPickerOpen(true); }}
                     activeOpacity={0.7}
                   >
-                    <Text style={filterBoxId ? styles.pickerRowValueActive : styles.pickerRowValuePlaceholder}>
+                    <AppText style={filterBoxId ? styles.pickerRowValueActive : styles.pickerRowValuePlaceholder}>
                       {filterBoxId ? boxes.find((b) => b.id === filterBoxId)?.boxNumber : "Все коробки"}
-                    </Text>
+                    </AppText>
                     <View style={styles.pickerRowRight}>
                       {filterBoxId && (
                         <TouchableOpacity
                           onPress={(e) => { e.stopPropagation(); setFilterBoxId(null); }}
                           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                         >
-                          <Text style={styles.pickerRowClear}>✕</Text>
+                          <AppText style={styles.pickerRowClear}>✕</AppText>
                         </TouchableOpacity>
                       )}
-                      <Text style={styles.pickerRowArrow}>▼</Text>
+                      <AppText style={styles.pickerRowArrow}>▼</AppText>
                     </View>
                   </TouchableOpacity>
                 </>
@@ -649,7 +649,7 @@ export function DuplicatesScreen() {
               {/* Reset */}
               {totalActive > 0 && (
                 <TouchableOpacity style={styles.resetBtn} onPress={resetFilters} activeOpacity={0.7}>
-                  <Text style={styles.resetBtnText}>✕ Сбросить все фильтры ({totalActive})</Text>
+                  <AppText style={styles.resetBtnText}>✕ Сбросить все фильтры ({totalActive})</AppText>
                 </TouchableOpacity>
               )}
             </View>
@@ -658,10 +658,10 @@ export function DuplicatesScreen() {
       }
       ListEmptyComponent={
         <View style={styles.emptyContainer}>
-          <Text style={styles.emptyIcon}>✅</Text>
-          <Text style={styles.empty}>
+          <AppText style={styles.emptyIcon}>✅</AppText>
+          <AppText style={styles.empty}>
             {totalActive > 0 ? "Нет групп, подходящих под фильтры" : "Дубликатов не найдено"}
-          </Text>
+          </AppText>
         </View>
       }
     />
@@ -682,9 +682,9 @@ export function DuplicatesScreen() {
             <TouchableWithoutFeedback>
               <View style={styles.pickerSheet}>
                 <View style={styles.pickerSheetHeader}>
-                  <Text style={styles.pickerSheetTitle}>Коробка</Text>
+                  <AppText style={styles.pickerSheetTitle}>Коробка</AppText>
                   <TouchableOpacity onPress={() => setBoxPickerOpen(false)}>
-                    <Text style={styles.pickerDoneBtn}>Закрыть</Text>
+                    <AppText style={styles.pickerDoneBtn}>Закрыть</AppText>
                   </TouchableOpacity>
                 </View>
                 <TextInput
@@ -717,10 +717,10 @@ export function DuplicatesScreen() {
                           setBoxPickerOpen(false);
                         }}
                       >
-                        <Text style={[styles.pickerListItemText, active && styles.pickerListItemTextActive]}>
+                        <AppText style={[styles.pickerListItemText, active && styles.pickerListItemTextActive]}>
                           {item.boxNumber}
-                        </Text>
-                        {active && <Text style={styles.pickerListCheckmark}>✓</Text>}
+                        </AppText>
+                        {active && <AppText style={styles.pickerListCheckmark}>✓</AppText>}
                       </TouchableOpacity>
                     );
                   }}

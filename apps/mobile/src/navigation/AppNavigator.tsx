@@ -3,13 +3,13 @@ import {
   ActivityIndicator,
   View,
   Modal,
-  Text,
   TouchableOpacity,
   ScrollView,
   StyleSheet,
   Platform,
   Alert,
 } from 'react-native';
+import { AppText } from '../components/AppText';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
@@ -104,14 +104,14 @@ export function AppNavigator() {
       {/* Admin banner — shown instead of full overlay */}
       {isActive && user?.role === UserRole.ADMIN && (
         <View style={[styles.adminBanner, { top: bannerTop }]} pointerEvents="none">
-          <Text style={styles.adminBannerText}>🔧 Технические работы активны — операторы видят экран обслуживания</Text>
+          <AppText style={styles.adminBannerText}>🔧 Технические работы активны — операторы видят экран обслуживания</AppText>
         </View>
       )}
 
       {/* No-connection banner — shown for all roles when server is unreachable and no maintenance */}
       {!isActive && serverUnreachable && isAuthenticated && (
         <View style={[styles.offlineBanner, { top: insets.top }]} pointerEvents="none">
-          <Text style={styles.offlineBannerText}>Нет подключения к серверу</Text>
+          <AppText style={styles.offlineBannerText}>Нет подключения к серверу</AppText>
         </View>
       )}
 
@@ -127,67 +127,67 @@ export function AppNavigator() {
             {docModal ? (
               <>
                 <View style={styles.docHeader}>
-                  <Text style={styles.docTitle}>{docModal.title}</Text>
+                  <AppText style={styles.docTitle}>{docModal.title}</AppText>
                 </View>
                 <ScrollView style={styles.docScroll} bounces>
-                  <Text style={styles.docText}>{docModal.text}</Text>
+                  <AppText style={styles.docText}>{docModal.text}</AppText>
                 </ScrollView>
                 <TouchableOpacity style={styles.warningBtn} onPress={() => setDocModal(null)} activeOpacity={0.8}>
-                  <Text style={styles.warningBtnText}>← Назад</Text>
+                  <AppText style={styles.warningBtnText}>← Назад</AppText>
                 </TouchableOpacity>
               </>
             ) : (
               <>
-                <Text style={styles.warningTitle}>Согласие с документами</Text>
-                <Text style={styles.consentIntro}>
+                <AppText style={styles.warningTitle}>Согласие с документами</AppText>
+                <AppText style={styles.consentIntro}>
                   Для продолжения работы ознакомьтесь и примите документы:
-                </Text>
+                </AppText>
 
                 <ScrollView style={styles.warningInstructionsScroll} bounces={false}>
-                  <Text style={styles.consentSectionTitle}>Политика конфиденциальности</Text>
-                  <Text style={styles.consentSectionText}>
+                  <AppText style={styles.consentSectionTitle}>Политика конфиденциальности</AppText>
+                  <AppText style={styles.consentSectionText}>
                     Мы собираем ФИО, телефон и email для идентификации. Данные хранятся на серверах в РФ и не передаются третьим лицам.
-                  </Text>
+                  </AppText>
 
-                  <Text style={styles.consentSectionTitle}>Пользовательское соглашение</Text>
-                  <Text style={styles.consentSectionText}>
+                  <AppText style={styles.consentSectionTitle}>Пользовательское соглашение</AppText>
+                  <AppText style={styles.consentSectionText}>
                     Приложение используется в рамках служебных обязанностей. Фотографии и карточки товаров принадлежат Правообладателю.
-                  </Text>
+                  </AppText>
                 </ScrollView>
 
                 <TouchableOpacity
                   style={styles.consentLinkRow}
                   onPress={() => setDocModal({ title: PRIVACY_POLICY_TITLE, text: PRIVACY_POLICY_TEXT })}
                 >
-                  <Text style={styles.consentLinkText}>Читать Политику конфиденциальности →</Text>
+                  <AppText style={styles.consentLinkText}>Читать Политику конфиденциальности →</AppText>
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={[styles.consentLinkRow, { marginBottom: 16 }]}
                   onPress={() => setDocModal({ title: PUBLIC_OFFER_TITLE, text: PUBLIC_OFFER_TEXT })}
                 >
-                  <Text style={styles.consentLinkText}>Читать Пользовательское соглашение →</Text>
+                  <AppText style={styles.consentLinkText}>Читать Пользовательское соглашение →</AppText>
                 </TouchableOpacity>
 
                 <View style={styles.consentCheckRow}>
                   <TouchableOpacity onPress={() => setConsentPrivacy((v) => !v)} activeOpacity={0.7}>
                     <View style={[styles.consentCheckbox, consentPrivacy && styles.consentCheckboxChecked]}>
-                      {consentPrivacy && <Text style={styles.consentCheckmark}>✓</Text>}
+                      {consentPrivacy && <AppText style={styles.consentCheckmark}>✓</AppText>}
                     </View>
                   </TouchableOpacity>
-                  <Text style={styles.consentCheckLabel} onPress={() => setConsentPrivacy((v) => !v)}>
+                  <AppText style={styles.consentCheckLabel} onPress={() => setConsentPrivacy((v) => !v)}>
                     Принимаю Политику конфиденциальности
-                  </Text>
+                  </AppText>
                 </View>
 
                 <View style={[styles.consentCheckRow, { marginBottom: 20 }]}>
                   <TouchableOpacity onPress={() => setConsentOffer((v) => !v)} activeOpacity={0.7}>
                     <View style={[styles.consentCheckbox, consentOffer && styles.consentCheckboxChecked]}>
-                      {consentOffer && <Text style={styles.consentCheckmark}>✓</Text>}
+                      {consentOffer && <AppText style={styles.consentCheckmark}>✓</AppText>}
                     </View>
                   </TouchableOpacity>
-                  <Text style={styles.consentCheckLabel} onPress={() => setConsentOffer((v) => !v)}>
+                  <AppText style={styles.consentCheckLabel} onPress={() => setConsentOffer((v) => !v)}>
                     Принимаю Пользовательское соглашение
-                  </Text>
+                  </AppText>
                 </View>
 
                 <TouchableOpacity
@@ -196,9 +196,9 @@ export function AppNavigator() {
                   activeOpacity={0.8}
                   disabled={!consentPrivacy || !consentOffer || consentLoading}
                 >
-                  <Text style={styles.warningBtnText}>
+                  <AppText style={styles.warningBtnText}>
                     {consentLoading ? 'Сохранение...' : 'Принять и продолжить'}
-                  </Text>
+                  </AppText>
                 </TouchableOpacity>
               </>
             )}
@@ -215,41 +215,41 @@ export function AppNavigator() {
       >
         <View style={styles.warningOverlay}>
           <View style={styles.warningBox}>
-            <Text style={styles.warningIcon}>⚠️</Text>
-            <Text style={styles.warningTitle}>Предстоящие технические работы</Text>
+            <AppText style={styles.warningIcon}>⚠️</AppText>
+            <AppText style={styles.warningTitle}>Предстоящие технические работы</AppText>
 
             <View style={styles.warningTimeRow}>
               <View style={styles.warningTimeBlock}>
-                <Text style={styles.warningTimeLabel}>Начало</Text>
-                <Text style={styles.warningTimeValue}>{formatDateTime(startsAt)}</Text>
+                <AppText style={styles.warningTimeLabel}>Начало</AppText>
+                <AppText style={styles.warningTimeValue}>{formatDateTime(startsAt)}</AppText>
               </View>
-              <Text style={styles.warningTimeDash}>→</Text>
+              <AppText style={styles.warningTimeDash}>→</AppText>
               <View style={styles.warningTimeBlock}>
-                <Text style={styles.warningTimeLabel}>Окончание (прим.)</Text>
-                <Text style={styles.warningTimeValue}>{formatDateTime(endsAt)}</Text>
+                <AppText style={styles.warningTimeLabel}>Окончание (прим.)</AppText>
+                <AppText style={styles.warningTimeValue}>{formatDateTime(endsAt)}</AppText>
               </View>
             </View>
 
             {message ? (
-              <Text style={styles.warningMessage}>{message}</Text>
+              <AppText style={styles.warningMessage}>{message}</AppText>
             ) : null}
 
             <ScrollView style={styles.warningInstructionsScroll} bounces={false}>
-              <Text style={styles.warningInstructionsTitle}>Что нужно сделать:</Text>
+              <AppText style={styles.warningInstructionsTitle}>Что нужно сделать:</AppText>
               {instructions ? (
-                <Text style={styles.warningInstructionsText}>{instructions}</Text>
+                <AppText style={styles.warningInstructionsText}>{instructions}</AppText>
               ) : (
-                <Text style={styles.warningInstructionsText}>
+                <AppText style={styles.warningInstructionsText}>
                   {'• Завершите текущую работу до начала обслуживания\n'}
                   {'• Сохраните все незаконченные карточки\n'}
                   {'• Все уже сохранённые данные останутся — ничего не потеряется\n'}
                   {'• Приложение автоматически откроется после окончания работ'}
-                </Text>
+                </AppText>
               )}
             </ScrollView>
 
             <TouchableOpacity style={styles.warningBtn} onPress={dismissWarning} activeOpacity={0.8}>
-              <Text style={styles.warningBtnText}>Понял, спасибо</Text>
+              <AppText style={styles.warningBtnText}>Понял, спасибо</AppText>
             </TouchableOpacity>
           </View>
         </View>

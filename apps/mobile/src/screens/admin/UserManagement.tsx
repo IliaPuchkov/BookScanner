@@ -1,7 +1,6 @@
 import React, { useState, useCallback } from 'react';
 import {
   View,
-  Text,
   FlatList,
   StyleSheet,
   RefreshControl,
@@ -14,6 +13,7 @@ import {
   Keyboard,
   Platform,
 } from 'react-native';
+import { AppText } from '../../components/AppText';
 import { useFocusEffect } from '@react-navigation/native';
 import { Input } from '../../components/Input';
 import { Button } from '../../components/Button';
@@ -143,12 +143,12 @@ export function UserManagementScreen() {
   const renderUser = ({ item }: { item: User }) => (
     <View style={styles.userCard}>
       <View style={styles.userInfo}>
-        <Text style={styles.userName}>{item.fullName}</Text>
-        <Text style={styles.userMeta}>
+        <AppText style={styles.userName}>{item.fullName}</AppText>
+        <AppText style={styles.userMeta}>
           {item.role === 'admin' ? 'Админ' : 'Оператор'} ·{' '}
           {item.isApproved ? 'Активен' : 'Ожидает'}
-        </Text>
-        <Text style={styles.userContact}>{item.phone}</Text>
+        </AppText>
+        <AppText style={styles.userContact}>{item.phone}</AppText>
       </View>
       <View style={styles.userActions}>
         {!item.isApproved && (
@@ -156,7 +156,7 @@ export function UserManagementScreen() {
             style={styles.approveBtn}
             onPress={() => handleApprove(item)}
           >
-            <Text style={styles.approveBtnText}>✓</Text>
+            <AppText style={styles.approveBtnText}>✓</AppText>
           </TouchableOpacity>
         )}
         {canEdit(item) && (
@@ -164,7 +164,7 @@ export function UserManagementScreen() {
             style={styles.editBtn}
             onPress={() => setEditTarget(item)}
           >
-            <Text style={styles.editBtnText}>✎</Text>
+            <AppText style={styles.editBtnText}>✎</AppText>
           </TouchableOpacity>
         )}
       </View>
@@ -188,7 +188,7 @@ export function UserManagementScreen() {
           />
         }
         ListEmptyComponent={
-          <Text style={styles.empty}>Нет пользователей</Text>
+          <AppText style={styles.empty}>Нет пользователей</AppText>
         }
       />
 
@@ -197,7 +197,7 @@ export function UserManagementScreen() {
         onPress={() => setShowCreateModal(true)}
         activeOpacity={0.8}
       >
-        <Text style={styles.fabText}>+</Text>
+        <AppText style={styles.fabText}>+</AppText>
       </TouchableOpacity>
 
       {/* Edit actions modal */}
@@ -208,11 +208,11 @@ export function UserManagementScreen() {
           onPress={() => setEditTarget(null)}
         >
           <View style={styles.modal} onStartShouldSetResponder={() => true}>
-            <Text style={styles.modalTitle}>{editTarget?.fullName}</Text>
-            <Text style={styles.modalSubtitle}>
+            <AppText style={styles.modalTitle}>{editTarget?.fullName}</AppText>
+            <AppText style={styles.modalSubtitle}>
               {editTarget?.role === 'admin' ? 'Админ' : 'Оператор'} ·{' '}
               {editTarget?.phone}
-            </Text>
+            </AppText>
 
             {editTarget?.role !== 'admin' && (
               <TouchableOpacity
@@ -220,9 +220,9 @@ export function UserManagementScreen() {
                 onPress={() => editTarget && handlePromoteToAdmin(editTarget)}
               >
                 <View style={[styles.actionIcon, { backgroundColor: '#FFF8E1' }]}>
-                  <Text style={{ fontSize: 16 }}>★</Text>
+                  <AppText style={{ fontSize: 16 }}>★</AppText>
                 </View>
-                <Text style={styles.actionText}>Назначить администратором</Text>
+                <AppText style={styles.actionText}>Назначить администратором</AppText>
               </TouchableOpacity>
             )}
 
@@ -232,11 +232,11 @@ export function UserManagementScreen() {
                 onPress={() => editTarget && handleDelete(editTarget)}
               >
                 <View style={[styles.actionIcon, { backgroundColor: '#FFEBEE' }]}>
-                  <Text style={{ fontSize: 16, color: '#E53935' }}>✕</Text>
+                  <AppText style={{ fontSize: 16, color: '#E53935' }}>✕</AppText>
                 </View>
-                <Text style={[styles.actionText, { color: '#E53935' }]}>
+                <AppText style={[styles.actionText, { color: '#E53935' }]}>
                   Удалить пользователя
-                </Text>
+                </AppText>
               </TouchableOpacity>
             )}
 
@@ -244,9 +244,9 @@ export function UserManagementScreen() {
               style={[styles.actionRow, { marginTop: 8 }]}
               onPress={() => setEditTarget(null)}
             >
-              <Text style={[styles.actionText, { color: '#999', textAlign: 'center', flex: 1 }]}>
+              <AppText style={[styles.actionText, { color: '#999', textAlign: 'center', flex: 1 }]}>
                 Отмена
-              </Text>
+              </AppText>
             </TouchableOpacity>
           </View>
         </TouchableOpacity>
@@ -261,7 +261,7 @@ export function UserManagementScreen() {
           <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
             <View style={styles.modalOverlay} pointerEvents="box-none">
               <View style={styles.modal}>
-                <Text style={styles.modalTitle}>Новый пользователь</Text>
+                <AppText style={styles.modalTitle}>Новый пользователь</AppText>
                 <ScrollView
                   keyboardShouldPersistTaps="handled"
                   showsVerticalScrollIndicator={false}

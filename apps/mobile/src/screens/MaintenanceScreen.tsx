@@ -1,11 +1,11 @@
 import React from 'react';
 import {
   View,
-  Text,
   StyleSheet,
   TouchableOpacity,
   ScrollView,
 } from 'react-native';
+import { AppText } from '../components/AppText';
 import { useMaintenanceContext } from '../context/MaintenanceContext';
 
 function formatDateTime(iso: string | null): string {
@@ -21,61 +21,61 @@ export function MaintenanceScreen() {
   return (
     <View style={styles.overlay}>
       <ScrollView contentContainerStyle={styles.content} bounces={false}>
-        <Text style={styles.icon}>🔧</Text>
-        <Text style={styles.title}>Технические работы</Text>
-        <Text style={styles.subtitle}>
+        <AppText style={styles.icon}>🔧</AppText>
+        <AppText style={styles.title}>Технические работы</AppText>
+        <AppText style={styles.subtitle}>
           Приложение временно недоступно.{'\n'}Приносим извинения за неудобства.
-        </Text>
+        </AppText>
 
         <View style={styles.card}>
           <View style={styles.timeRow}>
             <View style={styles.timeBlock}>
-              <Text style={styles.timeLabel}>Начало</Text>
-              <Text style={styles.timeValue}>{formatDateTime(startsAt)}</Text>
+              <AppText style={styles.timeLabel}>Начало</AppText>
+              <AppText style={styles.timeValue}>{formatDateTime(startsAt)}</AppText>
             </View>
-            <Text style={styles.timeDash}>→</Text>
+            <AppText style={styles.timeDash}>→</AppText>
             <View style={styles.timeBlock}>
-              <Text style={styles.timeLabel}>Примерное окончание</Text>
-              <Text style={styles.timeValue}>{formatDateTime(endsAt)}</Text>
+              <AppText style={styles.timeLabel}>Примерное окончание</AppText>
+              <AppText style={styles.timeValue}>{formatDateTime(endsAt)}</AppText>
             </View>
           </View>
         </View>
 
         {message ? (
           <View style={styles.card}>
-            <Text style={styles.cardTitle}>Причина</Text>
-            <Text style={styles.cardText}>{message}</Text>
+            <AppText style={styles.cardTitle}>Причина</AppText>
+            <AppText style={styles.cardText}>{message}</AppText>
           </View>
         ) : null}
 
         {instructions ? (
           <View style={styles.card}>
-            <Text style={styles.cardTitle}>Что делать?</Text>
-            <Text style={styles.cardText}>{instructions}</Text>
+            <AppText style={styles.cardTitle}>Что делать?</AppText>
+            <AppText style={styles.cardText}>{instructions}</AppText>
           </View>
         ) : (
           <View style={styles.card}>
-            <Text style={styles.cardTitle}>Что делать?</Text>
-            <Text style={styles.cardText}>
+            <AppText style={styles.cardTitle}>Что делать?</AppText>
+            <AppText style={styles.cardText}>
               {'• Подождите окончания технических работ\n'}
               {'• Все сохранённые карточки и данные останутся на месте\n'}
               {'• Несохранённые изменения будут потеряны — не закрывайте приложение, если у вас есть незавершённые карточки\n'}
               {'• Нажмите «Обновить» после окончания работ'}
-            </Text>
+            </AppText>
           </View>
         )}
 
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>Что сохранится автоматически</Text>
-          <Text style={styles.savedItem}>{'✅  Все карточки со статусом «Ожидает проверки»'}</Text>
-          <Text style={styles.savedItem}>{'✅  Загруженные фотографии'}</Text>
-          <Text style={styles.savedItem}>{'✅  Опубликованные в Ozon товары'}</Text>
-          <Text style={styles.notSavedItem}>{'❌  Карточки, которые вы создаёте прямо сейчас'}</Text>
-          <Text style={styles.notSavedItem}>{'❌  Несохранённые правки полей'}</Text>
+          <AppText style={styles.cardTitle}>Что сохранится автоматически</AppText>
+          <AppText style={styles.savedItem}>{'✅  Все карточки со статусом «Ожидает проверки»'}</AppText>
+          <AppText style={styles.savedItem}>{'✅  Загруженные фотографии'}</AppText>
+          <AppText style={styles.savedItem}>{'✅  Опубликованные в Ozon товары'}</AppText>
+          <AppText style={styles.notSavedItem}>{'❌  Карточки, которые вы создаёте прямо сейчас'}</AppText>
+          <AppText style={styles.notSavedItem}>{'❌  Несохранённые правки полей'}</AppText>
         </View>
 
         <TouchableOpacity style={styles.refreshBtn} onPress={refresh} activeOpacity={0.8}>
-          <Text style={styles.refreshBtnText}>🔄  Обновить статус</Text>
+          <AppText style={styles.refreshBtnText}>🔄  Обновить статус</AppText>
         </TouchableOpacity>
       </ScrollView>
     </View>

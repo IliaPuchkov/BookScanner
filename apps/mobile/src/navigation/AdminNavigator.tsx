@@ -1,7 +1,8 @@
 import React from "react";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
-import { Text, Pressable } from "react-native";
+import { Pressable } from "react-native";
+import { AppText } from '../components/AppText';
 import { DashboardScreen } from "../screens/admin/Dashboard";
 import { UserManagementScreen } from "../screens/admin/UserManagement";
 import { StatisticsScreen } from "../screens/admin/Statistics";
@@ -69,7 +70,7 @@ const stackScreenOptions = ({ navigation }: { navigation: any }) => ({
           justifyContent: "center",
         }}
       >
-        <Text style={{ color: "#fff", fontSize: 32 }}>‹</Text>
+        <AppText style={{ color: "#fff", fontSize: 32 }}>‹</AppText>
       </Pressable>
     ) : null,
 });
@@ -149,7 +150,7 @@ function CardsStack() {
                 justifyContent: "center",
               }}
             >
-              <Text style={{ color: "#fff", fontSize: 32 }}>‹</Text>
+              <AppText style={{ color: "#fff", fontSize: 32 }}>‹</AppText>
             </Pressable>
           ) : null,
       })}
@@ -233,7 +234,7 @@ function SettingsStackScreen() {
 }
 
 function TabIcon({ label }: { label: string }) {
-  return <Text style={{ fontSize: 14 }}>{label}</Text>;
+  return <AppText style={{ fontSize: 14 }}>{label}</AppText>;
 }
 
 export function AdminNavigator() {

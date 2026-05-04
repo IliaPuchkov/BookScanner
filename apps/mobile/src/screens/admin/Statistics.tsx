@@ -1,7 +1,6 @@
 import React, { useState, useCallback } from 'react';
 import {
   View,
-  Text,
   ScrollView,
   StyleSheet,
   RefreshControl,
@@ -9,6 +8,7 @@ import {
   Switch,
   Platform,
 } from 'react-native';
+import { AppText } from '../../components/AppText';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { useFocusEffect } from '@react-navigation/native';
 import { adminService } from '../../services/admin.service';
@@ -167,7 +167,7 @@ export function StatisticsScreen() {
     >
       {/* Карточки */}
       <View style={styles.section}>
-        <Text style={[styles.sectionTitle, { marginBottom: 14 }]}>Карточки</Text>
+        <AppText style={[styles.sectionTitle, { marginBottom: 14 }]}>Карточки</AppText>
         <View style={styles.statsRow}>
           <StatCell label="Всего" value={stats?.totalCards ?? 0} color="#1976D2" />
           <View style={styles.cellDivider} />
@@ -179,7 +179,7 @@ export function StatisticsScreen() {
 
       {/* Пользователи */}
       <View style={styles.section}>
-        <Text style={[styles.sectionTitle, { marginBottom: 14 }]}>Пользователи</Text>
+        <AppText style={[styles.sectionTitle, { marginBottom: 14 }]}>Пользователи</AppText>
         <View style={styles.statsRow}>
           <StatCell label="Админов" value={stats?.totalAdmins ?? 0} color="#1976D2" />
           <View style={styles.cellDivider} />
@@ -192,7 +192,7 @@ export function StatisticsScreen() {
       {/* Производительность */}
       <View style={styles.section}>
         <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Производительность</Text>
+          <AppText style={styles.sectionTitle}>Производительность</AppText>
 
           {/* Табы периода */}
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.periodsScroll}>
@@ -205,9 +205,9 @@ export function StatisticsScreen() {
                   accessibilityLabel={`Период ${opt.label}`}
                   accessibilityRole="button"
                 >
-                  <Text style={[styles.periodText, selectedPeriod === opt.key && styles.periodTextActive]}>
+                  <AppText style={[styles.periodText, selectedPeriod === opt.key && styles.periodTextActive]}>
                     {opt.label}
-                  </Text>
+                  </AppText>
                 </TouchableOpacity>
               ))}
             </View>
@@ -221,7 +221,7 @@ export function StatisticsScreen() {
               trackColor={{ false: '#ddd', true: '#90CAF9' }}
               thumbColor={includeActiveSessions ? '#1976D2' : '#fff'}
             />
-            <Text style={styles.toggleLabel}>Учитывать незавершённые сессии</Text>
+            <AppText style={styles.toggleLabel}>Учитывать незавершённые сессии</AppText>
           </TouchableOpacity>
 
           {/* Выбор дат для кастомного периода */}
@@ -231,22 +231,22 @@ export function StatisticsScreen() {
                 style={styles.dateBtn}
                 onPress={() => { setShowToPicker(false); setShowFromPicker(true); }}
               >
-                <Text style={styles.dateBtnLabel}>От</Text>
-                <Text style={styles.dateBtnValue}>{formatDate(customFrom)}</Text>
+                <AppText style={styles.dateBtnLabel}>От</AppText>
+                <AppText style={styles.dateBtnValue}>{formatDate(customFrom)}</AppText>
               </TouchableOpacity>
 
-              <Text style={styles.dateSeparator}>—</Text>
+              <AppText style={styles.dateSeparator}>—</AppText>
 
               <TouchableOpacity
                 style={styles.dateBtn}
                 onPress={() => { setShowFromPicker(false); setShowToPicker(true); }}
               >
-                <Text style={styles.dateBtnLabel}>До</Text>
-                <Text style={styles.dateBtnValue}>{formatDate(customTo)}</Text>
+                <AppText style={styles.dateBtnLabel}>До</AppText>
+                <AppText style={styles.dateBtnValue}>{formatDate(customTo)}</AppText>
               </TouchableOpacity>
 
               <TouchableOpacity style={styles.applyBtn} onPress={handleCustomApply}>
-                <Text style={styles.applyBtnText}>Применить</Text>
+                <AppText style={styles.applyBtnText}>Применить</AppText>
               </TouchableOpacity>
             </View>
           )}
@@ -278,21 +278,21 @@ export function StatisticsScreen() {
         {stats?.perUser && stats.perUser.length > 0 ? (
           <>
             <View style={styles.barScaleRow}>
-              <Text style={styles.barScaleLabel}>0</Text>
-              <Text style={styles.barScaleLabel}>макс. {maxCount}</Text>
+              <AppText style={styles.barScaleLabel}>0</AppText>
+              <AppText style={styles.barScaleLabel}>макс. {maxCount}</AppText>
             </View>
             {stats.perUser.map((u, index) => {
               const rankColor = index < 3 ? RANK_COLORS[index] : '#bbb';
               const isTopThree = index < 3;
               return (
                 <View key={u.userId} style={styles.userRow}>
-                  <Text style={[styles.rank, { color: rankColor, fontSize: isTopThree ? 14 : 13 }]}>
+                  <AppText style={[styles.rank, { color: rankColor, fontSize: isTopThree ? 14 : 13 }]}>
                     #{index + 1}
-                  </Text>
+                  </AppText>
                   <View style={styles.userInfo}>
-                    <Text style={[styles.userName, isTopThree && { color: '#111' }]} numberOfLines={1}>
+                    <AppText style={[styles.userName, isTopThree && { color: '#111' }]} numberOfLines={1}>
                       {u.fullName}
-                    </Text>
+                    </AppText>
                     <View style={styles.barContainer}>
                       {/* Завершённые карточки */}
                       <View
@@ -315,11 +315,11 @@ export function StatisticsScreen() {
                     </View>
                   </View>
                   <View style={styles.countBadge}>
-                    <Text style={[styles.countText, isTopThree && { color: rankColor }]}>
+                    <AppText style={[styles.countText, isTopThree && { color: rankColor }]}>
                       {u.completedCardsCount}
-                    </Text>
+                    </AppText>
                     {includeActiveSessions && u.activeCardsCount > 0 && (
-                      <Text style={styles.countTextActive}>+{u.activeCardsCount}</Text>
+                      <AppText style={styles.countTextActive}>+{u.activeCardsCount}</AppText>
                     )}
                   </View>
                 </View>
@@ -327,7 +327,7 @@ export function StatisticsScreen() {
             })}
           </>
         ) : (
-          <Text style={styles.emptyText}>Нет данных за период</Text>
+          <AppText style={styles.emptyText}>Нет данных за период</AppText>
         )}
       </View>
     </ScrollView>
@@ -337,8 +337,8 @@ export function StatisticsScreen() {
 function StatCell({ label, value, color }: { label: string; value: number; color: string }) {
   return (
     <View style={styles.statCell}>
-      <Text style={[styles.statValue, { color }]}>{value}</Text>
-      <Text style={styles.statLabel} numberOfLines={1} adjustsFontSizeToFit>{label}</Text>
+      <AppText style={[styles.statValue, { color }]}>{value}</AppText>
+      <AppText style={styles.statLabel} numberOfLines={1} adjustsFontSizeToFit>{label}</AppText>
     </View>
   );
 }

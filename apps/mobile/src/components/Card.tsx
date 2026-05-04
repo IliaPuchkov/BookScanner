@@ -1,5 +1,6 @@
 import React from "react";
-import { View, Text, StyleSheet, TouchableOpacity, Image } from "react-native";
+import { View, StyleSheet, TouchableOpacity, Image } from "react-native";
+import { AppText } from './AppText';
 import { BookStatus, UserRole } from "../types";
 import type { Book } from "../types";
 
@@ -45,23 +46,23 @@ export function BookCard({ book, onPress, userRole, storeName }: Props) {
         <Image source={{ uri: coverPhoto.fileUrl }} style={styles.image} />
       ) : (
         <View style={[styles.image, styles.placeholder]}>
-          <Text style={styles.placeholderText}>Нет фото</Text>
+          <AppText style={styles.placeholderText}>Нет фото</AppText>
         </View>
       )}
       <View style={styles.info}>
-        <Text style={styles.title} numberOfLines={2}>
+        <AppText style={styles.title} numberOfLines={2}>
           {book.title}
-        </Text>
+        </AppText>
         {book.author ? (
-          <Text style={styles.author} numberOfLines={1}>
+          <AppText style={styles.author} numberOfLines={1}>
             {book.author}
-          </Text>
+          </AppText>
         ) : null}
-        <Text style={styles.sku}>{book.sku}</Text>
+        <AppText style={styles.sku}>{book.sku}</AppText>
         {book.price != null &&
           Number(book.price) > 0 &&
           userRole === UserRole.ADMIN && (
-            <Text style={styles.price}>{Number(book.price).toFixed(0)} ₽</Text>
+            <AppText style={styles.price}>{Number(book.price).toFixed(0)} ₽</AppText>
           )}
         {userRole === UserRole.ADMIN && (
           <View style={styles.statusBadge}>
@@ -71,22 +72,22 @@ export function BookCard({ book, onPress, userRole, storeName }: Props) {
                 { backgroundColor: statusConfig.color },
               ]}
             />
-            <Text style={[styles.statusText, { color: statusConfig.color }]}>
+            <AppText style={[styles.statusText, { color: statusConfig.color }]}>
               {statusConfig.label}
-            </Text>
+            </AppText>
           </View>
         )}
         {storeName ? (
-          <Text style={styles.storeName}>Магазин: {storeName}</Text>
+          <AppText style={styles.storeName}>Магазин: {storeName}</AppText>
         ) : null}
         {userRole === "admin" && (
           <View style={styles.meta}>
             {book.createdBy?.fullName ? (
-              <Text style={styles.metaText} numberOfLines={1}>
+              <AppText style={styles.metaText} numberOfLines={1}>
                 {book.createdBy.fullName}
-              </Text>
+              </AppText>
             ) : null}
-            <Text style={styles.metaText}>{formatDate(book.createdAt)}</Text>
+            <AppText style={styles.metaText}>{formatDate(book.createdAt)}</AppText>
           </View>
         )}
       </View>

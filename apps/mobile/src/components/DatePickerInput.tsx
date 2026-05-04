@@ -1,13 +1,13 @@
 import React, { useState } from 'react';
 import {
   View,
-  Text,
   TouchableOpacity,
   Modal,
   TouchableWithoutFeedback,
   StyleSheet,
   Platform,
 } from 'react-native';
+import { AppText } from './AppText';
 import DateTimePicker, {
   DateTimePickerEvent,
 } from '@react-native-community/datetimepicker';
@@ -80,18 +80,18 @@ export function DatePickerInput({
         onPress={() => { setIosTemp(null); setShow(true); }}
         activeOpacity={0.7}
       >
-        <Text style={[styles.text, !value && styles.placeholder]} numberOfLines={1}>
+        <AppText style={[styles.text, !value && styles.placeholder]} numberOfLines={1}>
           {value ? toDisplayDate(value) : placeholder}
-        </Text>
+        </AppText>
         {value ? (
           <TouchableOpacity
             onPress={() => onChange('')}
             hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
           >
-            <Text style={styles.clearIcon}>✕</Text>
+            <AppText style={styles.clearIcon}>✕</AppText>
           </TouchableOpacity>
         ) : (
-          <Text style={styles.calIcon}>📅</Text>
+          <AppText style={styles.calIcon}>📅</AppText>
         )}
       </TouchableOpacity>
 
@@ -121,10 +121,10 @@ export function DatePickerInput({
                 <View style={styles.sheet}>
                   <View style={styles.sheetHeader}>
                     <TouchableOpacity onPress={handleIosCancel}>
-                      <Text style={styles.cancelBtn}>Отмена</Text>
+                      <AppText style={styles.cancelBtn}>Отмена</AppText>
                     </TouchableOpacity>
                     <TouchableOpacity onPress={handleIosDone}>
-                      <Text style={styles.doneBtn}>Готово</Text>
+                      <AppText style={styles.doneBtn}>Готово</AppText>
                     </TouchableOpacity>
                   </View>
                   <DateTimePicker

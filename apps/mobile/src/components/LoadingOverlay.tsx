@@ -1,5 +1,6 @@
 import React from 'react';
-import { View, ActivityIndicator, StyleSheet, Text } from 'react-native';
+import { View, ActivityIndicator, StyleSheet } from 'react-native';
+import { AppText } from './AppText';
 
 interface Props {
   message?: string;
@@ -10,7 +11,7 @@ export function LoadingOverlay({ message }: Props) {
     <View style={styles.overlay}>
       <View style={styles.box}>
         <ActivityIndicator size="large" color="#1976D2" />
-        {message && <Text style={styles.text}>{message}</Text>}
+        {message && <AppText style={styles.text}>{message}</AppText>}
       </View>
     </View>
   );

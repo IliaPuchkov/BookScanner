@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
 import {
   View,
-  Text,
   TouchableOpacity,
   StyleSheet,
   ActivityIndicator,
 } from 'react-native';
+import { AppText } from '../components/AppText';
 import { maintenanceService } from '../services/maintenance.service';
 
 interface Props {
@@ -29,20 +29,20 @@ export function ServerErrorScreen({ onRetry }: Props) {
 
   return (
     <View style={styles.overlay}>
-      <Text style={styles.icon}>😕</Text>
-      <Text style={styles.title}>Что-то пошло не так</Text>
-      <Text style={styles.subtitle}>
+      <AppText style={styles.icon}>😕</AppText>
+      <AppText style={styles.title}>Что-то пошло не так</AppText>
+      <AppText style={styles.subtitle}>
         Не удаётся подключиться к серверу.{'\n'}
         Проверьте интернет-соединение и попробуйте снова.
-      </Text>
+      </AppText>
 
       <View style={styles.card}>
-        <Text style={styles.cardTitle}>Возможные причины</Text>
-        <Text style={styles.cardText}>
+        <AppText style={styles.cardTitle}>Возможные причины</AppText>
+        <AppText style={styles.cardText}>
           {'• Нет интернет-соединения\n'}
           {'• Сервер временно недоступен\n'}
           {'• Ведутся технические работы'}
-        </Text>
+        </AppText>
       </View>
 
       <TouchableOpacity
@@ -54,7 +54,7 @@ export function ServerErrorScreen({ onRetry }: Props) {
         {checking ? (
           <ActivityIndicator color="#fff" />
         ) : (
-          <Text style={styles.retryBtnText}>🔄  Повторить попытку</Text>
+          <AppText style={styles.retryBtnText}>🔄  Повторить попытку</AppText>
         )}
       </TouchableOpacity>
     </View>

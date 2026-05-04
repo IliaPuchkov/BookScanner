@@ -8,9 +8,11 @@ import {
   Modal,
   TouchableOpacity,
 } from "react-native";
+import { AppText } from '../components/AppText';
 import Constants from "expo-constants";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuth } from "../hooks/useAuth";
+import { useTheme, FontSizeOption } from "../context/ThemeContext";
 import { Button } from "../components/Button";
 import { authService } from "../services/auth.service";
 import {
@@ -20,8 +22,23 @@ import {
   PUBLIC_OFFER_TEXT,
 } from "../constants/legal";
 
+const FONT_SIZE_LABELS: Record<FontSizeOption, string> = {
+  small: 'А',
+  medium: 'А',
+  large: 'А',
+  extralarge: 'А',
+};
+
+const FONT_SIZE_DISPLAY: Record<FontSizeOption, number> = {
+  small: 13,
+  medium: 16,
+  large: 20,
+  extralarge: 24,
+};
+
 export function ProfileScreen() {
   const { user, logout } = useAuth();
+  const { fontSize, setFontSize } = useTheme();
   const isAdmin = user?.role === "admin";
   const [deleting, setDeleting] = useState(false);
   const [docModal, setDocModal] = useState<{ title: string; text: string } | null>(null);
@@ -67,14 +84,14 @@ export function ProfileScreen() {
     >
       <View style={styles.card}>
         <View style={styles.avatar}>
-          <Text style={styles.avatarText}>
+          <AppText style={styles.avatarText}>
             {user?.fullName?.charAt(0)?.toUpperCase() ?? "?"}
-          </Text>
+          </AppText>
         </View>
-        <Text style={styles.name}>{user?.fullName}</Text>
-        <Text style={styles.role}>
+        <AppText style={styles.name}>{user?.fullName}</AppText>
+        <AppText style={styles.role}>
           {isAdmin ? "Администратор" : "Оператор"}
-        </Text>
+        </AppText>
 
         <View style={styles.info}>
           <InfoItem label="Телефон" value={user?.phone ?? "—"} />
@@ -87,23 +104,47 @@ export function ProfileScreen() {
       </View>
 
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Документы</Text>
+        <AppText style={styles.sectionTitle}>Документы</AppText>
         <TouchableOpacity
           style={styles.docRow}
           onPress={() => setDocModal({ title: PRIVACY_POLICY_TITLE, text: PRIVACY_POLICY_TEXT })}
           activeOpacity={0.7}
         >
-          <Text style={styles.docRowText}>Политика конфиденциальности</Text>
-          <Text style={styles.docRowArrow}>›</Text>
+          <AppText style={styles.docRowText}>Политика конфиденциальности</AppText>
+          <AppText style={styles.docRowArrow}>›</AppText>
         </TouchableOpacity>
         <TouchableOpacity
           style={[styles.docRow, { borderBottomWidth: 0 }]}
           onPress={() => setDocModal({ title: PUBLIC_OFFER_TITLE, text: PUBLIC_OFFER_TEXT })}
           activeOpacity={0.7}
         >
-          <Text style={styles.docRowText}>Пользовательское соглашение</Text>
-          <Text style={styles.docRowArrow}>›</Text>
+          <AppText style={styles.docRowText}>Пользовательское соглашение</AppText>
+          <AppText style={styles.docRowArrow}>›</AppText>
         </TouchableOpacity>
+      </View>
+
+      <View style={styles.section}>
+        <AppText style={styles.sectionTitle}>Размер текста</AppText>
+        <View style={styles.fontSizeRow}>
+          {(['small', 'medium', 'large', 'extralarge'] as FontSizeOption[]).map((option) => (
+            <TouchableOpacity
+              key={option}
+              style={[styles.fontSizeBtn, fontSize === option && styles.fontSizeBtnActive]}
+              onPress={() => setFontSize(option)}
+              activeOpacity={0.7}
+            >
+              <Text
+                style={[
+                  styles.fontSizeBtnText,
+                  { fontSize: FONT_SIZE_DISPLAY[option] },
+                  fontSize === option && styles.fontSizeBtnTextActive,
+                ]}
+              >
+                {FONT_SIZE_LABELS[option]}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
       </View>
 
       <Button
@@ -121,25 +162,25 @@ export function ProfileScreen() {
         style={{ marginTop: 8 }}
       />
 
-      <Text style={styles.deleteHint}>
+      <AppText style={styles.deleteHint}>
         При удалении аккаунта ваши персональные данные будут удалены в течение 30 дней.
-      </Text>
+      </AppText>
 
-      <Text style={styles.version}>
+      <AppText style={styles.version}>
         Версия {Constants.expoConfig?.version ?? "—"}
-      </Text>
+      </AppText>
 
       <Modal visible={!!docModal} animationType="slide" onRequestClose={() => setDocModal(null)}>
         <View style={styles.docContainer}>
           <View style={[styles.docHeader, { paddingTop: insets.top + 14 }]}>
             <TouchableOpacity onPress={() => setDocModal(null)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-              <Text style={styles.docBack}>‹ Назад</Text>
+              <AppText style={styles.docBack}>‹ Назад</AppText>
             </TouchableOpacity>
-            <Text style={styles.docTitle} numberOfLines={1}>{docModal?.title}</Text>
+            <AppText style={styles.docTitle} numberOfLines={1}>{docModal?.title}</AppText>
             <View style={{ width: 60 }} />
           </View>
           <ScrollView contentContainerStyle={styles.docScroll}>
-            <Text style={styles.docText}>{docModal?.text}</Text>
+            <AppText style={styles.docText}>{docModal?.text}</AppText>
           </ScrollView>
         </View>
       </Modal>
@@ -150,8 +191,8 @@ export function ProfileScreen() {
 function InfoItem({ label, value }: { label: string; value: string }) {
   return (
     <View style={styles.infoRow}>
-      <Text style={styles.infoLabel}>{label}</Text>
-      <Text style={styles.infoValue}>{value}</Text>
+      <AppText style={styles.infoLabel}>{label}</AppText>
+      <AppText style={styles.infoValue}>{value}</AppText>
     </View>
   );
 }
@@ -257,6 +298,33 @@ const styles = StyleSheet.create({
   docRowArrow: {
     fontSize: 20,
     color: "#ccc",
+  },
+  fontSizeRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+  },
+  fontSizeBtn: {
+    flex: 1,
+    marginHorizontal: 4,
+    paddingVertical: 10,
+    borderRadius: 10,
+    backgroundColor: '#F5F5F5',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  fontSizeBtnActive: {
+    backgroundColor: '#E3F0FB',
+    borderWidth: 1.5,
+    borderColor: '#1976D2',
+  },
+  fontSizeBtnText: {
+    color: '#888',
+    fontWeight: '600',
+  },
+  fontSizeBtnTextActive: {
+    color: '#1976D2',
   },
   docContainer: {
     flex: 1,

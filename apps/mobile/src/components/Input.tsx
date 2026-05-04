@@ -1,5 +1,6 @@
 import React, { type ReactNode } from 'react';
-import { View, Text, TextInput, StyleSheet, type TextInputProps } from 'react-native';
+import { View, TextInput, StyleSheet, type TextInputProps } from 'react-native';
+import { AppText } from './AppText';
 
 interface Props extends TextInputProps {
   label: string;
@@ -10,7 +11,7 @@ interface Props extends TextInputProps {
 export function Input({ label, error, style, rightElement, ...rest }: Props) {
   return (
     <View style={styles.container}>
-      <Text style={styles.label}>{label}</Text>
+      <AppText style={styles.label}>{label}</AppText>
       <View style={styles.inputWrapper}>
         <TextInput
           style={[styles.input, error ? styles.inputError : undefined, rightElement ? styles.inputWithRight : undefined, style]}
@@ -19,7 +20,7 @@ export function Input({ label, error, style, rightElement, ...rest }: Props) {
         />
         {rightElement ? <View style={styles.rightElement}>{rightElement}</View> : null}
       </View>
-      {error ? <Text style={styles.error}>{error}</Text> : null}
+      {error ? <AppText style={styles.error}>{error}</AppText> : null}
     </View>
   );
 }

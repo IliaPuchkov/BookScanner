@@ -4,10 +4,10 @@ import {
   ScrollView,
   StyleSheet,
   Alert,
-  Text,
   TouchableOpacity,
   ActivityIndicator,
 } from "react-native";
+import { AppText } from '../../components/AppText';
 import { useRoute, type RouteProp } from "@react-navigation/native";
 import * as ImagePicker from "expo-image-picker";
 import { ImageManipulator, SaveFormat } from "expo-image-manipulator";
@@ -274,9 +274,9 @@ export function CreateCardScreen() {
       >
         {step === "box" && (
           <View>
-            <Text style={styles.stepTitle}>
+            <AppText style={styles.stepTitle}>
               Выберите коробку в которой работаете
-            </Text>
+            </AppText>
 
             {boxesLoading && (
               <ActivityIndicator
@@ -303,7 +303,7 @@ export function CreateCardScreen() {
                         setNewBoxNumber("");
                       }}
                     >
-                      <Text
+                      <AppText
                         style={[
                           styles.boxItemText,
                           selectedBoxId === box.id &&
@@ -311,7 +311,7 @@ export function CreateCardScreen() {
                         ]}
                       >
                         {box.boxNumber}
-                      </Text>
+                      </AppText>
                     </TouchableOpacity>
                   ))}
                 </View>
@@ -322,7 +322,7 @@ export function CreateCardScreen() {
                     style={{ marginTop: 16 }}
                   />
                 )}
-                <Text style={styles.orDivider}>Или создайте новую:</Text>
+                <AppText style={styles.orDivider}>Или создайте новую:</AppText>
               </>
             )}
 
@@ -341,16 +341,16 @@ export function CreateCardScreen() {
 
         {step === "photos" && (
           <View>
-            <Text style={styles.stepTitle}>Загрузка фотографий</Text>
-            <Text style={styles.attention}>
+            <AppText style={styles.stepTitle}>Загрузка фотографий</AppText>
+            <AppText style={styles.attention}>
               {""}
               Вы работаете с коробкой №
               {boxes.find((b) => b.id === selectedBoxId)?.boxNumber}
               {""}
-            </Text>
-            <Text style={styles.hint}>
+            </AppText>
+            <AppText style={styles.hint}>
               Фото 1 — обложка с линейкой. Фото 2 — страница с информацией.
-            </Text>
+            </AppText>
 
             <PhotoGrid
               photos={photos}
