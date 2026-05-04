@@ -26,12 +26,16 @@ function BookMiniCard({
   onNavigate,
   onDelete,
   deleting,
+  onMarkNotDuplicate,
+  markingNotDuplicate,
   stores,
 }: {
   book: Book;
   onNavigate: (id: string) => void;
   onDelete: (book: Book) => void;
   deleting: boolean;
+  onMarkNotDuplicate: () => void;
+  markingNotDuplicate: boolean;
   stores: OzonStore[];
 }) {
   const coverPhoto = book.photos?.find((p) => p.sortOrder === 0);
@@ -84,6 +88,18 @@ function BookMiniCard({
           <Text style={styles.publishedLabelText}>Опубликована на Ozon</Text>
         </View>
       )}
+      <TouchableOpacity
+        style={[styles.notDuplicateBtn, markingNotDuplicate && styles.notDuplicateBtnDisabled]}
+        onPress={onMarkNotDuplicate}
+        disabled={markingNotDuplicate || deleting}
+        activeOpacity={0.7}
+      >
+        {markingNotDuplicate ? (
+          <ActivityIndicator size="small" color="#888" />
+        ) : (
+          <Text style={styles.notDuplicateBtnText}>Не дубль</Text>
+        )}
+      </TouchableOpacity>
     </View>
   );
 }
@@ -99,16 +115,20 @@ function DuplicateGroupCard({
   onNavigate,
   onDelete,
   onResolve,
+  onMarkBookNotDuplicate,
   deletingId,
   resolvingKey,
+  markingNotDuplicateId,
   stores,
 }: {
   group: DuplicateGroup;
   onNavigate: (id: string) => void;
   onDelete: (book: Book) => void;
   onResolve: (group: DuplicateGroup) => void;
+  onMarkBookNotDuplicate: (bookId: string, group: DuplicateGroup) => void;
   deletingId: string | null;
   resolvingKey: string | null;
+  markingNotDuplicateId: string | null;
   stores: OzonStore[];
 }) {
   const prob = group.probability ?? 30;
@@ -138,6 +158,8 @@ function DuplicateGroupCard({
             onNavigate={onNavigate}
             onDelete={onDelete}
             deleting={deletingId === book.id}
+            onMarkNotDuplicate={() => onMarkBookNotDuplicate(book.id, group)}
+            markingNotDuplicate={markingNotDuplicateId === book.id}
             stores={stores}
           />
         ))}
@@ -169,6 +191,7 @@ export function DuplicatesScreen() {
   const [total, setTotal] = useState(0);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [resolvingKey, setResolvingKey] = useState<string | null>(null);
+  const [markingNotDuplicateId, setMarkingNotDuplicateId] = useState<string | null>(null);
   const [stores, setStores] = useState<OzonStore[]>([]);
   const [filterProb, setFilterProb] = useState<number | null>(null);
   const loadingMoreRef = useRef(false);
@@ -246,6 +269,27 @@ export function DuplicatesScreen() {
     );
   }, []);
 
+  const handleMarkBookNotDuplicate = useCallback(async (bookId: string, group: DuplicateGroup) => {
+    setMarkingNotDuplicateId(bookId);
+    try {
+      const others = group.books.filter((b) => b.id !== bookId);
+      await Promise.all(others.map((other) => adminService.resolveDuplicate(bookId, other.id)));
+      setGroups((prev) =>
+        prev
+          .map((g) =>
+            g.key === group.key && g.type === group.type
+              ? { ...g, books: g.books.filter((b) => b.id !== bookId) }
+              : g,
+          )
+          .filter((g) => g.books.length >= 2),
+      );
+    } catch {
+      Alert.alert("Ошибка", "Не удалось пометить как не дубль");
+    } finally {
+      setMarkingNotDuplicateId(null);
+    }
+  }, []);
+
   const handleResolve = useCallback(async (group: DuplicateGroup) => {
     if (group.books.length < 2) return;
     setResolvingKey(group.key);
@@ -294,8 +338,10 @@ export function DuplicatesScreen() {
           onNavigate={navigate}
           onDelete={handleDelete}
           onResolve={handleResolve}
+          onMarkBookNotDuplicate={handleMarkBookNotDuplicate}
           deletingId={deletingId}
           resolvingKey={resolvingKey}
+          markingNotDuplicateId={markingNotDuplicateId}
           stores={stores}
         />
       )}
@@ -541,6 +587,22 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 12,
     fontWeight: "600",
+  },
+  notDuplicateBtn: {
+    marginTop: 6,
+    borderWidth: 1,
+    borderColor: "#bbb",
+    borderRadius: 6,
+    paddingVertical: 5,
+    alignItems: "center",
+  },
+  notDuplicateBtnDisabled: {
+    opacity: 0.5,
+  },
+  notDuplicateBtnText: {
+    fontSize: 11,
+    color: "#666",
+    fontWeight: "500",
   },
   resolveBtn: {
     borderWidth: 1,
