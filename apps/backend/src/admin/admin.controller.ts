@@ -22,6 +22,7 @@ import { UpdateUserDto } from '../users/dto/update-user.dto';
 import { PaginationDto } from '../common/dto/pagination.dto';
 import { SearchBooksDto } from './dto/search-books.dto';
 import { ResolveDuplicateDto } from './dto/resolve-duplicate.dto';
+import { DuplicateFiltersDto } from './dto/duplicate-filters.dto';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 
 @ApiTags('Admin')
@@ -110,8 +111,8 @@ export class AdminController {
   // Duplicates
   @Get('books/duplicates')
   @ApiOperation({ summary: 'Книги с возможными дубликатами' })
-  getDuplicates(@Query() pagination: PaginationDto) {
-    return this.adminService.getDuplicates(pagination.page, pagination.limit);
+  getDuplicates(@Query() dto: DuplicateFiltersDto) {
+    return this.adminService.getDuplicates(dto);
   }
 
   @Post('books/duplicates/resolve')

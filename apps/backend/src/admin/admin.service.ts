@@ -7,6 +7,7 @@ import { CreateUserDto } from '../users/dto/create-user.dto';
 import { UpdateUserDto } from '../users/dto/update-user.dto';
 import { PaginationDto } from '../common/dto/pagination.dto';
 import { SearchBooksDto } from './dto/search-books.dto';
+import { DuplicateFiltersDto } from './dto/duplicate-filters.dto';
 import { DuplicateResolution } from './entities/duplicate-resolution.entity';
 import { UserRole, BookStatus } from '@bookscanner/shared';
 
@@ -137,11 +138,11 @@ export class AdminService {
     return this.booksService.getUnderpricedBooks(pagination);
   }
 
-  async getDuplicates(page = 1, limit = 20) {
+  async getDuplicates(dto: DuplicateFiltersDto) {
     const resolvedPairs = await this.dupResRepository.find({
       select: ['book1Id', 'book2Id'],
     });
-    return this.booksService.getDuplicatePairs(resolvedPairs, page, limit);
+    return this.booksService.getDuplicatePairs(resolvedPairs, dto, dto.page, dto.limit);
   }
 
   async resolveDuplicate(book1Id: string, book2Id: string, adminId: string) {
