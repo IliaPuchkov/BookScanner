@@ -16,8 +16,11 @@ import { CreateBoxDto } from './dto/create-box.dto';
 import { UpdateBoxDto } from './dto/update-box.dto';
 import { PaginationDto } from '../common/dto/pagination.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { RolesGuard } from '../common/guards/roles.guard';
+import { Roles } from '../common/decorators/roles.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { User } from '../users/entities/user.entity';
+import { UserRole } from '@bookscanner/shared';
 
 @ApiTags('Boxes')
 @Controller('boxes')
@@ -30,6 +33,14 @@ export class BoxesController {
   @ApiOperation({ summary: 'Создать новую коробку' })
   create(@Body() dto: CreateBoxDto, @CurrentUser() user: User) {
     return this.boxesService.create(dto, user.id);
+  }
+
+  @Get('all')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @ApiOperation({ summary: 'Все коробки (для фильтра, только администратор)' })
+  findAllForFilter() {
+    return this.boxesService.findAllForFilter();
   }
 
   @Get()

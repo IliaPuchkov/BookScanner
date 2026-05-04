@@ -85,6 +85,12 @@ export class BoxesService {
     await this.boxesRepository.remove(box);
   }
 
+  async findAllForFilter(): Promise<Box[]> {
+    return this.boxesRepository.find({
+      order: { boxNumber: 'ASC' },
+    });
+  }
+
   async deleteIfEmpty(boxId: string): Promise<void> {
     const count = await this.booksRepository.countBy({ boxId });
     if (count === 0) {

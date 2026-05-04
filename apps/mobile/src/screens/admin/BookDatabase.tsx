@@ -240,12 +240,15 @@ export function BookDatabaseScreen() {
   useEffect(() => {
     const loadOptions = async () => {
       try {
-        const [boxesRes, usersRes, storesRes] = await Promise.all([
-          boxesService.getBoxes(1, 100),
+        const [allBoxes, usersRes, storesRes] = await Promise.all([
+          boxesService.getAllBoxes(),
           adminService.getUsers(1, 100),
           adminService.getOzonStores().catch(() => ({ stores: [], activeId: '' })),
         ]);
-        setBoxes(boxesRes.data);
+        const sorted = [...allBoxes].sort((a, b) =>
+          a.boxNumber.localeCompare(b.boxNumber, undefined, { numeric: true }),
+        );
+        setBoxes(sorted);
         setUsers(
           usersRes.data.map((u: User) => ({ id: u.id, fullName: u.fullName })),
         );

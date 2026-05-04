@@ -9,6 +9,11 @@ export const boxesService = {
     return data;
   },
 
+  async getAllBoxes(): Promise<Box[]> {
+    const { data } = await api.get<Box[]>('/boxes/all');
+    return data;
+  },
+
   async getBox(id: string): Promise<Box> {
     const { data } = await api.get<Box>(`/boxes/${id}`);
     return data;

@@ -340,11 +340,14 @@ export function PendingReviewScreen() {
   useEffect(() => {
     const loadOptions = async () => {
       try {
-        const [boxesRes, usersRes] = await Promise.all([
-          boxesService.getBoxes(1, 100),
+        const [allBoxes, usersRes] = await Promise.all([
+          boxesService.getAllBoxes(),
           adminService.getUsers(1, 100),
         ]);
-        setBoxes(boxesRes.data);
+        const sorted = [...allBoxes].sort((a, b) =>
+          a.boxNumber.localeCompare(b.boxNumber, undefined, { numeric: true }),
+        );
+        setBoxes(sorted);
         setFilterUsers(
           usersRes.data.map((u: User) => ({ id: u.id, fullName: u.fullName })),
         );
