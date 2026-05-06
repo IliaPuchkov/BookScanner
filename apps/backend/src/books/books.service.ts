@@ -562,9 +562,11 @@ export class BooksService {
             .createQueryBuilder('book')
             .select('book.isbn', 'isbn')
             .addSelect('array_agg(book.id)', 'ids')
+            .leftJoin('book.workSession', 'ws')
             .where('book.isbn IS NOT NULL')
             .andWhere("book.isbn != ''")
             .andWhere('book.status != :archived', { archived: 'archived' })
+            .andWhere("(book.work_session_id IS NULL OR ws.status = 'completed')")
             .groupBy('book.isbn')
             .having('COUNT(*) >= 2')
             .getRawMany<{ isbn: string; ids: unknown }>(),
@@ -572,9 +574,11 @@ export class BooksService {
             .createQueryBuilder('book')
             .select('LOWER(TRIM(book.title))', 'normalizedTitle')
             .addSelect('array_agg(book.id)', 'ids')
+            .leftJoin('book.workSession', 'ws')
             .where("LOWER(TRIM(book.title)) NOT ILIKE :newBook", { newBook: 'новая книга' })
             .andWhere('book.status != :archived', { archived: 'archived' })
             .andWhere("book.isbn IS NULL OR book.isbn = ''")
+            .andWhere("(book.work_session_id IS NULL OR ws.status = 'completed')")
             .groupBy('LOWER(TRIM(book.title))')
             .having('COUNT(*) >= 2')
             .getRawMany<{ normalizedTitle: string; ids: unknown }>(),
@@ -787,18 +791,22 @@ export class BooksService {
     const [isbnResult, titleResult] = await Promise.all([
       this.booksRepository.manager.query<[{ cnt: string }]>(`
         SELECT COUNT(*) AS cnt FROM (
-          SELECT isbn FROM books
-          WHERE isbn IS NOT NULL AND isbn != '' AND status != 'archived'
-          GROUP BY isbn HAVING COUNT(*) >= 2
+          SELECT b.isbn FROM books b
+          LEFT JOIN work_sessions ws ON ws.id = b.work_session_id
+          WHERE b.isbn IS NOT NULL AND b.isbn != '' AND b.status != 'archived'
+            AND (b.work_session_id IS NULL OR ws.status = 'completed')
+          GROUP BY b.isbn HAVING COUNT(*) >= 2
         ) sub
       `),
       this.booksRepository.manager.query<[{ cnt: string }]>(`
         SELECT COUNT(*) AS cnt FROM (
-          SELECT LOWER(TRIM(title)) FROM books
-          WHERE LOWER(TRIM(title)) NOT ILIKE 'новая книга'
-            AND status != 'archived'
-            AND (isbn IS NULL OR isbn = '')
-          GROUP BY LOWER(TRIM(title)) HAVING COUNT(*) >= 2
+          SELECT LOWER(TRIM(b.title)) FROM books b
+          LEFT JOIN work_sessions ws ON ws.id = b.work_session_id
+          WHERE LOWER(TRIM(b.title)) NOT ILIKE 'новая книга'
+            AND b.status != 'archived'
+            AND (b.isbn IS NULL OR b.isbn = '')
+            AND (b.work_session_id IS NULL OR ws.status = 'completed')
+          GROUP BY LOWER(TRIM(b.title)) HAVING COUNT(*) >= 2
         ) sub
       `),
     ]);
