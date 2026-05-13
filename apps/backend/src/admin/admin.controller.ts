@@ -128,29 +128,23 @@ export class AdminController {
   }
 
   // Copies
-  @Get('books/copies')
-  @ApiOperation({ summary: 'Книги, помеченные как копии (isCopy=true)' })
+  @Get('books/copies/groups')
+  @ApiOperation({ summary: 'Копии (isCopy=true), сгруппированные по ISBN или названию' })
   @ApiQuery({ name: 'page', required: false })
   @ApiQuery({ name: 'limit', required: false })
   @ApiQuery({ name: 'search', required: false })
   @ApiQuery({ name: 'status', required: false, enum: ['published', 'not_published'] })
-  @ApiQuery({ name: 'createdById', required: false })
-  @ApiQuery({ name: 'boxId', required: false })
-  getCopies(
+  getCopyGroups(
     @Query('page') page?: string,
     @Query('limit') limit?: string,
     @Query('search') search?: string,
     @Query('status') status?: 'published' | 'not_published',
-    @Query('createdById') createdById?: string,
-    @Query('boxId') boxId?: string,
   ) {
-    return this.adminService.getCopies({
+    return this.adminService.getCopyGroups({
       page: page ? parseInt(page, 10) : undefined,
       limit: limit ? parseInt(limit, 10) : undefined,
       search,
       status,
-      createdById,
-      boxId,
     });
   }
 

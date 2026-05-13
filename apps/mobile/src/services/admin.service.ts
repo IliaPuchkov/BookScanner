@@ -1,5 +1,5 @@
 import api from './api';
-import type { User, PaginatedResponse, StatsSummary, Book, DuplicatesResponse } from '../types';
+import type { User, PaginatedResponse, StatsSummary, Book, DuplicatesResponse, CopyGroupsResponse } from '../types';
 
 export interface SystemSetting {
   id: string;
@@ -278,17 +278,15 @@ export const adminService = {
     await api.post('/admin/books/mark-copies', { bookIds });
   },
 
-  async getCopies(
+  async getCopyGroups(
     page = 1,
     limit = 20,
     filters?: {
       search?: string;
       status?: 'published' | 'not_published';
-      createdById?: string;
-      boxId?: string;
     },
-  ): Promise<PaginatedResponse<Book>> {
-    const { data } = await api.get<PaginatedResponse<Book>>('/admin/books/copies', {
+  ): Promise<CopyGroupsResponse> {
+    const { data } = await api.get<CopyGroupsResponse>('/admin/books/copies/groups', {
       params: { page, limit, ...filters },
     });
     return data;

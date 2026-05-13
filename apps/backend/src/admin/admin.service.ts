@@ -164,17 +164,16 @@ export class AdminService {
     await this.booksService.markAsCopies(bookIds);
   }
 
-  async getCopies(dto: {
+  async getCopyGroups(dto: {
     page?: number;
     limit?: number;
     search?: string;
     status?: 'published' | 'not_published';
-    createdById?: string;
-    boxId?: string;
   }) {
-    const pagination = new PaginationDto();
-    pagination.page = dto.page ?? 1;
-    pagination.limit = dto.limit ?? 20;
-    return this.booksService.getCopies(pagination, dto);
+    return this.booksService.getCopyGroups(
+      dto.page ?? 1,
+      dto.limit ?? 20,
+      { search: dto.search, status: dto.status },
+    );
   }
 }

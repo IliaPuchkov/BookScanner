@@ -2,6 +2,7 @@ import React, { useState, useCallback, useRef } from "react";
 import {
   View,
   FlatList,
+  ScrollView,
   StyleSheet,
   TouchableOpacity,
   Image,
@@ -9,7 +10,6 @@ import {
   ActivityIndicator,
   RefreshControl,
   TextInput,
-  ScrollView,
 } from "react-native";
 import { AppText } from "../../components/AppText";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
@@ -17,12 +17,13 @@ import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { adminService } from "../../services/admin.service";
 import { booksService } from "../../services/books.service";
 import { BookStatus } from "../../types";
-import type { Book } from "../../types";
+import type { Book, CopyGroup } from "../../types";
 import type { AdminMainStackParamList } from "../../navigation/AdminNavigator";
 
 type Nav = NativeStackNavigationProp<AdminMainStackParamList, "Copies">;
-
 type StatusFilter = "all" | "published" | "not_published";
+
+// ─── Filter chip ──────────────────────────────────────────────────────────────
 
 function FilterChip({
   label,
@@ -46,91 +47,72 @@ function FilterChip({
   );
 }
 
-type BookItemProps = {
-  item: Book;
-  onNavigate: (id: string) => void;
-  onDelete: (book: Book) => void;
-  deleting: boolean;
-};
+// ─── Book mini-card inside a group ────────────────────────────────────────────
 
-const BookItem = React.memo(function BookItem({
-  item,
+function BookMiniCard({
+  book,
   onNavigate,
   onDelete,
   deleting,
-}: BookItemProps) {
-  const coverPhoto = item.photos?.find((p) => p.sortOrder === 0);
+}: {
+  book: Book;
+  onNavigate: (id: string) => void;
+  onDelete: (book: Book) => void;
+  deleting: boolean;
+}) {
+  const coverPhoto = book.photos?.find((p) => p.sortOrder === 0);
   const isPublished =
-    item.status === BookStatus.PUBLISHED ||
-    item.ozonProduct?.status === "published" ||
-    item.ozonProduct?.status === "PUBLISHED";
+    book.status === BookStatus.PUBLISHED ||
+    book.ozonProduct?.status === "published" ||
+    book.ozonProduct?.status === "PUBLISHED";
 
   return (
-    <TouchableOpacity
-      style={styles.card}
-      activeOpacity={0.75}
-      onPress={() => onNavigate(item.id)}
-    >
-      <View style={styles.cardRow}>
+    <View style={styles.miniCard}>
+      <TouchableOpacity activeOpacity={0.8} onPress={() => onNavigate(book.id)}>
         {coverPhoto ? (
-          <Image source={{ uri: coverPhoto.fileUrl }} style={styles.thumb} />
+          <Image source={{ uri: coverPhoto.fileUrl }} style={styles.miniImage} />
         ) : (
-          <View style={[styles.thumb, styles.thumbPlaceholder]}>
-            <AppText style={styles.thumbPlaceholderText}>Нет фото</AppText>
+          <View style={[styles.miniImage, styles.miniPlaceholder]}>
+            <AppText style={styles.miniPlaceholderText}>Нет фото</AppText>
           </View>
         )}
-        <View style={styles.cardInfo}>
-          <AppText style={styles.cardTitle} numberOfLines={2}>
-            {item.title}
+        <AppText style={styles.miniTitle} numberOfLines={2}>
+          {book.title}
+        </AppText>
+        {book.author ? (
+          <AppText style={styles.miniAuthor} numberOfLines={1}>
+            {book.author}
           </AppText>
-          {item.author ? (
-            <AppText style={styles.cardAuthor} numberOfLines={1}>
-              {item.author}
-            </AppText>
-          ) : null}
-          <AppText style={styles.cardSku}>{item.sku}</AppText>
-          <View style={styles.cardMeta}>
-            {item.box?.boxNumber ? (
-              <AppText style={styles.metaChip}>
-                Коробка: {item.box.boxNumber}
-              </AppText>
-            ) : null}
-            {item.createdBy?.fullName ? (
-              <AppText style={styles.metaChip} numberOfLines={1}>
-                {item.createdBy.fullName}
-              </AppText>
-            ) : null}
-          </View>
-          <View style={styles.cardFooter}>
-            {item.price != null && Number(item.price) > 0 ? (
-              <AppText style={styles.cardPrice}>
-                {Number(item.price).toFixed(0)} ₽
-              </AppText>
-            ) : null}
-            <View
-              style={[
-                styles.statusBadge,
-                isPublished ? styles.statusPublished : styles.statusPending,
-              ]}
-            >
-              <AppText
-                style={[
-                  styles.statusText,
-                  isPublished
-                    ? styles.statusTextPublished
-                    : styles.statusTextPending,
-                ]}
-              >
-                {isPublished ? "На Ozon" : "Не опубликована"}
-              </AppText>
-            </View>
-          </View>
+        ) : null}
+        <AppText style={styles.miniSku}>{book.sku}</AppText>
+        {book.price != null && Number(book.price) > 0 ? (
+          <AppText style={styles.miniPrice}>
+            {Number(book.price).toFixed(0)} ₽
+          </AppText>
+        ) : null}
+        {book.box?.boxNumber ? (
+          <AppText style={styles.miniBox}>Кор. {book.box.boxNumber}</AppText>
+        ) : null}
+        <View
+          style={[
+            styles.statusBadge,
+            isPublished ? styles.statusPublished : styles.statusPending,
+          ]}
+        >
+          <AppText
+            style={[
+              styles.statusText,
+              isPublished ? styles.statusPublishedText : styles.statusPendingText,
+            ]}
+          >
+            {isPublished ? "На Ozon" : "Не загружена"}
+          </AppText>
         </View>
-      </View>
+      </TouchableOpacity>
       {!isPublished && (
         <TouchableOpacity
           style={[styles.deleteBtn, deleting && styles.deleteBtnDisabled]}
-          onPress={() => onDelete(item)}
+          onPress={() => onDelete(book)}
           disabled={deleting}
           activeOpacity={0.7}
         >
@@ -141,15 +123,63 @@ const BookItem = React.memo(function BookItem({
           )}
         </TouchableOpacity>
       )}
-    </TouchableOpacity>
+    </View>
   );
-});
+}
 
-const PAGE_SIZE = 20;
+// ─── Group card ───────────────────────────────────────────────────────────────
+
+function CopyGroupCard({
+  group,
+  onNavigate,
+  onDelete,
+  deletingId,
+}: {
+  group: CopyGroup;
+  onNavigate: (id: string) => void;
+  onDelete: (book: Book) => void;
+  deletingId: string | null;
+}) {
+  return (
+    <View style={styles.groupCard}>
+      <View style={styles.groupHeader}>
+        <View style={styles.groupTypeBadge}>
+          <AppText style={styles.groupTypeBadgeText}>
+            {group.type === "isbn" ? "ISBN" : "Название"}
+          </AppText>
+        </View>
+        <AppText style={styles.groupKey} numberOfLines={1}>
+          {group.type === "isbn" ? group.key : group.key}
+        </AppText>
+        <AppText style={styles.groupCount}>{group.books.length} шт.</AppText>
+      </View>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={styles.booksScroll}
+        contentContainerStyle={styles.booksScrollContent}
+      >
+        {group.books.map((book) => (
+          <BookMiniCard
+            key={book.id}
+            book={book}
+            onNavigate={onNavigate}
+            onDelete={onDelete}
+            deleting={deletingId === book.id}
+          />
+        ))}
+      </ScrollView>
+    </View>
+  );
+}
+
+// ─── Main screen ──────────────────────────────────────────────────────────────
+
+const PAGE_SIZE = 15;
 
 export function CopiesScreen() {
   const navigation = useNavigation<Nav>();
-  const [books, setBooks] = useState<Book[]>([]);
+  const [groups, setGroups] = useState<CopyGroup[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -174,11 +204,15 @@ export function CopiesScreen() {
     ) => {
       activeFilters.current = filters;
       try {
-        const res = await adminService.getCopies(pageNum, PAGE_SIZE, filters);
-        setBooks(isRefresh || pageNum === 1 ? res.data : (prev) => [...prev, ...res.data]);
+        const res = await adminService.getCopyGroups(pageNum, PAGE_SIZE, filters);
+        setGroups(
+          isRefresh || pageNum === 1
+            ? res.groups
+            : (prev) => [...prev, ...res.groups],
+        );
         setPage(pageNum);
-        setTotal(res.meta.total);
-        setHasMore(pageNum < res.meta.totalPages);
+        setTotal(res.total);
+        setHasMore(pageNum < res.totalPages);
       } catch {
         // silent
       } finally {
@@ -193,26 +227,22 @@ export function CopiesScreen() {
   useFocusEffect(
     useCallback(() => {
       setLoading(true);
-      const filters = {
-        status: statusFilter !== "all" ? (statusFilter as "published" | "not_published") : undefined,
-        search: search.trim() || undefined,
-      };
-      fetchData(filters, 1, true);
-    }, [fetchData, statusFilter, search]),
+      fetchData(activeFilters.current, 1, true);
+    }, [fetchData]),
   );
 
   const applyFilters = useCallback(
     (newStatus: StatusFilter, newSearch: string) => {
-      setBooks([]);
+      const filters = {
+        status:
+          newStatus !== "all"
+            ? (newStatus as "published" | "not_published")
+            : undefined,
+        search: newSearch.trim() || undefined,
+      };
+      setGroups([]);
       setLoading(true);
-      fetchData(
-        {
-          status: newStatus !== "all" ? (newStatus as "published" | "not_published") : undefined,
-          search: newSearch.trim() || undefined,
-        },
-        1,
-        true,
-      );
+      fetchData(filters, 1, true);
     },
     [fetchData],
   );
@@ -237,34 +267,38 @@ export function CopiesScreen() {
     [applyFilters, statusFilter],
   );
 
-  const handleDelete = useCallback(
-    (book: Book) => {
-      Alert.alert(
-        "Удалить карточку?",
-        `"${book.title}" будет удалена безвозвратно.`,
-        [
-          { text: "Отмена", style: "cancel" },
-          {
-            text: "Удалить",
-            style: "destructive",
-            onPress: async () => {
-              setDeletingId(book.id);
-              try {
-                await booksService.deleteBook(book.id);
-                setBooks((prev) => prev.filter((b) => b.id !== book.id));
-                setTotal((t) => t - 1);
-              } catch {
-                Alert.alert("Ошибка", "Не удалось удалить карточку");
-              } finally {
-                setDeletingId(null);
-              }
-            },
+  const handleDelete = useCallback((book: Book) => {
+    Alert.alert(
+      "Удалить карточку?",
+      `"${book.title}" будет удалена безвозвратно.`,
+      [
+        { text: "Отмена", style: "cancel" },
+        {
+          text: "Удалить",
+          style: "destructive",
+          onPress: async () => {
+            setDeletingId(book.id);
+            try {
+              await booksService.deleteBook(book.id);
+              setGroups((prev) =>
+                prev
+                  .map((g) => ({
+                    ...g,
+                    books: g.books.filter((b) => b.id !== book.id),
+                  }))
+                  .filter((g) => g.books.length > 0),
+              );
+              setTotal((t) => Math.max(0, t - 1));
+            } catch {
+              Alert.alert("Ошибка", "Не удалось удалить карточку");
+            } finally {
+              setDeletingId(null);
+            }
           },
-        ],
-      );
-    },
-    [],
-  );
+        },
+      ],
+    );
+  }, []);
 
   const handleLoadMore = useCallback(() => {
     if (loadingMore || !hasMore || loading) return;
@@ -275,12 +309,11 @@ export function CopiesScreen() {
   const STATUS_OPTIONS: { label: string; value: StatusFilter }[] = [
     { label: "Все", value: "all" },
     { label: "На Ozon", value: "published" },
-    { label: "Не опубликованы", value: "not_published" },
+    { label: "Не загружены", value: "not_published" },
   ];
 
   return (
     <View style={styles.container}>
-      {/* Filters */}
       <View style={styles.filterPanel}>
         <TextInput
           style={styles.searchInput}
@@ -290,40 +323,41 @@ export function CopiesScreen() {
           placeholderTextColor="#bbb"
           clearButtonMode="while-editing"
         />
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          style={styles.chipsScroll}
-          contentContainerStyle={styles.chipsRow}
-        >
-          {STATUS_OPTIONS.map((opt) => (
-            <FilterChip
-              key={opt.value}
-              label={opt.label}
-              active={statusFilter === opt.value}
-              onPress={() => handleStatusChange(opt.value)}
-            />
-          ))}
-        </ScrollView>
-        <AppText style={styles.totalLabel}>{total} книг</AppText>
+        <View style={styles.filterRow}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.chipsRow}
+          >
+            {STATUS_OPTIONS.map((opt) => (
+              <FilterChip
+                key={opt.value}
+                label={opt.label}
+                active={statusFilter === opt.value}
+                onPress={() => handleStatusChange(opt.value)}
+              />
+            ))}
+          </ScrollView>
+          <AppText style={styles.totalLabel}>{total} групп</AppText>
+        </View>
       </View>
 
       {loading ? (
         <View style={styles.loader}>
-          <ActivityIndicator size="large" color="#1976D2" />
+          <ActivityIndicator size="large" color="#546E7A" />
         </View>
       ) : (
         <FlatList
-          data={books}
-          keyExtractor={(item) => item.id}
+          data={groups}
+          keyExtractor={(item) => `${item.type}:${item.key}`}
           renderItem={({ item }) => (
-            <BookItem
-              item={item}
+            <CopyGroupCard
+              group={item}
               onNavigate={(id) =>
                 navigation.navigate("ProductDetail", { bookId: id, editable: true })
               }
               onDelete={handleDelete}
-              deleting={deletingId === item.id}
+              deletingId={deletingId}
             />
           )}
           contentContainerStyle={styles.list}
@@ -341,7 +375,7 @@ export function CopiesScreen() {
           ListFooterComponent={
             loadingMore ? (
               <View style={styles.footerLoader}>
-                <ActivityIndicator size="small" color="#1976D2" />
+                <ActivityIndicator size="small" color="#546E7A" />
               </View>
             ) : null
           }
@@ -357,11 +391,12 @@ export function CopiesScreen() {
   );
 }
 
+// ─── Styles ───────────────────────────────────────────────────────────────────
+
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#F5F5F5",
-  },
+  container: { flex: 1, backgroundColor: "#F5F5F5" },
+
+  // Filter panel
   filterPanel: {
     backgroundColor: "#fff",
     paddingHorizontal: 16,
@@ -381,8 +416,10 @@ const styles = StyleSheet.create({
     color: "#222",
     backgroundColor: "#FAFAFA",
   },
-  chipsScroll: {
-    flexGrow: 0,
+  filterRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
   },
   chipsRow: {
     flexDirection: "row",
@@ -396,154 +433,98 @@ const styles = StyleSheet.create({
     borderColor: "#ddd",
     backgroundColor: "#fff",
   },
-  chipActive: {
-    backgroundColor: "#1976D2",
-    borderColor: "#1976D2",
-  },
-  chipText: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: "#666",
-  },
-  chipTextActive: {
-    color: "#fff",
-  },
-  totalLabel: {
-    fontSize: 12,
-    color: "#aaa",
-    textAlign: "right",
-  },
-  loader: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  list: {
-    padding: 12,
-    gap: 10,
-  },
-  card: {
+  chipActive: { backgroundColor: "#546E7A", borderColor: "#546E7A" },
+  chipText: { fontSize: 13, fontWeight: "600", color: "#666" },
+  chipTextActive: { color: "#fff" },
+  totalLabel: { fontSize: 12, color: "#aaa", marginLeft: "auto" },
+
+  loader: { flex: 1, justifyContent: "center", alignItems: "center" },
+  list: { padding: 12, gap: 12 },
+
+  // Group card
+  groupCard: {
     backgroundColor: "#fff",
     borderRadius: 12,
-    padding: 12,
+    padding: 14,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.07,
     shadowRadius: 4,
     elevation: 2,
     borderLeftWidth: 4,
-    borderLeftColor: "#90A4AE",
+    borderLeftColor: "#546E7A",
   },
-  cardRow: {
+  groupHeader: {
     flexDirection: "row",
-    gap: 12,
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 10,
   },
-  thumb: {
-    width: 70,
+  groupTypeBadge: {
+    backgroundColor: "#ECEFF1",
+    borderRadius: 5,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+  },
+  groupTypeBadgeText: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#546E7A",
+  },
+  groupKey: {
+    flex: 1,
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#333",
+  },
+  groupCount: {
+    fontSize: 12,
+    color: "#aaa",
+  },
+  booksScroll: { marginBottom: 4 },
+  booksScrollContent: { gap: 10, paddingRight: 4 },
+
+  // Mini card
+  miniCard: {
+    width: 145,
+    backgroundColor: "#FAFAFA",
+    borderRadius: 8,
+    padding: 8,
+    borderWidth: 1,
+    borderColor: "#eee",
+  },
+  miniImage: {
+    width: "100%",
     aspectRatio: 0.7,
     borderRadius: 6,
     backgroundColor: "#f0f0f0",
+    marginBottom: 6,
   },
-  thumbPlaceholder: {
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  thumbPlaceholderText: {
-    fontSize: 10,
-    color: "#ccc",
-  },
-  cardInfo: {
-    flex: 1,
-    gap: 3,
-  },
-  cardTitle: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: "#222",
-  },
-  cardAuthor: {
-    fontSize: 13,
-    color: "#666",
-  },
-  cardSku: {
-    fontSize: 11,
-    color: "#bbb",
-  },
-  cardMeta: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 4,
-    marginTop: 2,
-  },
-  metaChip: {
-    fontSize: 11,
-    color: "#888",
-    backgroundColor: "#F5F5F5",
-    borderRadius: 4,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-  },
-  cardFooter: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginTop: 4,
-  },
-  cardPrice: {
-    fontSize: 14,
-    fontWeight: "700",
-    color: "#1976D2",
-  },
-  statusBadge: {
-    borderRadius: 5,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-  },
-  statusPublished: {
-    backgroundColor: "#E8F5E9",
-  },
-  statusPending: {
-    backgroundColor: "#FFF3E0",
-  },
-  statusText: {
-    fontSize: 11,
-    fontWeight: "600",
-  },
-  statusTextPublished: {
-    color: "#2E7D32",
-  },
-  statusTextPending: {
-    color: "#E65100",
-  },
+  miniPlaceholder: { alignItems: "center", justifyContent: "center" },
+  miniPlaceholderText: { fontSize: 10, color: "#ccc" },
+  miniTitle: { fontSize: 12, fontWeight: "600", color: "#222", marginBottom: 2 },
+  miniAuthor: { fontSize: 11, color: "#888", marginBottom: 2 },
+  miniSku: { fontSize: 10, color: "#bbb", marginBottom: 3 },
+  miniPrice: { fontSize: 13, fontWeight: "700", color: "#1976D2", marginBottom: 3 },
+  miniBox: { fontSize: 10, color: "#999", marginBottom: 4 },
+  statusBadge: { borderRadius: 4, paddingHorizontal: 6, paddingVertical: 2, alignSelf: "flex-start" },
+  statusPublished: { backgroundColor: "#E8F5E9" },
+  statusPending: { backgroundColor: "#FFF3E0" },
+  statusText: { fontSize: 10, fontWeight: "600" },
+  statusPublishedText: { color: "#2E7D32" },
+  statusPendingText: { color: "#E65100" },
   deleteBtn: {
-    marginTop: 10,
+    marginTop: 8,
     backgroundColor: "#E53935",
-    borderRadius: 8,
-    paddingVertical: 8,
+    borderRadius: 6,
+    paddingVertical: 6,
     alignItems: "center",
   },
-  deleteBtnDisabled: {
-    opacity: 0.5,
-  },
-  deleteBtnText: {
-    color: "#fff",
-    fontSize: 13,
-    fontWeight: "600",
-  },
-  footerLoader: {
-    paddingVertical: 20,
-    alignItems: "center",
-  },
-  empty: {
-    alignItems: "center",
-    marginTop: 80,
-    gap: 12,
-  },
-  emptyIcon: {
-    fontSize: 48,
-  },
-  emptyText: {
-    fontSize: 16,
-    color: "#999",
-  },
+  deleteBtnDisabled: { opacity: 0.5 },
+  deleteBtnText: { color: "#fff", fontSize: 12, fontWeight: "600" },
+
+  footerLoader: { paddingVertical: 20, alignItems: "center" },
+  empty: { alignItems: "center", marginTop: 80, gap: 12 },
+  emptyIcon: { fontSize: 48 },
+  emptyText: { fontSize: 16, color: "#999" },
 });

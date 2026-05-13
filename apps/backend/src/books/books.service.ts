@@ -327,18 +327,19 @@ export class BooksService {
     this._groupsCache = null;
   }
 
-  async getCopies(
-    pagination: PaginationDto,
-    filters: { search?: string; status?: 'published' | 'not_published'; createdById?: string; boxId?: string } = {},
+  async getCopyGroups(
+    page: number,
+    limit: number,
+    filters: { search?: string; status?: 'published' | 'not_published' } = {},
   ) {
-    const { page = 1, limit = 20 } = pagination;
     const qb = this.booksRepository
       .createQueryBuilder('book')
       .leftJoinAndSelect('book.photos', 'photos')
       .leftJoinAndSelect('book.box', 'box')
       .leftJoinAndSelect('book.createdBy', 'createdBy')
       .leftJoinAndSelect('book.ozonProduct', 'ozonProduct')
-      .where('book.isCopy = true');
+      .where('book.isCopy = true')
+      .orderBy('book.createdAt', 'DESC');
 
     if (filters.status === 'published') {
       qb.andWhere('book.status = :pub', { pub: BookStatus.PUBLISHED });
@@ -353,18 +354,27 @@ export class BooksService {
       );
     }
 
-    if (filters.createdById) {
-      qb.andWhere('book.created_by = :createdById', { createdById: filters.createdById });
+    const books = await qb.getMany();
+
+    const groupMap = new Map<string, { type: 'isbn' | 'title'; key: string; books: Book[] }>();
+    for (const book of books) {
+      if (book.isbn?.trim()) {
+        const gk = `isbn:${book.isbn}`;
+        if (!groupMap.has(gk)) groupMap.set(gk, { type: 'isbn', key: book.isbn, books: [] });
+        groupMap.get(gk)!.books.push(book);
+      } else {
+        const normalized = book.title?.toLowerCase().trim() ?? '';
+        const gk = `title:${normalized}`;
+        if (!groupMap.has(gk)) groupMap.set(gk, { type: 'title', key: book.title ?? '', books: [] });
+        groupMap.get(gk)!.books.push(book);
+      }
     }
 
-    if (filters.boxId) {
-      qb.andWhere('book.box_id = :boxId', { boxId: filters.boxId });
-    }
+    const allGroups = Array.from(groupMap.values());
+    const total = allGroups.length;
+    const pageGroups = allGroups.slice((page - 1) * limit, page * limit);
 
-    qb.orderBy('book.createdAt', 'DESC').skip((page - 1) * limit).take(limit);
-
-    const [data, total] = await qb.getManyAndCount();
-    return { data, meta: { total, page, limit, totalPages: Math.ceil(total / limit) } };
+    return { groups: pageGroups, total, page, totalPages: Math.ceil(total / limit) };
   }
 
   async countCopies(): Promise<number> {

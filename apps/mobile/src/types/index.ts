@@ -104,6 +104,19 @@ export interface Box {
   updatedAt: string;
 }
 
+export interface CopyGroup {
+  type: 'isbn' | 'title';
+  key: string;
+  books: Book[];
+}
+
+export interface CopyGroupsResponse {
+  groups: CopyGroup[];
+  total: number;
+  page: number;
+  totalPages: number;
+}
+
 export interface PaginatedResponse<T> {
   data: T[];
   meta: {
