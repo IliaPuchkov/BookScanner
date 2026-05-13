@@ -17,10 +17,10 @@ export class DuplicateFiltersDto extends PaginationDto {
   @IsOptional()
   search?: string;
 
-  @ApiPropertyOptional({ enum: ['published', 'not_published'] })
+  @ApiPropertyOptional({ enum: ['published', 'not_published', 'archived'] })
   @IsOptional()
-  @IsIn(['published', 'not_published'])
-  status?: 'published' | 'not_published';
+  @IsIn(['published', 'not_published', 'archived'])
+  status?: 'published' | 'not_published' | 'archived';
 
   /** 2 | 3 | 4 (означает «4 и более») */
   @ApiPropertyOptional({ description: 'Количество книг в группе: 2, 3, или 4 (= 4+)' })

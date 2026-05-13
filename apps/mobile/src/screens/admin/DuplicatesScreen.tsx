@@ -300,11 +300,11 @@ function FilterChip({
 
 // ─── Main screen ──────────────────────────────────────────────────────────────
 
-type StatusFilter = "all" | "published" | "not_published";
+type StatusFilter = "all" | "published" | "not_published" | "archived";
 
 type ServerFilters = {
   search?: string;
-  status?: "published" | "not_published";
+  status?: "published" | "not_published" | "archived";
   count?: number;
   operatorId?: string;
   storeId?: string;
@@ -683,6 +683,7 @@ export function DuplicatesScreen() {
                     { label: "Все", value: "all" },
                     { label: "Загружена", value: "published" },
                     { label: "Не загружена", value: "not_published" },
+                    { label: "В архиве", value: "archived" },
                   ] as { label: string; value: StatusFilter }[]
                 ).map((opt) => (
                   <FilterChip

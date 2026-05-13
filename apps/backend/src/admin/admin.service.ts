@@ -168,7 +168,7 @@ export class AdminService {
     page?: number;
     limit?: number;
     search?: string;
-    status?: 'published' | 'not_published';
+    status?: 'published' | 'not_published' | 'archived';
   }) {
     return this.booksService.getCopyGroups(
       dto.page ?? 1,

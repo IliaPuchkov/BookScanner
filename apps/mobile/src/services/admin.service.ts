@@ -283,7 +283,7 @@ export const adminService = {
     limit = 20,
     filters?: {
       search?: string;
-      status?: 'published' | 'not_published';
+      status?: 'published' | 'not_published' | 'archived';
     },
   ): Promise<CopyGroupsResponse> {
     const { data } = await api.get<CopyGroupsResponse>('/admin/books/copies/groups', {

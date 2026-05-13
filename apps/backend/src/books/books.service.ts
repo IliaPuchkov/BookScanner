@@ -330,7 +330,7 @@ export class BooksService {
   async getCopyGroups(
     page: number,
     limit: number,
-    filters: { search?: string; status?: 'published' | 'not_published' } = {},
+    filters: { search?: string; status?: 'published' | 'not_published' | 'archived' } = {},
   ) {
     const qb = this.booksRepository
       .createQueryBuilder('book')
@@ -343,6 +343,8 @@ export class BooksService {
 
     if (filters.status === 'published') {
       qb.andWhere('book.status = :pub', { pub: BookStatus.PUBLISHED });
+    } else if (filters.status === 'archived') {
+      qb.andWhere('book.status = :arch', { arch: BookStatus.ARCHIVED });
     } else if (filters.status === 'not_published') {
       qb.andWhere('book.status != :pub', { pub: BookStatus.PUBLISHED });
     }
@@ -730,6 +732,8 @@ export class BooksService {
 
             if (filters.status === 'published') {
               qb.andWhere('book.status = :pub', { pub: BookStatus.PUBLISHED });
+            } else if (filters.status === 'archived') {
+              qb.andWhere('book.status = :arch', { arch: BookStatus.ARCHIVED });
             } else if (filters.status === 'not_published') {
               qb.andWhere('book.status != :pub', { pub: BookStatus.PUBLISHED });
             }

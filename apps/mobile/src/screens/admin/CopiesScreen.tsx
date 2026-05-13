@@ -21,7 +21,7 @@ import type { Book, CopyGroup } from "../../types";
 import type { AdminMainStackParamList } from "../../navigation/AdminNavigator";
 
 type Nav = NativeStackNavigationProp<AdminMainStackParamList, "Copies">;
-type StatusFilter = "all" | "published" | "not_published";
+type StatusFilter = "all" | "published" | "not_published" | "archived";
 
 // ─── Filter chip ──────────────────────────────────────────────────────────────
 
@@ -236,7 +236,7 @@ export function CopiesScreen() {
       const filters = {
         status:
           newStatus !== "all"
-            ? (newStatus as "published" | "not_published")
+            ? (newStatus as "published" | "not_published" | "archived")
             : undefined,
         search: newSearch.trim() || undefined,
       };
@@ -310,6 +310,7 @@ export function CopiesScreen() {
     { label: "Все", value: "all" },
     { label: "На Ozon", value: "published" },
     { label: "Не загружены", value: "not_published" },
+    { label: "В архиве", value: "archived" },
   ];
 
   return (

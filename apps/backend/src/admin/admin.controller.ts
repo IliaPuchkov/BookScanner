@@ -133,12 +133,12 @@ export class AdminController {
   @ApiQuery({ name: 'page', required: false })
   @ApiQuery({ name: 'limit', required: false })
   @ApiQuery({ name: 'search', required: false })
-  @ApiQuery({ name: 'status', required: false, enum: ['published', 'not_published'] })
+  @ApiQuery({ name: 'status', required: false, enum: ['published', 'not_published', 'archived'] })
   getCopyGroups(
     @Query('page') page?: string,
     @Query('limit') limit?: string,
     @Query('search') search?: string,
-    @Query('status') status?: 'published' | 'not_published',
+    @Query('status') status?: 'published' | 'not_published' | 'archived',
   ) {
     return this.adminService.getCopyGroups({
       page: page ? parseInt(page, 10) : undefined,
