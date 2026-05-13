@@ -27,6 +27,7 @@ export function DashboardScreen() {
   const [ocrErrorsCount, setOcrErrorsCount] = useState(0);
   const [ozonErrorsCount, setOzonErrorsCount] = useState(0);
   const [underpricedCount, setUnderpricedCount] = useState(0);
+  const [copiesCount, setCopiesCount] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
 
   const fetchData = useCallback(async () => {
@@ -55,6 +56,7 @@ export function DashboardScreen() {
       setOcrErrorsCount(statsData.ocrErrorsCount ?? 0);
       setOzonErrorsCount(statsData.ozonErrorsCount ?? 0);
       setUnderpricedCount(statsData.underpricedCount ?? 0);
+      setCopiesCount(statsData.copiesCount ?? 0);
     } catch {
       // silent
     } finally {
@@ -109,7 +111,19 @@ export function DashboardScreen() {
           </AppText>
         </TouchableOpacity>
 
-        {/* Cell 3: Заниженная цена */}
+        {/* Cell 3: Копии */}
+        <TouchableOpacity
+          style={[styles.gridCard, styles.cardBlueGrey]}
+          activeOpacity={0.75}
+          onPress={() => navigation.navigate("Copies")}
+        >
+          <AppText style={styles.gridCardTitle}>Копии</AppText>
+          <AppText style={[styles.gridCardCount, { color: "#546E7A" }]}>
+            {copiesCount}
+          </AppText>
+        </TouchableOpacity>
+
+        {/* Cell 4: Заниженная цена */}
         <TouchableOpacity
           style={[styles.gridCard, styles.cardAmber]}
           activeOpacity={0.75}
@@ -302,6 +316,11 @@ const styles = StyleSheet.create({
     backgroundColor: "#fff",
     borderLeftWidth: 4,
     borderLeftColor: "#BF360C",
+  },
+  cardBlueGrey: {
+    backgroundColor: "#fff",
+    borderLeftWidth: 4,
+    borderLeftColor: "#546E7A",
   },
   cardOrange: {
     backgroundColor: "#fff",

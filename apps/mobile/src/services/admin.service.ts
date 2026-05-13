@@ -278,6 +278,22 @@ export const adminService = {
     await api.post('/admin/books/mark-copies', { bookIds });
   },
 
+  async getCopies(
+    page = 1,
+    limit = 20,
+    filters?: {
+      search?: string;
+      status?: 'published' | 'not_published';
+      createdById?: string;
+      boxId?: string;
+    },
+  ): Promise<PaginatedResponse<Book>> {
+    const { data } = await api.get<PaginatedResponse<Book>>('/admin/books/copies', {
+      params: { page, limit, ...filters },
+    });
+    return data;
+  },
+
   async getOcrFailedBooks(page = 1, limit = 20): Promise<PaginatedResponse<Book>> {
     const { data } = await api.get<PaginatedResponse<Book>>('/admin/books/ocr-failed', {
       params: { page, limit },

@@ -126,6 +126,7 @@ export interface StatsSummary {
   ocrErrorsCount?: number;
   ozonErrorsCount?: number;
   underpricedCount?: number;
+  copiesCount?: number;
   perUser: Array<{
     userId: string;
     fullName: string;

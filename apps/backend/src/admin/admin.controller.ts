@@ -127,6 +127,33 @@ export class AdminController {
     return this.adminService.markCopies(dto.bookIds);
   }
 
+  // Copies
+  @Get('books/copies')
+  @ApiOperation({ summary: 'Книги, помеченные как копии (isCopy=true)' })
+  @ApiQuery({ name: 'page', required: false })
+  @ApiQuery({ name: 'limit', required: false })
+  @ApiQuery({ name: 'search', required: false })
+  @ApiQuery({ name: 'status', required: false, enum: ['published', 'not_published'] })
+  @ApiQuery({ name: 'createdById', required: false })
+  @ApiQuery({ name: 'boxId', required: false })
+  getCopies(
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+    @Query('search') search?: string,
+    @Query('status') status?: 'published' | 'not_published',
+    @Query('createdById') createdById?: string,
+    @Query('boxId') boxId?: string,
+  ) {
+    return this.adminService.getCopies({
+      page: page ? parseInt(page, 10) : undefined,
+      limit: limit ? parseInt(limit, 10) : undefined,
+      search,
+      status,
+      createdById,
+      boxId,
+    });
+  }
+
   // OCR errors
   @Get('books/ocr-failed')
   @ApiOperation({ summary: 'Книги с ошибкой распознавания (OCR)' })

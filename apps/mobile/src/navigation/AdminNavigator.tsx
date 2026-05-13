@@ -21,6 +21,7 @@ import OzonSyncScreen from "../screens/admin/OzonSyncScreen";
 import { ErrorsScreen } from "../screens/admin/ErrorsScreen";
 import { DuplicatesScreen } from "../screens/admin/DuplicatesScreen";
 import { UnderpricedScreen } from "../screens/admin/UnderpricedScreen";
+import { CopiesScreen } from "../screens/admin/CopiesScreen";
 
 export type AdminMainStackParamList = {
   Dashboard: undefined;
@@ -33,6 +34,7 @@ export type AdminMainStackParamList = {
   ProductDetail: { bookId: string; editable?: boolean };
   Errors: undefined;
   Duplicates: undefined;
+  Copies: undefined;
   Underpriced: undefined;
 };
 
@@ -117,7 +119,12 @@ function MainStackScreen() {
       <MainStack.Screen
         name="Duplicates"
         component={DuplicatesScreen}
-        options={{ title: "Дубли" }}
+        options={{ title: "На проверке: Копии" }}
+      />
+      <MainStack.Screen
+        name="Copies"
+        component={CopiesScreen}
+        options={{ title: "Копии" }}
       />
       <MainStack.Screen
         name="Underpriced"

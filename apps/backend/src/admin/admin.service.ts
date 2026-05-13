@@ -67,6 +67,7 @@ export class AdminService {
       ocrErrorsCount,
       ozonErrorsCount,
       underpricedCount,
+      copiesCount,
     ] = await Promise.all([
       this.booksService.countCreatedSince(startOfToday, endOfToday, true),
       this.booksService.countCreatedSince(periodStart, periodEnd, true),
@@ -80,6 +81,7 @@ export class AdminService {
       this.booksService.countOcrFailed(),
       this.booksService.countOzonFailed(),
       this.booksService.countUnderpriced(),
+      this.booksService.countCopies(),
     ]);
 
     return {
@@ -94,6 +96,7 @@ export class AdminService {
       ocrErrorsCount,
       ozonErrorsCount,
       underpricedCount,
+      copiesCount,
       perUser: perUserRaw.map((u) => {
         const completed = parseInt(u.completedCount, 10);
         const active = parseInt(u.activeCount, 10);
@@ -159,5 +162,19 @@ export class AdminService {
   async markCopies(bookIds: string[]) {
     if (!bookIds.length) return;
     await this.booksService.markAsCopies(bookIds);
+  }
+
+  async getCopies(dto: {
+    page?: number;
+    limit?: number;
+    search?: string;
+    status?: 'published' | 'not_published';
+    createdById?: string;
+    boxId?: string;
+  }) {
+    const pagination = new PaginationDto();
+    pagination.page = dto.page ?? 1;
+    pagination.limit = dto.limit ?? 20;
+    return this.booksService.getCopies(pagination, dto);
   }
 }

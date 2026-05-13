@@ -327,6 +327,50 @@ export class BooksService {
     this._groupsCache = null;
   }
 
+  async getCopies(
+    pagination: PaginationDto,
+    filters: { search?: string; status?: 'published' | 'not_published'; createdById?: string; boxId?: string } = {},
+  ) {
+    const { page = 1, limit = 20 } = pagination;
+    const qb = this.booksRepository
+      .createQueryBuilder('book')
+      .leftJoinAndSelect('book.photos', 'photos')
+      .leftJoinAndSelect('book.box', 'box')
+      .leftJoinAndSelect('book.createdBy', 'createdBy')
+      .leftJoinAndSelect('book.ozonProduct', 'ozonProduct')
+      .where('book.isCopy = true');
+
+    if (filters.status === 'published') {
+      qb.andWhere('book.status = :pub', { pub: BookStatus.PUBLISHED });
+    } else if (filters.status === 'not_published') {
+      qb.andWhere('book.status != :pub', { pub: BookStatus.PUBLISHED });
+    }
+
+    if (filters.search) {
+      qb.andWhere(
+        '(book.title ILIKE :s OR book.author ILIKE :s OR book.isbn ILIKE :s)',
+        { s: `%${filters.search}%` },
+      );
+    }
+
+    if (filters.createdById) {
+      qb.andWhere('book.created_by = :createdById', { createdById: filters.createdById });
+    }
+
+    if (filters.boxId) {
+      qb.andWhere('book.box_id = :boxId', { boxId: filters.boxId });
+    }
+
+    qb.orderBy('book.createdAt', 'DESC').skip((page - 1) * limit).take(limit);
+
+    const [data, total] = await qb.getManyAndCount();
+    return { data, meta: { total, page, limit, totalPages: Math.ceil(total / limit) } };
+  }
+
+  async countCopies(): Promise<number> {
+    return this.booksRepository.count({ where: { isCopy: true } });
+  }
+
   async countByBox(userId: string, role: UserRole, workSessionId?: string): Promise<Array<{ boxId: string; boxNumber: string; count: number }>> {
     const qb = this.booksRepository
       .createQueryBuilder('book')
