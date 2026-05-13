@@ -346,7 +346,7 @@ export class BooksService {
     } else if (filters.status === 'archived') {
       qb.andWhere('book.status = :arch', { arch: BookStatus.ARCHIVED });
     } else if (filters.status === 'not_published') {
-      qb.andWhere('book.status != :pub', { pub: BookStatus.PUBLISHED });
+      qb.andWhere('book.status NOT IN (:...excl)', { excl: [BookStatus.PUBLISHED, BookStatus.ARCHIVED] });
     }
 
     if (filters.search) {
@@ -735,7 +735,7 @@ export class BooksService {
             } else if (filters.status === 'archived') {
               qb.andWhere('book.status = :arch', { arch: BookStatus.ARCHIVED });
             } else if (filters.status === 'not_published') {
-              qb.andWhere('book.status != :pub', { pub: BookStatus.PUBLISHED });
+              qb.andWhere('book.status NOT IN (:...excl)', { excl: [BookStatus.PUBLISHED, BookStatus.ARCHIVED] });
             }
 
             if (filters.search) {
