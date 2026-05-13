@@ -286,7 +286,7 @@ export function CopiesScreen() {
                     ...g,
                     books: g.books.filter((b) => b.id !== book.id),
                   }))
-                  .filter((g) => g.books.length > 0),
+                  .filter((g) => g.books.length >= 2),
               );
               setTotal((t) => Math.max(0, t - 1));
             } catch {

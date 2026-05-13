@@ -474,11 +474,32 @@ export class BooksService {
   async remove(id: string, userId: string, role: UserRole): Promise<void> {
     const book = await this.findOne(id);
     this.checkOwnership(book, userId, role);
-    const boxId = book.boxId;
+    const { boxId, isCopy, isbn, title } = book;
     await this.photosService.deleteAllForBook(id);
     await this.booksRepository.remove(book);
     if (boxId) {
       await this.boxesService.deleteIfEmpty(boxId);
+    }
+    if (isCopy) {
+      await this.unmarkSingletonCopy(isbn, title);
+    }
+  }
+
+  private async unmarkSingletonCopy(isbn: string | null, title: string): Promise<void> {
+    const qb = this.booksRepository
+      .createQueryBuilder('book')
+      .where('book.isCopy = true');
+
+    if (isbn?.trim()) {
+      qb.andWhere('book.isbn = :isbn', { isbn });
+    } else {
+      qb.andWhere("LOWER(TRIM(book.title)) = LOWER(TRIM(:title))", { title });
+    }
+
+    const remaining = await qb.getMany();
+    if (remaining.length === 1) {
+      await this.booksRepository.update(remaining[0].id, { isCopy: false });
+      this._groupsCache = null;
     }
   }
 
