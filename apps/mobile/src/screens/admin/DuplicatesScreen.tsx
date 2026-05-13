@@ -42,6 +42,7 @@ function BookMiniCard({
   onMarkNotDuplicate,
   markingNotDuplicate,
   stores,
+  hasExistingCopy,
 }: {
   book: Book;
   onNavigate: (id: string) => void;
@@ -50,6 +51,7 @@ function BookMiniCard({
   onMarkNotDuplicate: () => void;
   markingNotDuplicate: boolean;
   stores: OzonStore[];
+  hasExistingCopy: boolean;
 }) {
   const coverPhoto = book.photos?.find((p) => p.sortOrder === 0);
   const storeName = book.ozonProduct?.storeId
@@ -69,6 +71,13 @@ function BookMiniCard({
         ) : (
           <View style={[styles.miniImage, styles.miniPlaceholder]}>
             <AppText style={styles.miniPlaceholderText}>Нет фото</AppText>
+          </View>
+        )}
+        {hasExistingCopy && (
+          <View style={[styles.copyRoleBadge, book.isCopy ? styles.copyRoleBadgeExisting : styles.copyRoleBadgeNew]}>
+            <AppText style={[styles.copyRoleBadgeText, book.isCopy ? styles.copyRoleBadgeTextExisting : styles.copyRoleBadgeTextNew]}>
+              {book.isCopy ? "Копия уже в системе" : "Новая копия"}
+            </AppText>
           </View>
         )}
         <AppText style={styles.miniTitle} numberOfLines={2}>
@@ -233,6 +242,7 @@ function DuplicateGroupCard({
             onMarkNotDuplicate={() => onMarkBookNotDuplicate(book.id, group)}
             markingNotDuplicate={markingNotDuplicateId === book.id}
             stores={stores}
+            hasExistingCopy={group.books.some((b) => b.isCopy)}
           />
         ))}
       </ScrollView>
@@ -360,7 +370,7 @@ export function DuplicatesScreen() {
       const isFirstPage = pageNum === 1;
       try {
         const storesPromise =
-          isFirstPage && !isRefresh
+          isFirstPage
             ? adminService.getOzonStores().catch(() => ({ stores: [] }))
             : Promise.resolve(null);
 
@@ -1228,6 +1238,29 @@ const styles = StyleSheet.create({
     fontSize: 10,
     color: "#1565C0",
     fontWeight: "600",
+  },
+  copyRoleBadge: {
+    borderRadius: 4,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    alignSelf: "flex-start",
+    marginBottom: 4,
+  },
+  copyRoleBadgeNew: {
+    backgroundColor: "#FFF3E0",
+  },
+  copyRoleBadgeExisting: {
+    backgroundColor: "#ECEFF1",
+  },
+  copyRoleBadgeText: {
+    fontSize: 10,
+    fontWeight: "700",
+  },
+  copyRoleBadgeTextNew: {
+    color: "#E65100",
+  },
+  copyRoleBadgeTextExisting: {
+    color: "#546E7A",
   },
   deleteBtn: {
     marginTop: 8,

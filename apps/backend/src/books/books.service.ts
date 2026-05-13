@@ -861,6 +861,7 @@ export class BooksService {
     for (const group of pageGroups) {
       const books = group.ids.map((id) => bookMap.get(id)).filter(Boolean) as Book[];
       if (books.length < 2) continue;
+      if (books.every((b) => b.isCopy)) continue;
       const { probability, matchedFields } = calcGroupProbability(books, group.type);
 
       if (group.type === 'isbn') {
