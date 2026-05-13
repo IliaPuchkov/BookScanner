@@ -791,7 +791,7 @@ export function PendingReviewScreen() {
       const boxId = sectionBooks[0]?.boxId;
       const loadedIds = sectionBooks.map((b) => b.id);
 
-      // When filters or search are active, only operate on the visible filtered books
+      // When filters or search are active, fetch all matching IDs from API
       const hasActiveFilters =
         searchRef.current.length > 0 ||
         Object.keys(filtersRef.current).length > 0;
@@ -799,15 +799,53 @@ export function PendingReviewScreen() {
       if (hasActiveFilters) {
         const allSelected =
           loadedIds.length > 0 && loadedIds.every((id) => selectedIds.has(id));
-        setSelectedIds((prev) => {
-          const next = new Set(prev);
-          if (allSelected) {
-            loadedIds.forEach((id) => next.delete(id));
-          } else {
-            loadedIds.forEach((id) => next.add(id));
+
+        if (boxId) {
+          try {
+            const f = filtersRef.current;
+            const apiFilters: Record<string, string> = {};
+            if (f.createdById) apiFilters.createdById = f.createdById;
+            if (f.dateFrom) apiFilters.dateFrom = f.dateFrom;
+            if (f.dateTo) apiFilters.dateTo = f.dateTo;
+            if (f.priceMin) apiFilters.priceMin = f.priceMin;
+            if (f.priceMax) apiFilters.priceMax = f.priceMax;
+            if (f.yearFrom) apiFilters.yearFrom = f.yearFrom;
+            if (f.yearTo) apiFilters.yearTo = f.yearTo;
+            if (f.printRunMin) apiFilters.printRunMin = f.printRunMin;
+            if (f.printRunMax) apiFilters.printRunMax = f.printRunMax;
+            if (searchRef.current) apiFilters.search = searchRef.current;
+            const allIds = await adminService.getPendingReviewIds(boxId, apiFilters);
+            setSelectedIds((prev) => {
+              const next = new Set(prev);
+              if (allSelected) {
+                allIds.forEach((id) => next.delete(id));
+              } else {
+                allIds.forEach((id) => next.add(id));
+              }
+              return next;
+            });
+          } catch {
+            setSelectedIds((prev) => {
+              const next = new Set(prev);
+              if (allSelected) {
+                loadedIds.forEach((id) => next.delete(id));
+              } else {
+                loadedIds.forEach((id) => next.add(id));
+              }
+              return next;
+            });
           }
-          return next;
-        });
+        } else {
+          setSelectedIds((prev) => {
+            const next = new Set(prev);
+            if (allSelected) {
+              loadedIds.forEach((id) => next.delete(id));
+            } else {
+              loadedIds.forEach((id) => next.add(id));
+            }
+            return next;
+          });
+        }
         return;
       }
 

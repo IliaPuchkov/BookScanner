@@ -83,10 +83,10 @@ export class AdminController {
   }
 
   @Get('books/pending-review/ids')
-  @ApiOperation({ summary: 'ID всех карточек в ожидании проверки (опционально по коробке)' })
-  @ApiQuery({ name: 'boxId', required: false })
-  getPendingReviewIds(@Query('boxId') boxId?: string) {
-    return this.adminService.getPendingReviewIds(boxId);
+  @ApiOperation({ summary: 'ID всех карточек в ожидании проверки (опционально по коробке и фильтрам)' })
+  getPendingReviewIds(@Query() dto: SearchBooksDto) {
+    const { boxId, search, createdById, dateFrom, dateTo, priceMin, priceMax, yearFrom, yearTo, printRunMin, printRunMax } = dto;
+    return this.adminService.getPendingReviewIds(boxId, { search, createdById, dateFrom, dateTo, priceMin, priceMax, yearFrom, yearTo, printRunMin, printRunMax });
   }
 
   @Get('books/pending-review')

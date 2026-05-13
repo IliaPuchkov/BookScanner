@@ -141,9 +141,9 @@ export const adminService = {
     return data;
   },
 
-  async getPendingReviewIds(boxId: string): Promise<string[]> {
+  async getPendingReviewIds(boxId: string, filters?: Record<string, string>): Promise<string[]> {
     const { data } = await api.get<string[]>('/admin/books/pending-review/ids', {
-      params: { boxId },
+      params: { boxId, ...filters },
     });
     return data;
   },

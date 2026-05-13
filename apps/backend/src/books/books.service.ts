@@ -305,7 +305,21 @@ export class BooksService {
     };
   }
 
-  async getPendingReviewIds(boxId?: string): Promise<string[]> {
+  async getPendingReviewIds(
+    boxId?: string,
+    filters?: {
+      search?: string;
+      createdById?: string;
+      dateFrom?: string;
+      dateTo?: string;
+      priceMin?: string;
+      priceMax?: string;
+      yearFrom?: string;
+      yearTo?: string;
+      printRunMin?: string;
+      printRunMax?: string;
+    },
+  ): Promise<string[]> {
     const qb = this.booksRepository
       .createQueryBuilder('book')
       .leftJoin('book.workSession', 'workSession')
@@ -316,6 +330,24 @@ export class BooksService {
 
     if (boxId) {
       qb.andWhere('book.box_id = :boxId', { boxId });
+    }
+
+    if (filters) {
+      const { search, createdById, dateFrom, dateTo, priceMin, priceMax, yearFrom, yearTo, printRunMin, printRunMax } = filters;
+      if (createdById) qb.andWhere('book.created_by = :createdById', { createdById });
+      if (dateFrom) qb.andWhere('book.createdAt >= :dateFrom', { dateFrom });
+      if (dateTo) {
+        const to = new Date(dateTo);
+        to.setHours(23, 59, 59, 999);
+        qb.andWhere('book.createdAt <= :dateTo', { dateTo: to.toISOString() });
+      }
+      if (search) qb.andWhere('(book.title ILIKE :search OR book.author ILIKE :search OR book.isbn ILIKE :search)', { search: `%${search}%` });
+      if (priceMin) qb.andWhere('book.price >= :priceMin', { priceMin: parseFloat(priceMin) });
+      if (priceMax) qb.andWhere('book.price <= :priceMax', { priceMax: parseFloat(priceMax) });
+      if (yearFrom) qb.andWhere('book.yearPublished >= :yearFrom', { yearFrom: parseInt(yearFrom, 10) });
+      if (yearTo) qb.andWhere('book.yearPublished <= :yearTo', { yearTo: parseInt(yearTo, 10) });
+      if (printRunMin) qb.andWhere('book.printRun >= :printRunMin', { printRunMin: parseInt(printRunMin, 10) });
+      if (printRunMax) qb.andWhere('book.printRun <= :printRunMax', { printRunMax: parseInt(printRunMax, 10) });
     }
 
     const books = await qb.getMany();

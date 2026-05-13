@@ -125,8 +125,22 @@ export class AdminService {
     return this.booksService.countPendingReviewByBox();
   }
 
-  async getPendingReviewIds(boxId?: string) {
-    return this.booksService.getPendingReviewIds(boxId);
+  async getPendingReviewIds(
+    boxId?: string,
+    filters?: {
+      search?: string;
+      createdById?: string;
+      dateFrom?: string;
+      dateTo?: string;
+      priceMin?: string;
+      priceMax?: string;
+      yearFrom?: string;
+      yearTo?: string;
+      printRunMin?: string;
+      printRunMax?: string;
+    },
+  ) {
+    return this.booksService.getPendingReviewIds(boxId, filters);
   }
 
   async getFailedPublicationBooks(pagination: PaginationDto) {
