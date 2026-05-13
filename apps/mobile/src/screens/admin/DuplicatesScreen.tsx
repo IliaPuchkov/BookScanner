@@ -342,6 +342,7 @@ export function DuplicatesScreen() {
   >(null);
   const [markingCopiesKey, setMarkingCopiesKey] = useState<string | null>(null);
   const [stores, setStores] = useState<OzonStore[]>([]);
+  const [markCopiesPickerGroup, setMarkCopiesPickerGroup] = useState<DuplicateGroup | null>(null);
 
   // Server-side filters
   const [filtersOpen, setFiltersOpen] = useState(false);
@@ -579,19 +580,40 @@ export function DuplicatesScreen() {
     }
   }, []);
 
-  const handleMarkCopies = useCallback(async (group: DuplicateGroup) => {
-    setMarkingCopiesKey(group.key);
-    try {
-      await adminService.markCopies(group.books.map((b) => b.id));
-      setGroups((prev) =>
-        prev.filter((g) => !(g.key === group.key && g.type === group.type)),
+  const doMarkCopies = useCallback(
+    async (group: DuplicateGroup, keepBookId: string | null) => {
+      setMarkingCopiesKey(group.key);
+      try {
+        const ids = keepBookId
+          ? group.books.filter((b) => b.id !== keepBookId).map((b) => b.id)
+          : group.books.map((b) => b.id);
+        await adminService.markCopies(ids);
+        setGroups((prev) =>
+          prev.filter((g) => !(g.key === group.key && g.type === group.type)),
+        );
+      } catch {
+        Alert.alert("Ошибка", "Не удалось пометить как копии");
+      } finally {
+        setMarkingCopiesKey(null);
+      }
+    },
+    [],
+  );
+
+  const handleMarkCopies = useCallback(
+    (group: DuplicateGroup) => {
+      const allUnpublished = group.books.every(
+        (b) =>
+          b.status !== BookStatus.PUBLISHED && b.status !== BookStatus.ARCHIVED,
       );
-    } catch {
-      Alert.alert("Ошибка", "Не удалось пометить как копии");
-    } finally {
-      setMarkingCopiesKey(null);
-    }
-  }, []);
+      if (allUnpublished) {
+        setMarkCopiesPickerGroup(group);
+      } else {
+        doMarkCopies(group, null);
+      }
+    },
+    [doMarkCopies],
+  );
 
   const handleLoadMore = useCallback(() => {
     if (loadingMore || !hasMore || loading) return;
@@ -922,6 +944,94 @@ export function DuplicatesScreen() {
           }
         />
       )}
+
+      {/* Mark copies — master book picker modal */}
+      <Modal
+        visible={markCopiesPickerGroup !== null}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setMarkCopiesPickerGroup(null)}
+      >
+        <TouchableWithoutFeedback onPress={() => setMarkCopiesPickerGroup(null)}>
+          <View style={styles.pickerOverlay}>
+            <TouchableWithoutFeedback>
+              <View style={styles.pickerSheet}>
+                <View style={styles.pickerSheetHeader}>
+                  <AppText style={styles.pickerSheetTitle}>
+                    Выберите основную книгу
+                  </AppText>
+                  <TouchableOpacity
+                    onPress={() => setMarkCopiesPickerGroup(null)}
+                  >
+                    <AppText style={styles.pickerDoneBtn}>Отмена</AppText>
+                  </TouchableOpacity>
+                </View>
+                <AppText style={styles.masterPickerHint}>
+                  Она останется доступной для публикации на Ozon. Остальные
+                  будут помечены как копии.
+                </AppText>
+                <FlatList
+                  data={markCopiesPickerGroup?.books ?? []}
+                  keyExtractor={(item) => item.id}
+                  style={styles.pickerList}
+                  renderItem={({ item }) => {
+                    const cover = item.photos?.find((p) => p.sortOrder === 0);
+                    return (
+                      <TouchableOpacity
+                        style={styles.masterPickerItem}
+                        activeOpacity={0.7}
+                        onPress={() => {
+                          const group = markCopiesPickerGroup!;
+                          setMarkCopiesPickerGroup(null);
+                          doMarkCopies(group, item.id);
+                        }}
+                      >
+                        {cover ? (
+                          <Image
+                            source={{ uri: cover.fileUrl }}
+                            style={styles.masterPickerThumb}
+                          />
+                        ) : (
+                          <View
+                            style={[
+                              styles.masterPickerThumb,
+                              styles.miniPlaceholder,
+                            ]}
+                          >
+                            <AppText style={styles.miniPlaceholderText}>
+                              Нет фото
+                            </AppText>
+                          </View>
+                        )}
+                        <View style={styles.masterPickerInfo}>
+                          <AppText
+                            style={styles.masterPickerTitle}
+                            numberOfLines={2}
+                          >
+                            {item.title}
+                          </AppText>
+                          {item.author ? (
+                            <AppText
+                              style={styles.masterPickerAuthor}
+                              numberOfLines={1}
+                            >
+                              {item.author}
+                            </AppText>
+                          ) : null}
+                          <AppText style={styles.masterPickerSku}>
+                            {item.sku}
+                          </AppText>
+                        </View>
+                        <AppText style={styles.masterPickerArrow}>›</AppText>
+                      </TouchableOpacity>
+                    );
+                  }}
+                />
+              </View>
+            </TouchableWithoutFeedback>
+          </View>
+        </TouchableWithoutFeedback>
+      </Modal>
 
       {/* Box picker modal */}
       <Modal
@@ -1467,5 +1577,49 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#1976D2",
     fontWeight: "700",
+  },
+  masterPickerHint: {
+    fontSize: 13,
+    color: "#888",
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: "#f0f0f0",
+  },
+  masterPickerItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "#f5f5f5",
+    gap: 12,
+  },
+  masterPickerThumb: {
+    width: 52,
+    height: 74,
+    borderRadius: 4,
+    backgroundColor: "#f0f0f0",
+  },
+  masterPickerInfo: {
+    flex: 1,
+    gap: 2,
+  },
+  masterPickerTitle: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#222",
+  },
+  masterPickerAuthor: {
+    fontSize: 12,
+    color: "#888",
+  },
+  masterPickerSku: {
+    fontSize: 11,
+    color: "#bbb",
+  },
+  masterPickerArrow: {
+    fontSize: 22,
+    color: "#ccc",
   },
 });
