@@ -121,6 +121,9 @@ export class Book {
   @Column({ default: false })
   priceReviewed: boolean;
 
+  @Column({ default: false })
+  isCopy: boolean;
+
   @Column({ type: 'enum', enum: BookStatus, default: BookStatus.PENDING_REVIEW })
   status: BookStatus;
 

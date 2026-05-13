@@ -274,6 +274,10 @@ export const adminService = {
     await api.post('/admin/books/duplicates/resolve', { book1Id, book2Id });
   },
 
+  async markCopies(bookIds: string[]): Promise<void> {
+    await api.post('/admin/books/mark-copies', { bookIds });
+  },
+
   async getOcrFailedBooks(page = 1, limit = 20): Promise<PaginatedResponse<Book>> {
     const { data } = await api.get<PaginatedResponse<Book>>('/admin/books/ocr-failed', {
       params: { page, limit },

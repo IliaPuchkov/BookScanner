@@ -121,6 +121,12 @@ export class AdminController {
     return this.adminService.resolveDuplicate(dto.book1Id, dto.book2Id, user.id);
   }
 
+  @Post('books/mark-copies')
+  @ApiOperation({ summary: 'Пометить группу книг как копии друг друга' })
+  markCopies(@Body() dto: { bookIds: string[] }) {
+    return this.adminService.markCopies(dto.bookIds);
+  }
+
   // OCR errors
   @Get('books/ocr-failed')
   @ApiOperation({ summary: 'Книги с ошибкой распознавания (OCR)' })

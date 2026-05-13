@@ -99,6 +99,10 @@ export class OzonService {
       );
     }
 
+    if (book.isCopy && !book.publishedToOzon) {
+      throw new BadRequestException('Книга помечена как копия и не может быть опубликована на Ozon.');
+    }
+
     if (!book.title) {
       throw new BadRequestException('Не заполнено название книги.');
     }
@@ -499,6 +503,10 @@ export class OzonService {
     const failed: { id: string; title?: string; error: string }[] = [];
 
     for (const book of books) {
+      if (book.isCopy && !book.publishedToOzon) {
+        failed.push({ id: book.id, title: book.title, error: 'Копия — публикация на Ozon заблокирована' });
+        continue;
+      }
       if (!book.title) {
         failed.push({ id: book.id, title: book.title, error: 'Не заполнено название' });
         continue;

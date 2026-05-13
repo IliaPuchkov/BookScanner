@@ -140,6 +140,9 @@ export class BooksService {
 
     if (status) {
       qb.andWhere('book.status = :status', { status });
+      if (status === BookStatus.PENDING_REVIEW) {
+        qb.andWhere('(book.is_copy = false OR book.published_to_ozon IS NOT NULL)');
+      }
     }
 
     if (search) {
@@ -261,6 +264,7 @@ export class BooksService {
       .andWhere(
         "(book.work_session_id IS NULL OR workSession.status = 'completed')",
       )
+      .andWhere('(book.is_copy = false OR book.published_to_ozon IS NOT NULL)')
       .getCount();
   }
 
@@ -274,6 +278,7 @@ export class BooksService {
       .addSelect('COUNT(*)', 'count')
       .where('book.status = :status', { status: BookStatus.PENDING_REVIEW })
       .andWhere("(book.work_session_id IS NULL OR workSession.status = 'completed')")
+      .andWhere('(book.is_copy = false OR book.published_to_ozon IS NOT NULL)')
       .groupBy('box.id')
       .addGroupBy('box.boxNumber')
       .getRawMany();
@@ -306,7 +311,8 @@ export class BooksService {
       .leftJoin('book.workSession', 'workSession')
       .select('book.id')
       .where('book.status = :status', { status: BookStatus.PENDING_REVIEW })
-      .andWhere("(book.work_session_id IS NULL OR workSession.status = 'completed')");
+      .andWhere("(book.work_session_id IS NULL OR workSession.status = 'completed')")
+      .andWhere('(book.is_copy = false OR book.published_to_ozon IS NOT NULL)');
 
     if (boxId) {
       qb.andWhere('book.box_id = :boxId', { boxId });
@@ -314,6 +320,11 @@ export class BooksService {
 
     const books = await qb.getMany();
     return books.map((b) => b.id);
+  }
+
+  async markAsCopies(bookIds: string[]): Promise<void> {
+    await this.booksRepository.update({ id: In(bookIds) }, { isCopy: true });
+    this._groupsCache = null;
   }
 
   async countByBox(userId: string, role: UserRole, workSessionId?: string): Promise<Array<{ boxId: string; boxNumber: string; count: number }>> {
@@ -565,7 +576,6 @@ export class BooksService {
             .leftJoin('book.workSession', 'ws')
             .where('book.isbn IS NOT NULL')
             .andWhere("book.isbn != ''")
-            .andWhere('book.status != :archived', { archived: 'archived' })
             .andWhere("(book.work_session_id IS NULL OR ws.status = 'completed')")
             .groupBy('book.isbn')
             .having('COUNT(*) >= 2')
@@ -576,7 +586,6 @@ export class BooksService {
             .addSelect('array_agg(book.id)', 'ids')
             .leftJoin('book.workSession', 'ws')
             .where("LOWER(TRIM(book.title)) NOT ILIKE :newBook", { newBook: 'новая книга' })
-            .andWhere('book.status != :archived', { archived: 'archived' })
             .andWhere("book.isbn IS NULL OR book.isbn = ''")
             .andWhere("(book.work_session_id IS NULL OR ws.status = 'completed')")
             .groupBy('LOWER(TRIM(book.title))')
@@ -642,7 +651,7 @@ export class BooksService {
             const qb = this.booksRepository
               .createQueryBuilder('book')
               .select('book.id', 'id')
-              .where('book.status != :archived', { archived: 'archived' });
+              .where('1 = 1');
 
             if (filters.status === 'published') {
               qb.andWhere('book.status = :pub', { pub: BookStatus.PUBLISHED });
@@ -793,7 +802,7 @@ export class BooksService {
         SELECT COUNT(*) AS cnt FROM (
           SELECT b.isbn FROM books b
           LEFT JOIN work_sessions ws ON ws.id = b.work_session_id
-          WHERE b.isbn IS NOT NULL AND b.isbn != '' AND b.status != 'archived'
+          WHERE b.isbn IS NOT NULL AND b.isbn != ''
             AND (b.work_session_id IS NULL OR ws.status = 'completed')
           GROUP BY b.isbn HAVING COUNT(*) >= 2
         ) sub
@@ -803,7 +812,6 @@ export class BooksService {
           SELECT LOWER(TRIM(b.title)) FROM books b
           LEFT JOIN work_sessions ws ON ws.id = b.work_session_id
           WHERE LOWER(TRIM(b.title)) NOT ILIKE 'новая книга'
-            AND b.status != 'archived'
             AND (b.isbn IS NULL OR b.isbn = '')
             AND (b.work_session_id IS NULL OR ws.status = 'completed')
           GROUP BY LOWER(TRIM(b.title)) HAVING COUNT(*) >= 2

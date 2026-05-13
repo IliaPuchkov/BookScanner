@@ -133,7 +133,7 @@ function BookMiniCard({
         {markingNotDuplicate ? (
           <ActivityIndicator size="small" color="#888" />
         ) : (
-          <AppText style={styles.notDuplicateBtnText}>Не дубль</AppText>
+          <AppText style={styles.notDuplicateBtnText}>Не копия</AppText>
         )}
       </TouchableOpacity>
     </View>
@@ -173,9 +173,11 @@ function DuplicateGroupCard({
   onDelete,
   onResolve,
   onMarkBookNotDuplicate,
+  onMarkCopies,
   deletingId,
   resolvingKey,
   markingNotDuplicateId,
+  markingCopiesKey,
   stores,
 }: {
   group: DuplicateGroup;
@@ -183,9 +185,11 @@ function DuplicateGroupCard({
   onDelete: (book: Book) => void;
   onResolve: (group: DuplicateGroup) => void;
   onMarkBookNotDuplicate: (bookId: string, group: DuplicateGroup) => void;
+  onMarkCopies: (group: DuplicateGroup) => void;
   deletingId: string | null;
   resolvingKey: string | null;
   markingNotDuplicateId: string | null;
+  markingCopiesKey: string | null;
   stores: OzonStore[];
 }) {
   const prob = group.probability ?? 30;
@@ -230,6 +234,21 @@ function DuplicateGroupCard({
       </ScrollView>
       <TouchableOpacity
         style={[
+          styles.markCopiesBtn,
+          markingCopiesKey === group.key && styles.resolveBtnDisabled,
+        ]}
+        onPress={() => onMarkCopies(group)}
+        disabled={markingCopiesKey === group.key}
+        activeOpacity={0.7}
+      >
+        {markingCopiesKey === group.key ? (
+          <ActivityIndicator size="small" color="#fff" />
+        ) : (
+          <AppText style={styles.markCopiesBtnText}>Это копии</AppText>
+        )}
+      </TouchableOpacity>
+      <TouchableOpacity
+        style={[
           styles.resolveBtn,
           resolvingKey === group.key && styles.resolveBtnDisabled,
         ]}
@@ -241,7 +260,7 @@ function DuplicateGroupCard({
           <ActivityIndicator size="small" color="#555" />
         ) : (
           <AppText style={styles.resolveBtnText}>
-            Это не дубль — пропустить
+            Это не копии — пропустить
           </AppText>
         )}
       </TouchableOpacity>
@@ -307,6 +326,7 @@ export function DuplicatesScreen() {
   const [markingNotDuplicateId, setMarkingNotDuplicateId] = useState<
     string | null
   >(null);
+  const [markingCopiesKey, setMarkingCopiesKey] = useState<string | null>(null);
   const [stores, setStores] = useState<OzonStore[]>([]);
 
   // Server-side filters
@@ -516,7 +536,7 @@ export function DuplicatesScreen() {
             .filter((g) => g.books.length >= 2),
         );
       } catch {
-        Alert.alert("Ошибка", "Не удалось пометить как не дубль");
+        Alert.alert("Ошибка", "Не удалось пометить как не копию");
       } finally {
         setMarkingNotDuplicateId(null);
       }
@@ -539,9 +559,23 @@ export function DuplicatesScreen() {
       );
       setGroups((prev) => prev.filter((g) => g.key !== group.key));
     } catch {
-      Alert.alert("Ошибка", "Не удалось отметить как не дубль");
+      Alert.alert("Ошибка", "Не удалось отметить как не копию");
     } finally {
       setResolvingKey(null);
+    }
+  }, []);
+
+  const handleMarkCopies = useCallback(async (group: DuplicateGroup) => {
+    setMarkingCopiesKey(group.key);
+    try {
+      await adminService.markCopies(group.books.map((b) => b.id));
+      setGroups((prev) =>
+        prev.filter((g) => !(g.key === group.key && g.type === group.type)),
+      );
+    } catch {
+      Alert.alert("Ошибка", "Не удалось пометить как копии");
+    } finally {
+      setMarkingCopiesKey(null);
     }
   }, []);
 
@@ -662,7 +696,7 @@ export function DuplicatesScreen() {
             </ScrollView>
 
             {/* Count */}
-            <AppText style={styles.filterSectionLabel}>Кол-во дублей</AppText>
+            <AppText style={styles.filterSectionLabel}>Кол-во копий</AppText>
             <ScrollView
               horizontal
               showsHorizontalScrollIndicator={false}
@@ -823,9 +857,11 @@ export function DuplicatesScreen() {
               onDelete={handleDelete}
               onResolve={handleResolve}
               onMarkBookNotDuplicate={handleMarkBookNotDuplicate}
+              onMarkCopies={handleMarkCopies}
               deletingId={deletingId}
               resolvingKey={resolvingKey}
               markingNotDuplicateId={markingNotDuplicateId}
+              markingCopiesKey={markingCopiesKey}
               stores={stores}
             />
           )}
@@ -865,7 +901,7 @@ export function DuplicatesScreen() {
               <AppText style={styles.empty}>
                 {totalActive > 0
                   ? "Нет групп, подходящих под фильтры"
-                  : "Дубликатов не найдено"}
+                  : "Копий не найдено"}
               </AppText>
             </View>
           }
@@ -1230,6 +1266,18 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: "#666",
     fontWeight: "500",
+  },
+  markCopiesBtn: {
+    borderRadius: 8,
+    paddingVertical: 10,
+    alignItems: "center",
+    backgroundColor: "#1976D2",
+    marginBottom: 6,
+  },
+  markCopiesBtnText: {
+    fontSize: 13,
+    color: "#fff",
+    fontWeight: "600",
   },
   resolveBtn: {
     borderWidth: 1,

@@ -6,7 +6,7 @@ import {
   RefreshControl,
   TouchableOpacity,
 } from "react-native";
-import { AppText } from '../../components/AppText';
+import { AppText } from "../../components/AppText";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import { type NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { adminService } from "../../services/admin.service";
@@ -33,8 +33,18 @@ export function DashboardScreen() {
     try {
       const [statsData, booksData] = await Promise.all([
         adminService.getStatistics(
-          (() => { const d = new Date(); const diff = d.getDay() === 0 ? -6 : 1 - d.getDay(); d.setDate(d.getDate() + diff); d.setHours(0, 0, 0, 0); return d.toISOString(); })(),
-          (() => { const d = new Date(); d.setHours(23, 59, 59, 999); return d.toISOString(); })(),
+          (() => {
+            const d = new Date();
+            const diff = d.getDay() === 0 ? -6 : 1 - d.getDay();
+            d.setDate(d.getDate() + diff);
+            d.setHours(0, 0, 0, 0);
+            return d.toISOString();
+          })(),
+          (() => {
+            const d = new Date();
+            d.setHours(23, 59, 59, 999);
+            return d.toISOString();
+          })(),
         ),
         adminService.getBookDatabase(1, 4),
       ]);
@@ -87,13 +97,13 @@ export function DashboardScreen() {
           </AppText>
         </TouchableOpacity>
 
-        {/* Cell 2: Дубли */}
+        {/* Cell 2: Копии */}
         <TouchableOpacity
           style={[styles.gridCard, styles.cardTeal]}
           activeOpacity={0.75}
           onPress={() => navigation.navigate("Duplicates")}
         >
-          <AppText style={styles.gridCardTitle}>Дубли</AppText>
+          <AppText style={styles.gridCardTitle}>На проверке: Копии</AppText>
           <AppText style={[styles.gridCardCount, { color: "#00838F" }]}>
             {duplicatesCount}
           </AppText>

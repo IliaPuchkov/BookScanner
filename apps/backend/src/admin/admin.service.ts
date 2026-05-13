@@ -155,4 +155,9 @@ export class AdminService {
       .orIgnore()
       .execute();
   }
+
+  async markCopies(bookIds: string[]) {
+    if (!bookIds.length) return;
+    await this.booksService.markAsCopies(bookIds);
+  }
 }

@@ -88,6 +88,7 @@ export interface Book {
   status: BookStatus;
   publishedToOzon?: string;
   priceReviewed?: boolean;
+  isCopy?: boolean;
   ozonProduct?: { errorMessage?: string; status?: string; storeId?: string };
   ocrResult?: { status: string; errorMessage?: string };
   createdAt: string;
