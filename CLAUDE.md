@@ -137,7 +137,7 @@ BookScanner/
 |-------|-------------|
 | `users` | id (UUID), fullName, phone (unique), email (unique), passwordHash, role (OPERATOR/ADMIN), isApproved, refreshToken |
 | `boxes` | id (UUID), boxNumber, description, createdById (FK users) — unique (boxNumber, createdById) |
-| `books` | id (UUID), sku (unique), title, author, isbn, publisher, yearPublished, dimensions (JSONB), weightGross, weightNet, paperType, coverType, pageCount, language, price, annotation, hashtags[], condition, bookType, direction, boxId, createdById, workSessionId, status (PENDING_REVIEW/PENDING_PUBLICATION/PUBLISHED/PUBLICATION_FAILED), publishedToOzon |
+| `books` | id (UUID), sku (unique), title, author, isbn, publisher, yearPublished, dimensions (JSONB), weightGross, weightNet, paperType, coverType, pageCount, language, price, annotation, hashtags[], condition, bookType, direction, boxId, createdById, workSessionId, status (PENDING_REVIEW/PENDING_PUBLICATION/PUBLISHED/PUBLICATION_FAILED/ARCHIVED), publishedToOzon, isCopy (boolean, default false) |
 | `book_photos` | id (UUID), bookId, fileUrl, fileKey, sortOrder, originalFilename, mimeType, fileSizeBytes |
 | `ocr_results` | id (UUID), bookId (unique), rawOcrText, extractedData (JSONB), photo01Extraction (JSONB), photo02Extraction (JSONB), status, errorMessage |
 | `ozon_products` | id (UUID), bookId (unique), ozonProductId, taskId, publishPayload (JSONB), status, averageMarketPrice, errorMessage |
@@ -151,6 +151,7 @@ Located in `apps/backend/src/database/migrations/`:
 - `1710600000000-AddWorkSessions.ts`
 - `1710700000000-AddBookStatus.ts`
 - `1710800000000-BoxNumberUniquePerUser.ts`
+- `1747100000000-AddBookIsCopy.ts` — adds `"isCopy"` boolean column (camelCase, default false)
 
 ---
 
@@ -246,9 +247,18 @@ All routes prefixed with `/api`.
 - `GET /status/:bookId` — Get publication status
 
 ### Admin (`/api/admin`)
-- `GET /stats` — Statistics summary
-- `GET /books/search` — Search books across all users
-- `GET /pending-review` — Books with PENDING_REVIEW status
+- `GET /statistics` — Statistics summary (includes `copiesCount`, `duplicatesCount`, etc.)
+- `GET /books/database` — Search books across all users
+- `GET /books/pending-review` — Books with PENDING_REVIEW status (excludes `isCopy=true` unless already published)
+- `GET /books/pending-review/ids` — IDs for bulk approval (optional `?boxId`)
+- `GET /books/pending-review/counts-by-box` — Count per box
+- `GET /books/failed-publication` — Ozon PUBLICATION_FAILED books
+- `GET /books/ocr-failed` — Books where OCR extraction failed
+- `GET /books/underpriced` — Books with possibly low price (year ≤ 1985, print run < 10 000)
+- `GET /books/duplicates` — Groups of possible duplicates (same ISBN or title, from completed sessions). Filters: `search`, `status`, `count`, `operatorId`, `storeId`, `boxId`
+- `POST /books/duplicates/resolve` — Mark a (book1Id, book2Id) pair as not duplicates
+- `POST /books/mark-copies` — Set `isCopy=true` on a list of bookIds (confirms they are copies)
+- `GET /books/copies/groups` — Books with `isCopy=true`, grouped by ISBN or normalized title. Filters: `search`, `status` (published/not_published/archived)
 
 ### Settings (`/api/settings`)
 - `GET /` — Get all system settings (includes Ozon store configs)
@@ -285,7 +295,29 @@ All routes prefixed with `/api`.
 ```
 PENDING_REVIEW → (admin approves) → PENDING_PUBLICATION → (ozon publish) → PUBLISHED
                                                                           ↘ PUBLICATION_FAILED
+                                                                          ↘ ARCHIVED
 ```
+
+### Copies / Duplicates System
+
+The admin has two dedicated screens for managing books that are potential or confirmed copies:
+
+**Duplicates screen** (`GET /admin/books/duplicates`) — "На проверке: Копии":
+- Shows groups of books suspected to be duplicates (same ISBN, or same normalized title from completed sessions)
+- Each group has a probability level (High/Medium/Low based on matched fields)
+- Admin can: mark all as copies (`POST /books/mark-copies`), mark as not copies (adds to `duplicate_resolutions`), or delete individual unpublished books
+- Published books show "Опубликована на Ozon"; archived books show "В архиве" (no delete)
+- `duplicate_resolutions` table suppresses resolved (book1Id, book2Id) pairs
+
+**Copies screen** (`GET /admin/books/copies/groups`) — "Копии":
+- Shows only books where `isCopy=true`, grouped by ISBN or LOWER(TRIM(title))
+- Each book card shows: cover photo, title, author, SKU, price, box number, publication status
+- Published books display store name (e.g. "Основной магазин") + "Опубликована на Ozon"
+- Archived books show "В архиве" badge (no delete); unpublished books have a delete button
+- When deleting a book leaves only 1 book in its group, that remaining book's `isCopy` is automatically reset to `false`
+- Books with `isCopy=true` that are not yet published are blocked from Ozon publication
+
+**Key invariant**: `isCopy=true` books with `publishedToOzon IS NULL` are excluded from the pending-review queue and cannot be published to Ozon until `isCopy` is cleared.
 
 ### Ozon Integration
 
@@ -315,12 +347,18 @@ AppNavigator (root)
 │   ├── CardsTab → CardsList → CreateCard / CardDetail / PhotoUpload
 │   └── ProfileTab → ProfileScreen
 ├── AdminNavigator (role: ADMIN)
-│   ├── MainTab → Dashboard / Statistics / BookDatabase / PendingReview / ProductDetail
+│   ├── MainTab (AdminMainStack) → Dashboard / Statistics / BookDatabase /
+│   │                              PendingReview / Duplicates / Copies / ProductDetail
 │   ├── CardCreationTab → CardsList / CreateCard / CardDetail / PhotoUpload
 │   ├── SettingsTab → SettingsScreen / UserManagement
 │   └── ProfileTab → ProfileScreen
 └── DevNavigator (dev only)
 ```
+
+Admin screens in `apps/mobile/src/screens/admin/`:
+- `Dashboard.tsx` — grid of stat cards including Duplicates (→ Duplicates) and Copies count (→ Copies)
+- `DuplicatesScreen.tsx` — "На проверке: Копии", grouped suspected duplicates with probability
+- `CopiesScreen.tsx` — confirmed copies (`isCopy=true`), grouped by ISBN/title, with store name display
 
 ---
 
@@ -386,3 +424,6 @@ Build order in Dockerfile: `shared` → `ocr-processor` → `backend`
 4. **boxNumber uniqueness**: scoped per user (not globally unique)
 5. **Admin approval**: new users require `isApproved = true` before they can use the app
 6. **Swagger docs**: available at `http://localhost:3000/api/docs` in development
+7. **TypeORM column naming — camelCase only**: The project has NO naming strategy configured, so all DB column names are camelCase (e.g. `"isCopy"`, `"publishedToOzon"`, `"workSessionId"`). In raw SQL strings passed to `.andWhere()`, always use the TypeORM **entity property name** (e.g. `book.isCopy`), not snake_case — TypeORM translates property names to quoted column refs, but passes snake_case strings verbatim, causing `column does not exist` errors.
+8. **Deployment uses rsync, not git**: the production server at `31.184.197.226` has no `.git` directory. Code is pushed via `bash deploy.sh 31.184.197.226 jollybook.duckdns.org`. The script rsyncs source, rebuilds the backend Docker image, restarts the container, and runs migrations.
+9. **`useFocusEffect` always passes `isRefresh=true`**: when fetching stores or other secondary data in an admin screen, guard on `pageNum === 1` only (not `&& !isRefresh`), otherwise the data never loads on navigation focus.
