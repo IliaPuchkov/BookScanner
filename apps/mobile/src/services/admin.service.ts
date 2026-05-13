@@ -257,7 +257,7 @@ export const adminService = {
     limit = 20,
     filters?: {
       search?: string;
-      status?: 'published' | 'not_published';
+      status?: 'published' | 'not_published' | 'archived';
       count?: number;
       operatorId?: string;
       storeId?: string;

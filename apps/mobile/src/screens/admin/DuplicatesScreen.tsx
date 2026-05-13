@@ -101,7 +101,17 @@ function BookMiniCard({
           </View>
         ) : null}
       </TouchableOpacity>
-      {book.status !== BookStatus.PUBLISHED ? (
+      {book.status === BookStatus.PUBLISHED ? (
+        <View style={styles.publishedLabel}>
+          <AppText style={styles.publishedLabelText}>
+            Опубликована на Ozon
+          </AppText>
+        </View>
+      ) : book.status === BookStatus.ARCHIVED ? (
+        <View style={styles.archivedLabel}>
+          <AppText style={styles.archivedLabelText}>В архиве</AppText>
+        </View>
+      ) : (
         <TouchableOpacity
           style={[styles.deleteBtn, deleting && styles.deleteBtnDisabled]}
           onPress={() => onDelete(book)}
@@ -114,12 +124,6 @@ function BookMiniCard({
             <AppText style={styles.deleteBtnText}>Удалить</AppText>
           )}
         </TouchableOpacity>
-      ) : (
-        <View style={styles.publishedLabel}>
-          <AppText style={styles.publishedLabelText}>
-            Опубликована на Ozon
-          </AppText>
-        </View>
       )}
       <TouchableOpacity
         style={[
@@ -1249,6 +1253,18 @@ const styles = StyleSheet.create({
   },
   publishedLabelText: {
     color: "#2E7D32",
+    fontSize: 11,
+    fontWeight: "600",
+  },
+  archivedLabel: {
+    marginTop: 8,
+    backgroundColor: "#ECEFF1",
+    borderRadius: 6,
+    paddingVertical: 6,
+    alignItems: "center",
+  },
+  archivedLabelText: {
+    color: "#546E7A",
     fontSize: 11,
     fontWeight: "600",
   },

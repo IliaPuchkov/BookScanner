@@ -14,7 +14,7 @@ import {
 import { AppText } from "../../components/AppText";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import { adminService } from "../../services/admin.service";
+import { adminService, type OzonStore } from "../../services/admin.service";
 import { booksService } from "../../services/books.service";
 import { BookStatus } from "../../types";
 import type { Book, CopyGroup } from "../../types";
@@ -54,17 +54,23 @@ function BookMiniCard({
   onNavigate,
   onDelete,
   deleting,
+  stores,
 }: {
   book: Book;
   onNavigate: (id: string) => void;
   onDelete: (book: Book) => void;
   deleting: boolean;
+  stores: OzonStore[];
 }) {
   const coverPhoto = book.photos?.find((p) => p.sortOrder === 0);
   const isPublished =
     book.status === BookStatus.PUBLISHED ||
     book.ozonProduct?.status === "published" ||
     book.ozonProduct?.status === "PUBLISHED";
+  const isArchived = book.status === BookStatus.ARCHIVED;
+  const storeName = isPublished && book.ozonProduct?.storeId
+    ? stores.find((s) => s.id === book.ozonProduct!.storeId)?.name ?? "На Ozon"
+    : null;
 
   return (
     <View style={styles.miniCard}>
@@ -93,23 +99,30 @@ function BookMiniCard({
         {book.box?.boxNumber ? (
           <AppText style={styles.miniBox}>Кор. {book.box.boxNumber}</AppText>
         ) : null}
-        <View
-          style={[
-            styles.statusBadge,
-            isPublished ? styles.statusPublished : styles.statusPending,
-          ]}
-        >
-          <AppText
-            style={[
-              styles.statusText,
-              isPublished ? styles.statusPublishedText : styles.statusPendingText,
-            ]}
-          >
-            {isPublished ? "На Ozon" : "Не загружена"}
-          </AppText>
-        </View>
+        {isPublished ? (
+          <View style={styles.publishedGroup}>
+            <View style={styles.statusBadge}>
+              <AppText style={styles.statusPublishedText}>Опубликована на Ozon</AppText>
+            </View>
+            {storeName ? (
+              <View style={[styles.statusBadge, styles.storeBadge]}>
+                <AppText style={styles.storeBadgeText} numberOfLines={1}>
+                  {storeName}
+                </AppText>
+              </View>
+            ) : null}
+          </View>
+        ) : isArchived ? (
+          <View style={[styles.statusBadge, styles.statusArchived, styles.statusBadgeMt]}>
+            <AppText style={styles.statusArchivedText}>В архиве</AppText>
+          </View>
+        ) : (
+          <View style={[styles.statusBadge, styles.statusPending, styles.statusBadgeMt]}>
+            <AppText style={styles.statusPendingText}>Не загружена</AppText>
+          </View>
+        )}
       </TouchableOpacity>
-      {!isPublished && (
+      {!isPublished && !isArchived && (
         <TouchableOpacity
           style={[styles.deleteBtn, deleting && styles.deleteBtnDisabled]}
           onPress={() => onDelete(book)}
@@ -134,11 +147,13 @@ function CopyGroupCard({
   onNavigate,
   onDelete,
   deletingId,
+  stores,
 }: {
   group: CopyGroup;
   onNavigate: (id: string) => void;
   onDelete: (book: Book) => void;
   deletingId: string | null;
+  stores: OzonStore[];
 }) {
   return (
     <View style={styles.groupCard}>
@@ -166,6 +181,7 @@ function CopyGroupCard({
             onNavigate={onNavigate}
             onDelete={onDelete}
             deleting={deletingId === book.id}
+            stores={stores}
           />
         ))}
       </ScrollView>
@@ -187,24 +203,33 @@ export function CopiesScreen() {
   const [hasMore, setHasMore] = useState(false);
   const [total, setTotal] = useState(0);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [stores, setStores] = useState<OzonStore[]>([]);
 
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [search, setSearch] = useState("");
 
   const activeFilters = useRef<{
-    status?: "published" | "not_published";
+    status?: "published" | "not_published" | "archived";
     search?: string;
   }>({});
 
   const fetchData = useCallback(
     async (
-      filters: { status?: "published" | "not_published"; search?: string },
+      filters: { status?: "published" | "not_published" | "archived"; search?: string },
       pageNum = 1,
       isRefresh = false,
     ) => {
       activeFilters.current = filters;
       try {
-        const res = await adminService.getCopyGroups(pageNum, PAGE_SIZE, filters);
+        const storesPromise =
+          pageNum === 1
+            ? adminService.getOzonStores().catch(() => ({ stores: [] as OzonStore[] }))
+            : Promise.resolve(null);
+        const [res, storesRes] = await Promise.all([
+          adminService.getCopyGroups(pageNum, PAGE_SIZE, filters),
+          storesPromise,
+        ]);
+        if (storesRes) setStores((storesRes as { stores: OzonStore[] }).stores);
         setGroups(
           isRefresh || pageNum === 1
             ? res.groups
@@ -359,6 +384,7 @@ export function CopiesScreen() {
               }
               onDelete={handleDelete}
               deletingId={deletingId}
+              stores={stores}
             />
           )}
           contentContainerStyle={styles.list}
@@ -508,12 +534,16 @@ const styles = StyleSheet.create({
   miniSku: { fontSize: 10, color: "#bbb", marginBottom: 3 },
   miniPrice: { fontSize: 13, fontWeight: "700", color: "#1976D2", marginBottom: 3 },
   miniBox: { fontSize: 10, color: "#999", marginBottom: 4 },
-  statusBadge: { borderRadius: 4, paddingHorizontal: 6, paddingVertical: 2, alignSelf: "flex-start" },
-  statusPublished: { backgroundColor: "#E8F5E9" },
+  publishedGroup: { marginTop: 4, gap: 3 },
+  statusBadge: { borderRadius: 4, paddingHorizontal: 6, paddingVertical: 2, alignSelf: "flex-start", backgroundColor: "#E8F5E9" },
+  statusBadgeMt: { marginTop: 4 },
+  storeBadge: { backgroundColor: "#E3F2FD" },
   statusPending: { backgroundColor: "#FFF3E0" },
-  statusText: { fontSize: 10, fontWeight: "600" },
-  statusPublishedText: { color: "#2E7D32" },
-  statusPendingText: { color: "#E65100" },
+  statusArchived: { backgroundColor: "#ECEFF1" },
+  statusPublishedText: { fontSize: 10, fontWeight: "600", color: "#2E7D32" },
+  storeBadgeText: { fontSize: 10, fontWeight: "600", color: "#1565C0" },
+  statusPendingText: { fontSize: 10, fontWeight: "600", color: "#E65100" },
+  statusArchivedText: { fontSize: 10, fontWeight: "600", color: "#546E7A" },
   deleteBtn: {
     marginTop: 8,
     backgroundColor: "#E53935",
