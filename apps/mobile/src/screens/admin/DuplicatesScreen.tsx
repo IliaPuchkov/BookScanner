@@ -550,7 +550,7 @@ export function DuplicatesScreen() {
                 setGroups((prev) =>
                   prev
                     .map((g) =>
-                      g.key === group.key && g.type === group.type
+                      g.key === group.key && g.type === group.type && g.authorKey === group.authorKey
                         ? { ...g, books: g.books.filter((b) => b.id !== bookId) }
                         : g,
                     )
@@ -590,7 +590,7 @@ export function DuplicatesScreen() {
               await Promise.all(
                 pairs.map(([id1, id2]) => adminService.resolveDuplicate(id1, id2)),
               );
-              setGroups((prev) => prev.filter((g) => g.key !== group.key));
+              setGroups((prev) => prev.filter((g) => !(g.key === group.key && g.type === group.type && g.authorKey === group.authorKey)));
             } catch {
               Alert.alert("Ошибка", "Не удалось отметить как не копию");
             } finally {
@@ -609,7 +609,7 @@ export function DuplicatesScreen() {
         const allIds = group.books.map((b) => b.id);
         await adminService.markCopies(allIds, masterBookId ?? undefined);
         setGroups((prev) =>
-          prev.filter((g) => !(g.key === group.key && g.type === group.type)),
+          prev.filter((g) => !(g.key === group.key && g.type === group.type && g.authorKey === group.authorKey)),
         );
       } catch {
         Alert.alert("Ошибка", "Не удалось пометить как копии");
@@ -919,7 +919,7 @@ export function DuplicatesScreen() {
         <FlatList
           style={styles.container}
           data={displayGroups}
-          keyExtractor={(item) => `${item.type}:${item.key}`}
+          keyExtractor={(item) => `${item.type}:${item.key}:${item.authorKey ?? ''}`}
           renderItem={({ item }) => (
             <DuplicateGroupCard
               group={item}

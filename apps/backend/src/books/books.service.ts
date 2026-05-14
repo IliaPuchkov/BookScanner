@@ -32,12 +32,12 @@ export class BooksService {
   private readonly logger = new Logger(BooksService.name);
   private _groupsCache: {
     isbnGroupsRaw: Array<{ isbn: string; ids: unknown }>;
-    titleGroupsRaw: Array<{ normalizedTitle: string; ids: unknown }>;
+    titleGroupsRaw: Array<{ normalizedTitle: string; normalizedAuthor: string; ids: unknown }>;
     cachedAt: number;
   } | null = null;
   private _groupsCachePending: Promise<{
     isbnGroupsRaw: Array<{ isbn: string; ids: unknown }>;
-    titleGroupsRaw: Array<{ normalizedTitle: string; ids: unknown }>;
+    titleGroupsRaw: Array<{ normalizedTitle: string; normalizedAuthor: string; ids: unknown }>;
   }> | null = null;
 
   private _filterCache: {
@@ -679,7 +679,7 @@ export class BooksService {
     const CACHE_TTL = 2 * 60 * 1000;
     const now = Date.now();
     let isbnGroupsRaw: Array<{ isbn: string; ids: unknown }>;
-    let titleGroupsRaw: Array<{ normalizedTitle: string; ids: unknown }>;
+    let titleGroupsRaw: Array<{ normalizedTitle: string; normalizedAuthor: string; ids: unknown }>;
 
     if (this._groupsCache && now - this._groupsCache.cachedAt < CACHE_TTL) {
       isbnGroupsRaw = this._groupsCache.isbnGroupsRaw;
@@ -698,27 +698,20 @@ export class BooksService {
             .groupBy('book.isbn')
             .having('COUNT(*) >= 2')
             .getRawMany<{ isbn: string; ids: unknown }>(),
-          // CTE finds titles where ≥2 books share the same non-empty author.
-          // INNER JOIN on that set avoids the correlated-subquery / ungrouped-column error.
-          this.booksRepository.manager.query<{ normalizedTitle: string; ids: unknown }[]>(`
-            WITH author_overlap AS (
-              SELECT LOWER(TRIM(title)) AS t
-              FROM books
-              WHERE author IS NOT NULL AND TRIM(author) <> ''
-                AND (isbn IS NULL OR isbn = '')
-              GROUP BY LOWER(TRIM(title)), LOWER(TRIM(author))
-              HAVING COUNT(*) >= 2
-            )
+          // Group by (title + author) so each group already has both fields matched (prob=60).
+          // This avoids noise from generic titles like "Избранное" with many different authors.
+          this.booksRepository.manager.query<{ normalizedTitle: string; normalizedAuthor: string; ids: unknown }[]>(`
             SELECT
               LOWER(TRIM(book.title)) AS "normalizedTitle",
+              LOWER(TRIM(book.author)) AS "normalizedAuthor",
               array_agg(book.id::text) AS ids
             FROM books book
             LEFT JOIN work_sessions ws ON ws.id = book.work_session_id
-            INNER JOIN author_overlap ao ON ao.t = LOWER(TRIM(book.title))
             WHERE LOWER(TRIM(book.title)) NOT ILIKE 'новая книга'
               AND (book.isbn IS NULL OR book.isbn = '')
+              AND book.author IS NOT NULL AND TRIM(book.author) <> ''
               AND (book.work_session_id IS NULL OR ws.status = 'completed')
-            GROUP BY LOWER(TRIM(book.title))
+            GROUP BY LOWER(TRIM(book.title)), LOWER(TRIM(book.author))
             HAVING COUNT(*) >= 2
           `),
         ]).then(([isbnRaw, titleRaw]) => {
@@ -735,7 +728,7 @@ export class BooksService {
     }
 
     // Step 2: Filter resolved, build flat list
-    type RawGroup = { type: 'isbn' | 'title'; key: string; ids: string[] };
+    type RawGroup = { type: 'isbn' | 'title'; key: string; authorKey?: string; ids: string[] };
     const allGroups: RawGroup[] = [];
 
     for (const g of isbnGroupsRaw) {
@@ -747,7 +740,7 @@ export class BooksService {
     for (const g of titleGroupsRaw) {
       const ids = parseIds(g.ids);
       if (ids.length >= 2 && !allPairsResolved(ids)) {
-        allGroups.push({ type: 'title', key: g.normalizedTitle, ids });
+        allGroups.push({ type: 'title', key: g.normalizedTitle, authorKey: g.normalizedAuthor, ids });
       }
     }
 
@@ -868,7 +861,7 @@ export class BooksService {
       books.forEach((b) => bookMap.set(b.id, b));
     }
 
-    type GroupResult = { type: 'isbn' | 'title'; key: string; books: Book[]; probability: number; matchedFields: string[] };
+    type GroupResult = { type: 'isbn' | 'title'; key: string; authorKey?: string; books: Book[]; probability: number; matchedFields: string[] };
     const isbnDuplicates: GroupResult[] = [];
     const possibleDuplicates: GroupResult[] = [];
 
@@ -922,7 +915,7 @@ export class BooksService {
       if (group.type === 'isbn') {
         isbnDuplicates.push({ type: 'isbn', key: group.key, books, probability, matchedFields });
       } else {
-        possibleDuplicates.push({ type: 'title', key: group.key, books, probability, matchedFields });
+        possibleDuplicates.push({ type: 'title', key: group.key, authorKey: group.authorKey, books, probability, matchedFields });
       }
     }
 
@@ -944,12 +937,13 @@ export class BooksService {
       `),
       this.booksRepository.manager.query<[{ cnt: string }]>(`
         SELECT COUNT(*) AS cnt FROM (
-          SELECT LOWER(TRIM(b.title)) FROM books b
+          SELECT LOWER(TRIM(b.title)), LOWER(TRIM(b.author)) FROM books b
           LEFT JOIN work_sessions ws ON ws.id = b.work_session_id
           WHERE LOWER(TRIM(b.title)) NOT ILIKE 'новая книга'
             AND (b.isbn IS NULL OR b.isbn = '')
+            AND b.author IS NOT NULL AND TRIM(b.author) <> ''
             AND (b.work_session_id IS NULL OR ws.status = 'completed')
-          GROUP BY LOWER(TRIM(b.title)) HAVING COUNT(*) >= 2
+          GROUP BY LOWER(TRIM(b.title)), LOWER(TRIM(b.author)) HAVING COUNT(*) >= 2
         ) sub
       `),
     ]);

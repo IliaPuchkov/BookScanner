@@ -153,6 +153,7 @@ export interface StatsSummary {
 export interface DuplicateGroup {
   type: 'isbn' | 'title';
   key: string;
+  authorKey?: string;
   books: Book[];
   probability?: number;
   matchedFields?: string[];
