@@ -700,7 +700,7 @@ export class BooksService {
             .getRawMany<{ isbn: string; ids: unknown }>(),
           // CTE finds titles where ≥2 books share the same non-empty author.
           // INNER JOIN on that set avoids the correlated-subquery / ungrouped-column error.
-          this.booksRepository.manager.query<{ normalizedTitle: string; ids: unknown }>(`
+          this.booksRepository.manager.query<{ normalizedTitle: string; ids: unknown }[]>(`
             WITH author_overlap AS (
               SELECT LOWER(TRIM(title)) AS t
               FROM books
