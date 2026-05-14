@@ -894,12 +894,13 @@ export class BooksService {
           const isbnMatch = groupType === 'isbn';
           const na = norm(a?.title); const nb = norm(b?.title);
           const aa = norm(a?.author); const ab = norm(b?.author);
-          const titleMatch = !!(na && nb && na === nb);
+          const titleMatch  = !!(na && nb && na === nb);
           const authorMatch = !!(aa && ab && aa === ab);
           const fields: string[] = [];
-          if (isbnMatch) fields.push('ISBN');
-          if (titleMatch) fields.push('Название');
+          if (isbnMatch)   fields.push('ISBN');
+          if (titleMatch)  fields.push('Название');
           if (authorMatch) fields.push('Автор');
+          // High (100): all 3; Medium (60): any 2; Low (30): only 1
           const prob = fields.length >= 3 ? 100 : fields.length === 2 ? 60 : 30;
           if (prob > bestProb) { bestProb = prob; bestFields = fields; }
         }
@@ -916,6 +917,7 @@ export class BooksService {
       if (books.length < 2) continue;
       if (books.some((b) => b.isCopy)) continue;
       const { probability, matchedFields } = calcGroupProbability(books, group.type);
+      if (probability < 60) continue; // skip Low-probability groups (only 1 field matched)
 
       if (group.type === 'isbn') {
         isbnDuplicates.push({ type: 'isbn', key: group.key, books, probability, matchedFields });
