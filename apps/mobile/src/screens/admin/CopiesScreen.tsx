@@ -10,6 +10,8 @@ import {
   ActivityIndicator,
   RefreshControl,
   TextInput,
+  Modal,
+  TouchableWithoutFeedback,
 } from "react-native";
 import { AppText } from "../../components/AppText";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
@@ -148,7 +150,6 @@ function CopyGroupCard({
   onDelete,
   onUnmark,
   deletingId,
-  unmarking,
   stores,
 }: {
   group: CopyGroup;
@@ -156,9 +157,19 @@ function CopyGroupCard({
   onDelete: (book: Book) => void;
   onUnmark: (group: CopyGroup) => void;
   deletingId: string | null;
-  unmarking: boolean;
   stores: OzonStore[];
 }) {
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [menuPos, setMenuPos] = useState({ top: 0, right: 0 });
+  const kebabRef = useRef<TouchableOpacity>(null);
+
+  const openMenu = () => {
+    kebabRef.current?.measure((_x, _y, width, height, pageX, pageY) => {
+      setMenuPos({ top: pageY + height + 4, right: 0 });
+      setMenuOpen(true);
+    });
+  };
+
   return (
     <View style={styles.groupCard}>
       <View style={styles.groupHeader}>
@@ -171,6 +182,15 @@ function CopyGroupCard({
           {group.type === "isbn" ? group.key : group.key}
         </AppText>
         <AppText style={styles.groupCount}>{group.books.length} шт.</AppText>
+        <TouchableOpacity
+          ref={kebabRef}
+          onPress={openMenu}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          activeOpacity={0.6}
+          style={styles.kebabBtn}
+        >
+          <AppText style={styles.kebabIcon}>⋮</AppText>
+        </TouchableOpacity>
       </View>
       <ScrollView
         horizontal
@@ -189,18 +209,30 @@ function CopyGroupCard({
           />
         ))}
       </ScrollView>
-      <TouchableOpacity
-        style={[styles.unmarkBtn, unmarking && styles.unmarkBtnDisabled]}
-        onPress={() => onUnmark(group)}
-        disabled={unmarking}
-        activeOpacity={0.7}
+
+      <Modal
+        visible={menuOpen}
+        transparent
+        animationType="none"
+        onRequestClose={() => setMenuOpen(false)}
       >
-        {unmarking ? (
-          <ActivityIndicator size="small" color="#546E7A" />
-        ) : (
-          <AppText style={styles.unmarkBtnText}>Вернуть на проверку</AppText>
-        )}
-      </TouchableOpacity>
+        <TouchableWithoutFeedback onPress={() => setMenuOpen(false)}>
+          <View style={styles.menuOverlay}>
+            <View style={[styles.menuCard, { top: menuPos.top, right: 16 }]}>
+              <TouchableOpacity
+                style={styles.menuItem}
+                activeOpacity={0.7}
+                onPress={() => {
+                  setMenuOpen(false);
+                  onUnmark(group);
+                }}
+              >
+                <AppText style={styles.menuItemText}>Вернуть на проверку</AppText>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </TouchableWithoutFeedback>
+      </Modal>
     </View>
   );
 }
@@ -219,7 +251,6 @@ export function CopiesScreen() {
   const [hasMore, setHasMore] = useState(false);
   const [total, setTotal] = useState(0);
   const [deletingId, setDeletingId] = useState<string | null>(null);
-  const [unmarkingKey, setUnmarkingKey] = useState<string | null>(null);
   const [stores, setStores] = useState<OzonStore[]>([]);
 
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
@@ -352,7 +383,6 @@ export function CopiesScreen() {
           text: "Вернуть",
           onPress: async () => {
             const groupKey = `${group.type}:${group.key}`;
-            setUnmarkingKey(groupKey);
             try {
               const bookIds = group.books.map((b) => b.id);
               await adminService.unmarkCopies(bookIds);
@@ -360,8 +390,6 @@ export function CopiesScreen() {
               setTotal((t) => Math.max(0, t - 1));
             } catch {
               Alert.alert("Ошибка", "Не удалось вернуть книги на проверку");
-            } finally {
-              setUnmarkingKey(null);
             }
           },
         },
@@ -429,7 +457,6 @@ export function CopiesScreen() {
               onDelete={handleDelete}
               onUnmark={handleUnmarkGroup}
               deletingId={deletingId}
-              unmarking={unmarkingKey === `${item.type}:${item.key}`}
               stores={stores}
             />
           )}
@@ -600,17 +627,40 @@ const styles = StyleSheet.create({
   deleteBtnDisabled: { opacity: 0.5 },
   deleteBtnText: { color: "#fff", fontSize: 12, fontWeight: "600" },
 
-  unmarkBtn: {
-    marginTop: 10,
-    borderWidth: 1,
-    borderColor: "#90A4AE",
-    borderRadius: 8,
-    paddingVertical: 9,
+  kebabBtn: {
+    marginLeft: 4,
+    paddingHorizontal: 4,
+    justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "#ECEFF1",
   },
-  unmarkBtnDisabled: { opacity: 0.5 },
-  unmarkBtnText: { fontSize: 13, color: "#546E7A", fontWeight: "600" },
+  kebabIcon: {
+    fontSize: 18,
+    color: "#aaa",
+    lineHeight: 22,
+  },
+  menuOverlay: {
+    flex: 1,
+  },
+  menuCard: {
+    position: "absolute",
+    backgroundColor: "#fff",
+    borderRadius: 8,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 6,
+    elevation: 8,
+    minWidth: 180,
+    overflow: "hidden",
+  },
+  menuItem: {
+    paddingHorizontal: 16,
+    paddingVertical: 13,
+  },
+  menuItemText: {
+    fontSize: 14,
+    color: "#333",
+  },
   footerLoader: { paddingVertical: 20, alignItems: "center" },
   empty: { alignItems: "center", marginTop: 80, gap: 12 },
   emptyIcon: { fontSize: 48 },
