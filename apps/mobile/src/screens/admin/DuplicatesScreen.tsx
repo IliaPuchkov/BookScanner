@@ -26,6 +26,7 @@ import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { adminService, type OzonStore } from "../../services/admin.service";
 import { booksService } from "../../services/books.service";
+import { boxesService } from "../../services/boxes.service";
 import { BookStatus } from "../../types";
 import type { DuplicateGroup, Book } from "../../types";
 import type { AdminMainStackParamList } from "../../navigation/AdminNavigator";
@@ -342,6 +343,7 @@ export function DuplicatesScreen() {
   >(null);
   const [markingCopiesKey, setMarkingCopiesKey] = useState<string | null>(null);
   const [stores, setStores] = useState<OzonStore[]>([]);
+  const [allBoxes, setAllBoxes] = useState<Array<{ id: string; boxNumber: string }>>([]);
   const [markCopiesPickerGroup, setMarkCopiesPickerGroup] = useState<DuplicateGroup | null>(null);
 
   // Server-side filters
@@ -403,6 +405,13 @@ export function DuplicatesScreen() {
   useEffect(() => {
     setLoading(true);
     fetchData({});
+    boxesService.getAllBoxes().then((fetched) => {
+      setAllBoxes(
+        fetched
+          .map((b) => ({ id: b.id, boxNumber: b.boxNumber }))
+          .sort((a, b) => a.boxNumber.localeCompare(b.boxNumber)),
+      );
+    }).catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -433,7 +442,7 @@ export function DuplicatesScreen() {
     filterBoxId,
   ]);
 
-  // Extract unique operators and boxes from loaded groups (for filter UI chips)
+  // Extract unique operators from loaded groups (for filter UI chips)
   const operators = useMemo(() => {
     const map = new Map<string, string>();
     groups.forEach((g) =>
@@ -442,18 +451,6 @@ export function DuplicatesScreen() {
       }),
     );
     return Array.from(map.entries()).map(([id, name]) => ({ id, name }));
-  }, [groups]);
-
-  const boxes = useMemo(() => {
-    const map = new Map<string, string>();
-    groups.forEach((g) =>
-      g.books.forEach((b) => {
-        if (b.box) map.set(b.boxId, b.box.boxNumber);
-      }),
-    );
-    return Array.from(map.entries())
-      .map(([id, boxNumber]) => ({ id, boxNumber }))
-      .sort((a, b) => a.boxNumber.localeCompare(b.boxNumber));
   }, [groups]);
 
   // Probability is the only client-side filter remaining
@@ -821,7 +818,7 @@ export function DuplicatesScreen() {
             )}
 
             {/* Box */}
-            {boxes.length > 0 && (
+            {allBoxes.length > 0 && (
               <>
                 <AppText style={styles.filterSectionLabel}>Коробка</AppText>
                 <TouchableOpacity
@@ -840,7 +837,7 @@ export function DuplicatesScreen() {
                     }
                   >
                     {filterBoxId
-                      ? boxes.find((b) => b.id === filterBoxId)?.boxNumber
+                      ? allBoxes.find((b) => b.id === filterBoxId)?.boxNumber
                       : "Все коробки"}
                   </AppText>
                   <View style={styles.pickerRowRight}>
@@ -1064,7 +1061,7 @@ export function DuplicatesScreen() {
                   <FlatList
                     data={[
                       { id: "", boxNumber: "Все коробки" },
-                      ...boxes.filter((b) =>
+                      ...allBoxes.filter((b) =>
                         b.boxNumber
                           .toLowerCase()
                           .includes(boxPickerSearch.toLowerCase()),
