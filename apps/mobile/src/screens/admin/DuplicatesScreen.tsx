@@ -529,52 +529,77 @@ export function DuplicatesScreen() {
   }, []);
 
   const handleMarkBookNotDuplicate = useCallback(
-    async (bookId: string, group: DuplicateGroup) => {
-      setMarkingNotDuplicateId(bookId);
-      try {
-        const others = group.books.filter((b) => b.id !== bookId);
-        await Promise.all(
-          others.map((other) =>
-            adminService.resolveDuplicate(bookId, other.id),
-          ),
-        );
-        setGroups((prev) =>
-          prev
-            .map((g) =>
-              g.key === group.key && g.type === group.type
-                ? { ...g, books: g.books.filter((b) => b.id !== bookId) }
-                : g,
-            )
-            .filter((g) => g.books.length >= 2),
-        );
-      } catch {
-        Alert.alert("Ошибка", "Не удалось пометить как не копию");
-      } finally {
-        setMarkingNotDuplicateId(null);
-      }
+    (bookId: string, group: DuplicateGroup) => {
+      const book = group.books.find((b) => b.id === bookId);
+      Alert.alert(
+        "Не копия?",
+        `Книга "${book?.title ?? "..."}" будет исключена из этой группы дубликатов.`,
+        [
+          { text: "Отмена", style: "cancel" },
+          {
+            text: "Подтвердить",
+            onPress: async () => {
+              setMarkingNotDuplicateId(bookId);
+              try {
+                const others = group.books.filter((b) => b.id !== bookId);
+                await Promise.all(
+                  others.map((other) =>
+                    adminService.resolveDuplicate(bookId, other.id),
+                  ),
+                );
+                setGroups((prev) =>
+                  prev
+                    .map((g) =>
+                      g.key === group.key && g.type === group.type
+                        ? { ...g, books: g.books.filter((b) => b.id !== bookId) }
+                        : g,
+                    )
+                    .filter((g) => g.books.length >= 2),
+                );
+              } catch {
+                Alert.alert("Ошибка", "Не удалось пометить как не копию");
+              } finally {
+                setMarkingNotDuplicateId(null);
+              }
+            },
+          },
+        ],
+      );
     },
     [],
   );
 
-  const handleResolve = useCallback(async (group: DuplicateGroup) => {
+  const handleResolve = useCallback((group: DuplicateGroup) => {
     if (group.books.length < 2) return;
-    setResolvingKey(group.key);
-    try {
-      const pairs: Array<[string, string]> = [];
-      for (let i = 0; i < group.books.length; i++) {
-        for (let j = i + 1; j < group.books.length; j++) {
-          pairs.push([group.books[i].id, group.books[j].id]);
-        }
-      }
-      await Promise.all(
-        pairs.map(([id1, id2]) => adminService.resolveDuplicate(id1, id2)),
-      );
-      setGroups((prev) => prev.filter((g) => g.key !== group.key));
-    } catch {
-      Alert.alert("Ошибка", "Не удалось отметить как не копию");
-    } finally {
-      setResolvingKey(null);
-    }
+    Alert.alert(
+      "Это не копии?",
+      "Все книги группы будут исключены из списка дубликатов и больше не будут сравниваться друг с другом.",
+      [
+        { text: "Отмена", style: "cancel" },
+        {
+          text: "Пропустить",
+          onPress: async () => {
+            setResolvingKey(group.key);
+            try {
+              const pairs: Array<[string, string]> = [];
+              for (let i = 0; i < group.books.length; i++) {
+                for (let j = i + 1; j < group.books.length; j++) {
+                  pairs.push([group.books[i].id, group.books[j].id]);
+                }
+              }
+              await Promise.all(
+                pairs.map(([id1, id2]) => adminService.resolveDuplicate(id1, id2)),
+              );
+              setGroups((prev) => prev.filter((g) => g.key !== group.key));
+            } catch {
+              Alert.alert("Ошибка", "Не удалось отметить как не копию");
+            } finally {
+              setResolvingKey(null);
+            }
+          },
+        },
+      ],
+    );
   }, []);
 
   const doMarkCopies = useCallback(
@@ -601,11 +626,25 @@ export function DuplicatesScreen() {
         (b) =>
           b.status !== BookStatus.PUBLISHED && b.status !== BookStatus.ARCHIVED,
       );
-      if (allUnpublished) {
-        setMarkCopiesPickerGroup(group);
-      } else {
-        doMarkCopies(group, null);
-      }
+      Alert.alert(
+        "Пометить как копии?",
+        allUnpublished
+          ? "Выберите основную книгу — она останется доступной для публикации на Ozon. Остальные будут помечены как копии."
+          : `Все ${group.books.length} книги группы будут помечены как копии и скрыты из очереди публикации.`,
+        [
+          { text: "Отмена", style: "cancel" },
+          {
+            text: "Это копии",
+            onPress: () => {
+              if (allUnpublished) {
+                setMarkCopiesPickerGroup(group);
+              } else {
+                doMarkCopies(group, null);
+              }
+            },
+          },
+        ],
+      );
     },
     [doMarkCopies],
   );
