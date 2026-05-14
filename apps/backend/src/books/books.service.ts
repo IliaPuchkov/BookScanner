@@ -698,29 +698,29 @@ export class BooksService {
             .groupBy('book.isbn')
             .having('COUNT(*) >= 2')
             .getRawMany<{ isbn: string; ids: unknown }>(),
-          this.booksRepository
-            .createQueryBuilder('book')
-            .select('LOWER(TRIM(book.title))', 'normalizedTitle')
-            .addSelect('array_agg(book.id)', 'ids')
-            .leftJoin('book.workSession', 'ws')
-            .where("LOWER(TRIM(book.title)) NOT ILIKE :newBook", { newBook: 'новая книга' })
-            .andWhere("book.isbn IS NULL OR book.isbn = ''")
-            .andWhere("(book.work_session_id IS NULL OR ws.status = 'completed')")
-            .groupBy('LOWER(TRIM(book.title))')
-            // Require that at least 2 books share the same non-empty author —
-            // title-only matches (all different authors) are noise, not real duplicates.
-            .having('COUNT(*) >= 2')
-            .andHaving(`(
-              SELECT COUNT(*) FROM (
-                SELECT LOWER(TRIM("author")) AS a
-                FROM books b2
-                WHERE LOWER(TRIM(b2.title)) = LOWER(TRIM(book.title))
-                  AND b2.author IS NOT NULL AND TRIM(b2.author) <> ''
-                GROUP BY LOWER(TRIM("author"))
-                HAVING COUNT(*) >= 2
-              ) _author_match
-            ) > 0`)
-            .getRawMany<{ normalizedTitle: string; ids: unknown }>(),
+          // CTE finds titles where ≥2 books share the same non-empty author.
+          // INNER JOIN on that set avoids the correlated-subquery / ungrouped-column error.
+          this.booksRepository.manager.query<{ normalizedTitle: string; ids: unknown }>(`
+            WITH author_overlap AS (
+              SELECT LOWER(TRIM(title)) AS t
+              FROM books
+              WHERE author IS NOT NULL AND TRIM(author) <> ''
+                AND (isbn IS NULL OR isbn = '')
+              GROUP BY LOWER(TRIM(title)), LOWER(TRIM(author))
+              HAVING COUNT(*) >= 2
+            )
+            SELECT
+              LOWER(TRIM(book.title)) AS "normalizedTitle",
+              array_agg(book.id::text) AS ids
+            FROM books book
+            LEFT JOIN work_sessions ws ON ws.id = book."workSessionId"
+            INNER JOIN author_overlap ao ON ao.t = LOWER(TRIM(book.title))
+            WHERE LOWER(TRIM(book.title)) NOT ILIKE 'новая книга'
+              AND (book.isbn IS NULL OR book.isbn = '')
+              AND (book."workSessionId" IS NULL OR ws.status = 'completed')
+            GROUP BY LOWER(TRIM(book.title))
+            HAVING COUNT(*) >= 2
+          `),
         ]).then(([isbnRaw, titleRaw]) => {
           this._groupsCache = { isbnGroupsRaw: isbnRaw, titleGroupsRaw: titleRaw, cachedAt: Date.now() };
           this._groupsCachePending = null;
