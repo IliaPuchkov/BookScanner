@@ -658,7 +658,6 @@ export function DuplicatesScreen() {
   const PROB_FILTERS = [
     { label: "Высокая", value: 100, color: "#E53935" },
     { label: "Средняя", value: 60, color: "#FB8C00" },
-    { label: "Малая", value: 30, color: "#F9A825" },
   ];
 
   const COUNT_OPTIONS = [

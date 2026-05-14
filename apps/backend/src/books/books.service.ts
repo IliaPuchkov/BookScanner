@@ -707,7 +707,19 @@ export class BooksService {
             .andWhere("book.isbn IS NULL OR book.isbn = ''")
             .andWhere("(book.work_session_id IS NULL OR ws.status = 'completed')")
             .groupBy('LOWER(TRIM(book.title))')
+            // Require that at least 2 books share the same non-empty author —
+            // title-only matches (all different authors) are noise, not real duplicates.
             .having('COUNT(*) >= 2')
+            .andHaving(`(
+              SELECT COUNT(*) FROM (
+                SELECT LOWER(TRIM("author")) AS a
+                FROM books b2
+                WHERE LOWER(TRIM(b2.title)) = LOWER(TRIM(book.title))
+                  AND b2.author IS NOT NULL AND TRIM(b2.author) <> ''
+                GROUP BY LOWER(TRIM("author"))
+                HAVING COUNT(*) >= 2
+              ) _author_match
+            ) > 0`)
             .getRawMany<{ normalizedTitle: string; ids: unknown }>(),
         ]).then(([isbnRaw, titleRaw]) => {
           this._groupsCache = { isbnGroupsRaw: isbnRaw, titleGroupsRaw: titleRaw, cachedAt: Date.now() };
