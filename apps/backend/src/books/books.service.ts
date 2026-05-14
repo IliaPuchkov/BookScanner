@@ -362,6 +362,12 @@ export class BooksService {
     this._groupsCache = null;
   }
 
+  async unmarkCopies(bookIds: string[]): Promise<void> {
+    if (!bookIds.length) return;
+    await this.booksRepository.update({ id: In(bookIds) }, { isCopy: false, isCopyMaster: false });
+    this._groupsCache = null;
+  }
+
   async getCopyGroups(
     page: number,
     limit: number,

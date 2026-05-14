@@ -127,6 +127,12 @@ export class AdminController {
     return this.adminService.markCopies(dto.bookIds, dto.masterBookId);
   }
 
+  @Post('books/unmark-copies')
+  @ApiOperation({ summary: 'Снять флаг isCopy/isCopyMaster — вернуть книги в очередь дубликатов' })
+  unmarkCopies(@Body() dto: { bookIds: string[] }) {
+    return this.adminService.unmarkCopies(dto.bookIds);
+  }
+
   // Copies
   @Get('books/copies/groups')
   @ApiOperation({ summary: 'Копии (isCopy=true), сгруппированные по ISBN или названию' })

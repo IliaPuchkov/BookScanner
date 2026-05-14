@@ -178,6 +178,11 @@ export class AdminService {
     await this.booksService.markAsCopies(bookIds, masterBookId);
   }
 
+  async unmarkCopies(bookIds: string[]) {
+    if (!bookIds.length) return;
+    await this.booksService.unmarkCopies(bookIds);
+  }
+
   async getCopyGroups(dto: {
     page?: number;
     limit?: number;

@@ -146,13 +146,17 @@ function CopyGroupCard({
   group,
   onNavigate,
   onDelete,
+  onUnmark,
   deletingId,
+  unmarking,
   stores,
 }: {
   group: CopyGroup;
   onNavigate: (id: string) => void;
   onDelete: (book: Book) => void;
+  onUnmark: (group: CopyGroup) => void;
   deletingId: string | null;
+  unmarking: boolean;
   stores: OzonStore[];
 }) {
   return (
@@ -185,6 +189,18 @@ function CopyGroupCard({
           />
         ))}
       </ScrollView>
+      <TouchableOpacity
+        style={[styles.unmarkBtn, unmarking && styles.unmarkBtnDisabled]}
+        onPress={() => onUnmark(group)}
+        disabled={unmarking}
+        activeOpacity={0.7}
+      >
+        {unmarking ? (
+          <ActivityIndicator size="small" color="#546E7A" />
+        ) : (
+          <AppText style={styles.unmarkBtnText}>Вернуть на проверку</AppText>
+        )}
+      </TouchableOpacity>
     </View>
   );
 }
@@ -203,6 +219,7 @@ export function CopiesScreen() {
   const [hasMore, setHasMore] = useState(false);
   const [total, setTotal] = useState(0);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [unmarkingKey, setUnmarkingKey] = useState<string | null>(null);
   const [stores, setStores] = useState<OzonStore[]>([]);
 
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
@@ -325,6 +342,33 @@ export function CopiesScreen() {
     );
   }, []);
 
+  const handleUnmarkGroup = useCallback((group: CopyGroup) => {
+    Alert.alert(
+      "Вернуть на проверку?",
+      "Все книги группы будут возвращены в очередь дубликатов.",
+      [
+        { text: "Отмена", style: "cancel" },
+        {
+          text: "Вернуть",
+          onPress: async () => {
+            const groupKey = `${group.type}:${group.key}`;
+            setUnmarkingKey(groupKey);
+            try {
+              const bookIds = group.books.map((b) => b.id);
+              await adminService.unmarkCopies(bookIds);
+              setGroups((prev) => prev.filter((g) => `${g.type}:${g.key}` !== groupKey));
+              setTotal((t) => Math.max(0, t - 1));
+            } catch {
+              Alert.alert("Ошибка", "Не удалось вернуть книги на проверку");
+            } finally {
+              setUnmarkingKey(null);
+            }
+          },
+        },
+      ],
+    );
+  }, []);
+
   const handleLoadMore = useCallback(() => {
     if (loadingMore || !hasMore || loading) return;
     setLoadingMore(true);
@@ -383,7 +427,9 @@ export function CopiesScreen() {
                 navigation.navigate("ProductDetail", { bookId: id, editable: true })
               }
               onDelete={handleDelete}
+              onUnmark={handleUnmarkGroup}
               deletingId={deletingId}
+              unmarking={unmarkingKey === `${item.type}:${item.key}`}
               stores={stores}
             />
           )}
@@ -554,6 +600,17 @@ const styles = StyleSheet.create({
   deleteBtnDisabled: { opacity: 0.5 },
   deleteBtnText: { color: "#fff", fontSize: 12, fontWeight: "600" },
 
+  unmarkBtn: {
+    marginTop: 10,
+    borderWidth: 1,
+    borderColor: "#90A4AE",
+    borderRadius: 8,
+    paddingVertical: 9,
+    alignItems: "center",
+    backgroundColor: "#ECEFF1",
+  },
+  unmarkBtnDisabled: { opacity: 0.5 },
+  unmarkBtnText: { fontSize: 13, color: "#546E7A", fontWeight: "600" },
   footerLoader: { paddingVertical: 20, alignItems: "center" },
   empty: { alignItems: "center", marginTop: 80, gap: 12 },
   emptyIcon: { fontSize: 48 },

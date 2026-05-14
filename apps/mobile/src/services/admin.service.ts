@@ -278,6 +278,10 @@ export const adminService = {
     await api.post('/admin/books/mark-copies', { bookIds, masterBookId });
   },
 
+  async unmarkCopies(bookIds: string[]): Promise<void> {
+    await api.post('/admin/books/unmark-copies', { bookIds });
+  },
+
   async getCopyGroups(
     page = 1,
     limit = 20,
