@@ -713,11 +713,11 @@ export class BooksService {
               LOWER(TRIM(book.title)) AS "normalizedTitle",
               array_agg(book.id::text) AS ids
             FROM books book
-            LEFT JOIN work_sessions ws ON ws.id = book."workSessionId"
+            LEFT JOIN work_sessions ws ON ws.id = book.work_session_id
             INNER JOIN author_overlap ao ON ao.t = LOWER(TRIM(book.title))
             WHERE LOWER(TRIM(book.title)) NOT ILIKE 'новая книга'
               AND (book.isbn IS NULL OR book.isbn = '')
-              AND (book."workSessionId" IS NULL OR ws.status = 'completed')
+              AND (book.work_session_id IS NULL OR ws.status = 'completed')
             GROUP BY LOWER(TRIM(book.title))
             HAVING COUNT(*) >= 2
           `),
