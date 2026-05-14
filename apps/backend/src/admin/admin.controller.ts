@@ -123,8 +123,8 @@ export class AdminController {
 
   @Post('books/mark-copies')
   @ApiOperation({ summary: 'Пометить группу книг как копии друг друга' })
-  markCopies(@Body() dto: { bookIds: string[] }) {
-    return this.adminService.markCopies(dto.bookIds);
+  markCopies(@Body() dto: { bookIds: string[]; masterBookId?: string }) {
+    return this.adminService.markCopies(dto.bookIds, dto.masterBookId);
   }
 
   // Copies

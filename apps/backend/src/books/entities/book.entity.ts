@@ -124,6 +124,9 @@ export class Book {
   @Column({ default: false })
   isCopy: boolean;
 
+  @Column({ default: false })
+  isCopyMaster: boolean;
+
   @Column({ type: 'enum', enum: BookStatus, default: BookStatus.PENDING_REVIEW })
   status: BookStatus;
 

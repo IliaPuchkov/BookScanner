@@ -173,9 +173,9 @@ export class AdminService {
       .execute();
   }
 
-  async markCopies(bookIds: string[]) {
+  async markCopies(bookIds: string[], masterBookId?: string) {
     if (!bookIds.length) return;
-    await this.booksService.markAsCopies(bookIds);
+    await this.booksService.markAsCopies(bookIds, masterBookId);
   }
 
   async getCopyGroups(dto: {

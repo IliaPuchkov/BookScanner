@@ -274,8 +274,8 @@ export const adminService = {
     await api.post('/admin/books/duplicates/resolve', { book1Id, book2Id });
   },
 
-  async markCopies(bookIds: string[]): Promise<void> {
-    await api.post('/admin/books/mark-copies', { bookIds });
+  async markCopies(bookIds: string[], masterBookId?: string): Promise<void> {
+    await api.post('/admin/books/mark-copies', { bookIds, masterBookId });
   },
 
   async getCopyGroups(

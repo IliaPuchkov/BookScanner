@@ -366,7 +366,7 @@ export function DuplicatesScreen() {
   const PAGE_SIZE = 50;
 
   const fetchData = useCallback(
-    async (filters: ServerFilters, pageNum = 1, isRefresh = false) => {
+    async (filters: ServerFilters, pageNum = 1, _isRefresh = false) => {
       activeFiltersRef.current = filters;
       const isFirstPage = pageNum === 1;
       try {
@@ -581,13 +581,11 @@ export function DuplicatesScreen() {
   }, []);
 
   const doMarkCopies = useCallback(
-    async (group: DuplicateGroup, keepBookId: string | null) => {
+    async (group: DuplicateGroup, masterBookId: string | null) => {
       setMarkingCopiesKey(group.key);
       try {
-        const ids = keepBookId
-          ? group.books.filter((b) => b.id !== keepBookId).map((b) => b.id)
-          : group.books.map((b) => b.id);
-        await adminService.markCopies(ids);
+        const allIds = group.books.map((b) => b.id);
+        await adminService.markCopies(allIds, masterBookId ?? undefined);
         setGroups((prev) =>
           prev.filter((g) => !(g.key === group.key && g.type === group.type)),
         );

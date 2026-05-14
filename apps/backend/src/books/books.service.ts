@@ -141,7 +141,7 @@ export class BooksService {
     if (status) {
       qb.andWhere('book.status = :status', { status });
       if (status === BookStatus.PENDING_REVIEW) {
-        qb.andWhere('(book.isCopy = false OR book.publishedToOzon IS NOT NULL)');
+        qb.andWhere('(book.isCopy = false OR book.isCopyMaster = true OR book.publishedToOzon IS NOT NULL)');
       }
     }
 
@@ -264,7 +264,7 @@ export class BooksService {
       .andWhere(
         "(book.work_session_id IS NULL OR workSession.status = 'completed')",
       )
-      .andWhere('(book.isCopy = false OR book.publishedToOzon IS NOT NULL)')
+      .andWhere('(book.isCopy = false OR book.isCopyMaster = true OR book.publishedToOzon IS NOT NULL)')
       .getCount();
   }
 
@@ -278,7 +278,7 @@ export class BooksService {
       .addSelect('COUNT(*)', 'count')
       .where('book.status = :status', { status: BookStatus.PENDING_REVIEW })
       .andWhere("(book.work_session_id IS NULL OR workSession.status = 'completed')")
-      .andWhere('(book.isCopy = false OR book.publishedToOzon IS NOT NULL)')
+      .andWhere('(book.isCopy = false OR book.isCopyMaster = true OR book.publishedToOzon IS NOT NULL)')
       .groupBy('box.id')
       .addGroupBy('box.boxNumber')
       .getRawMany();
@@ -326,7 +326,7 @@ export class BooksService {
       .select('book.id')
       .where('book.status = :status', { status: BookStatus.PENDING_REVIEW })
       .andWhere("(book.work_session_id IS NULL OR workSession.status = 'completed')")
-      .andWhere('(book.isCopy = false OR book.publishedToOzon IS NOT NULL)');
+      .andWhere('(book.isCopy = false OR book.isCopyMaster = true OR book.publishedToOzon IS NOT NULL)');
 
     if (boxId) {
       qb.andWhere('book.box_id = :boxId', { boxId });
@@ -354,8 +354,11 @@ export class BooksService {
     return books.map((b) => b.id);
   }
 
-  async markAsCopies(bookIds: string[]): Promise<void> {
-    await this.booksRepository.update({ id: In(bookIds) }, { isCopy: true });
+  async markAsCopies(bookIds: string[], masterBookId?: string): Promise<void> {
+    await this.booksRepository.update({ id: In(bookIds) }, { isCopy: true, isCopyMaster: false });
+    if (masterBookId) {
+      await this.booksRepository.update({ id: masterBookId }, { isCopyMaster: true });
+    }
     this._groupsCache = null;
   }
 
@@ -893,7 +896,7 @@ export class BooksService {
     for (const group of pageGroups) {
       const books = group.ids.map((id) => bookMap.get(id)).filter(Boolean) as Book[];
       if (books.length < 2) continue;
-      if (books.every((b) => b.isCopy)) continue;
+      if (books.some((b) => b.isCopy)) continue;
       const { probability, matchedFields } = calcGroupProbability(books, group.type);
 
       if (group.type === 'isbn') {

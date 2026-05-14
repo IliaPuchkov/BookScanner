@@ -2,7 +2,7 @@
   "expo": {
     "name": "Джолли Бук",
     "slug": "bookscanner",
-    "version": "1.10.0",
+    "version": "1.10.1",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -13,12 +13,12 @@
       "backgroundColor": "#ffffff"
     },
     "ios": {
-      "buildNumber": "13",
+      "buildNumber": "14",
       "supportsTablet": false,
       "bundleIdentifier": "com.bookscanner.app"
     },
     "android": {
-      "versionCode": 13,
+      "versionCode": 14,
       "softwareKeyboardLayoutMode": "pan",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
