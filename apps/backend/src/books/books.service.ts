@@ -702,16 +702,16 @@ export class BooksService {
           // This avoids noise from generic titles like "Избранное" with many different authors.
           this.booksRepository.manager.query<{ normalizedTitle: string; normalizedAuthor: string; ids: unknown }[]>(`
             SELECT
-              LOWER(TRIM(book.title)) AS "normalizedTitle",
-              LOWER(TRIM(book.author)) AS "normalizedAuthor",
+              REPLACE(LOWER(TRIM(book.title)), 'ё', 'е') AS "normalizedTitle",
+              REPLACE(LOWER(TRIM(book.author)), 'ё', 'е') AS "normalizedAuthor",
               array_agg(book.id::text) AS ids
             FROM books book
             LEFT JOIN work_sessions ws ON ws.id = book.work_session_id
-            WHERE LOWER(TRIM(book.title)) NOT ILIKE 'новая книга'
+            WHERE REPLACE(LOWER(TRIM(book.title)), 'ё', 'е') NOT ILIKE 'новая книга'
               AND (book.isbn IS NULL OR book.isbn = '')
               AND book.author IS NOT NULL AND TRIM(book.author) <> ''
               AND (book.work_session_id IS NULL OR ws.status = 'completed')
-            GROUP BY LOWER(TRIM(book.title)), LOWER(TRIM(book.author))
+            GROUP BY REPLACE(LOWER(TRIM(book.title)), 'ё', 'е'), REPLACE(LOWER(TRIM(book.author)), 'ё', 'е')
             HAVING COUNT(*) >= 2
           `),
         ]).then(([isbnRaw, titleRaw]) => {
@@ -937,13 +937,13 @@ export class BooksService {
       `),
       this.booksRepository.manager.query<[{ cnt: string }]>(`
         SELECT COUNT(*) AS cnt FROM (
-          SELECT LOWER(TRIM(b.title)), LOWER(TRIM(b.author)) FROM books b
+          SELECT REPLACE(LOWER(TRIM(b.title)), 'ё', 'е'), REPLACE(LOWER(TRIM(b.author)), 'ё', 'е') FROM books b
           LEFT JOIN work_sessions ws ON ws.id = b.work_session_id
-          WHERE LOWER(TRIM(b.title)) NOT ILIKE 'новая книга'
+          WHERE REPLACE(LOWER(TRIM(b.title)), 'ё', 'е') NOT ILIKE 'новая книга'
             AND (b.isbn IS NULL OR b.isbn = '')
             AND b.author IS NOT NULL AND TRIM(b.author) <> ''
             AND (b.work_session_id IS NULL OR ws.status = 'completed')
-          GROUP BY LOWER(TRIM(b.title)), LOWER(TRIM(b.author)) HAVING COUNT(*) >= 2
+          GROUP BY REPLACE(LOWER(TRIM(b.title)), 'ё', 'е'), REPLACE(LOWER(TRIM(b.author)), 'ё', 'е') HAVING COUNT(*) >= 2
         ) sub
       `),
     ]);
