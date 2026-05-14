@@ -30,6 +30,10 @@ npm-debug.log*
 # Expo
 .expo/
 
+# Android builds
+*.apk
+*.aab
+
 # Uploads (local storage)
 uploads/
 
