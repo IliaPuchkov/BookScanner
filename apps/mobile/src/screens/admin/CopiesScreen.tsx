@@ -70,60 +70,85 @@ function BookMiniCard({
     book.ozonProduct?.status === "published" ||
     book.ozonProduct?.status === "PUBLISHED";
   const isArchived = book.status === BookStatus.ARCHIVED;
-  const storeName = isPublished && book.ozonProduct?.storeId
-    ? stores.find((s) => s.id === book.ozonProduct!.storeId)?.name ?? "На Ozon"
-    : null;
+  const storeName =
+    isPublished && book.ozonProduct?.storeId
+      ? (stores.find((s) => s.id === book.ozonProduct!.storeId)?.name ??
+        "На Ozon")
+      : null;
 
   return (
     <View style={styles.miniCard}>
-      <TouchableOpacity activeOpacity={0.8} onPress={() => onNavigate(book.id)}>
-        {coverPhoto ? (
-          <Image source={{ uri: coverPhoto.fileUrl }} style={styles.miniImage} />
-        ) : (
-          <View style={[styles.miniImage, styles.miniPlaceholder]}>
-            <AppText style={styles.miniPlaceholderText}>Нет фото</AppText>
-          </View>
-        )}
-        <AppText style={styles.miniTitle} numberOfLines={2}>
-          {book.title}
-        </AppText>
-        {book.author ? (
-          <AppText style={styles.miniAuthor} numberOfLines={1}>
-            {book.author}
-          </AppText>
-        ) : null}
-        <AppText style={styles.miniSku}>{book.sku}</AppText>
-        {book.price != null && Number(book.price) > 0 ? (
-          <AppText style={styles.miniPrice}>
-            {Number(book.price).toFixed(0)} ₽
-          </AppText>
-        ) : null}
-        {book.box?.boxNumber ? (
-          <AppText style={styles.miniBox}>Кор. {book.box.boxNumber}</AppText>
-        ) : null}
-        {isPublished ? (
-          <View style={styles.publishedGroup}>
-            <View style={styles.statusBadge}>
-              <AppText style={styles.statusPublishedText}>Опубликована на Ozon</AppText>
+      <View>
+        <TouchableOpacity
+          activeOpacity={0.8}
+          onPress={() => onNavigate(book.id)}
+        >
+          {coverPhoto ? (
+            <Image
+              source={{ uri: coverPhoto.fileUrl }}
+              style={styles.miniImage}
+            />
+          ) : (
+            <View style={[styles.miniImage, styles.miniPlaceholder]}>
+              <AppText style={styles.miniPlaceholderText}>Нет фото</AppText>
             </View>
-            {storeName ? (
-              <View style={[styles.statusBadge, styles.storeBadge]}>
-                <AppText style={styles.storeBadgeText} numberOfLines={1}>
-                  {storeName}
+          )}
+          <AppText style={styles.miniTitle} numberOfLines={2}>
+            {book.title}
+          </AppText>
+          {book.author ? (
+            <AppText style={styles.miniAuthor} numberOfLines={1}>
+              {book.author}
+            </AppText>
+          ) : null}
+          <AppText style={styles.miniSku}>{book.sku}</AppText>
+          {book.price != null && Number(book.price) > 0 ? (
+            <AppText style={styles.miniPrice}>
+              {Number(book.price).toFixed(0)} ₽
+            </AppText>
+          ) : null}
+          {book.box?.boxNumber ? (
+            <AppText style={styles.miniBox}>Кор. {book.box.boxNumber}</AppText>
+          ) : null}
+          {isPublished ? (
+            <View style={styles.publishedGroup}>
+              <View style={styles.statusBadge}>
+                <AppText style={styles.statusPublishedText}>
+                  Опубликована на Ozon
                 </AppText>
               </View>
-            ) : null}
-          </View>
-        ) : isArchived ? (
-          <View style={[styles.statusBadge, styles.statusArchived, styles.statusBadgeMt]}>
-            <AppText style={styles.statusArchivedText}>В архиве</AppText>
-          </View>
-        ) : (
-          <View style={[styles.statusBadge, styles.statusPending, styles.statusBadgeMt]}>
-            <AppText style={styles.statusPendingText}>Не загружена</AppText>
-          </View>
-        )}
-      </TouchableOpacity>
+              {storeName ? (
+                <View style={[styles.statusBadge, styles.storeBadge]}>
+                  <AppText style={styles.storeBadgeText} numberOfLines={1}>
+                    {storeName}
+                  </AppText>
+                </View>
+              ) : null}
+            </View>
+          ) : isArchived ? (
+            <View
+              style={[
+                styles.statusBadge,
+                styles.statusArchived,
+                styles.statusBadgeMt,
+              ]}
+            >
+              <AppText style={styles.statusArchivedText}>В архиве</AppText>
+            </View>
+          ) : (
+            <View
+              style={[
+                styles.statusBadge,
+                styles.statusPending,
+                styles.statusBadgeMt,
+              ]}
+            >
+              <AppText style={styles.statusPendingText}>Не загружена</AppText>
+            </View>
+          )}
+        </TouchableOpacity>
+      </View>
+
       {!isPublished && !isArchived && (
         <TouchableOpacity
           style={[styles.deleteBtn, deleting && styles.deleteBtnDisabled]}
@@ -227,7 +252,9 @@ function CopyGroupCard({
                   onUnmark(group);
                 }}
               >
-                <AppText style={styles.menuItemText}>Вернуть на проверку</AppText>
+                <AppText style={styles.menuItemText}>
+                  Вернуть на проверку
+                </AppText>
               </TouchableOpacity>
             </View>
           </View>
@@ -263,7 +290,10 @@ export function CopiesScreen() {
 
   const fetchData = useCallback(
     async (
-      filters: { status?: "published" | "not_published" | "archived"; search?: string },
+      filters: {
+        status?: "published" | "not_published" | "archived";
+        search?: string;
+      },
       pageNum = 1,
       isRefresh = false,
     ) => {
@@ -271,7 +301,9 @@ export function CopiesScreen() {
       try {
         const storesPromise =
           pageNum === 1
-            ? adminService.getOzonStores().catch(() => ({ stores: [] as OzonStore[] }))
+            ? adminService
+                .getOzonStores()
+                .catch(() => ({ stores: [] as OzonStore[] }))
             : Promise.resolve(null);
         const [res, storesRes] = await Promise.all([
           adminService.getCopyGroups(pageNum, PAGE_SIZE, filters),
@@ -386,7 +418,9 @@ export function CopiesScreen() {
             try {
               const bookIds = group.books.map((b) => b.id);
               await adminService.unmarkCopies(bookIds);
-              setGroups((prev) => prev.filter((g) => `${g.type}:${g.key}` !== groupKey));
+              setGroups((prev) =>
+                prev.filter((g) => `${g.type}:${g.key}` !== groupKey),
+              );
               setTotal((t) => Math.max(0, t - 1));
             } catch {
               Alert.alert("Ошибка", "Не удалось вернуть книги на проверку");
@@ -452,7 +486,10 @@ export function CopiesScreen() {
             <CopyGroupCard
               group={item}
               onNavigate={(id) =>
-                navigation.navigate("ProductDetail", { bookId: id, editable: true })
+                navigation.navigate("ProductDetail", {
+                  bookId: id,
+                  editable: true,
+                })
               }
               onDelete={handleDelete}
               onUnmark={handleUnmarkGroup}
@@ -586,6 +623,7 @@ const styles = StyleSheet.create({
 
   // Mini card
   miniCard: {
+    justifyContent: "space-between",
     width: 145,
     backgroundColor: "#FAFAFA",
     borderRadius: 8,
@@ -602,13 +640,29 @@ const styles = StyleSheet.create({
   },
   miniPlaceholder: { alignItems: "center", justifyContent: "center" },
   miniPlaceholderText: { fontSize: 10, color: "#ccc" },
-  miniTitle: { fontSize: 12, fontWeight: "600", color: "#222", marginBottom: 2 },
+  miniTitle: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#222",
+    marginBottom: 2,
+  },
   miniAuthor: { fontSize: 11, color: "#888", marginBottom: 2 },
   miniSku: { fontSize: 10, color: "#bbb", marginBottom: 3 },
-  miniPrice: { fontSize: 13, fontWeight: "700", color: "#1976D2", marginBottom: 3 },
+  miniPrice: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#1976D2",
+    marginBottom: 3,
+  },
   miniBox: { fontSize: 10, color: "#999", marginBottom: 4 },
   publishedGroup: { marginTop: 4, gap: 3 },
-  statusBadge: { borderRadius: 4, paddingHorizontal: 6, paddingVertical: 2, alignSelf: "flex-start", backgroundColor: "#E8F5E9" },
+  statusBadge: {
+    borderRadius: 4,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    alignSelf: "flex-start",
+    backgroundColor: "#E8F5E9",
+  },
   statusBadgeMt: { marginTop: 4 },
   storeBadge: { backgroundColor: "#E3F2FD" },
   statusPending: { backgroundColor: "#FFF3E0" },
@@ -634,8 +688,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   kebabIcon: {
-    fontSize: 18,
-    color: "#aaa",
+    fontSize: 25,
+    fontWeight: "600",
+    color: "#000",
     lineHeight: 22,
   },
   menuOverlay: {
@@ -645,9 +700,11 @@ const styles = StyleSheet.create({
     position: "absolute",
     backgroundColor: "#fff",
     borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#ddd",
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
+    shadowOpacity: 0.6,
     shadowRadius: 6,
     elevation: 8,
     minWidth: 180,

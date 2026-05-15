@@ -865,15 +865,14 @@ export class BooksService {
     const isbnDuplicates: GroupResult[] = [];
     const possibleDuplicates: GroupResult[] = [];
 
-    // Latin→Cyrillic homoglyph normalization: OCR/operators often mix them visually
+    // Normalization consistent with SQL GROUP BY: lowercase + trim + ё→е + homoglyphs.
+    // Intentionally does NOT strip punctuation to avoid false-positive title collisions.
     const HOMO: Record<string, string> = { a: 'а', c: 'с', e: 'е', o: 'о', p: 'р', x: 'х', y: 'у' };
     const norm = (s?: string | null) =>
       (s ?? '')
         .toLowerCase()
         .replace(/ё/g, 'е')
         .replace(/[acoepxy]/g, (ch) => HOMO[ch] ?? ch)
-        .replace(/[.,\-–—:;!?«»"'`()\[\]\/\\]/g, ' ')
-        .replace(/[  ​‌­﻿]/g, ' ')
         .replace(/\s+/g, ' ')
         .trim();
 
@@ -884,7 +883,10 @@ export class BooksService {
         for (let j = i + 1; j < books.length; j++) {
           const a = books[i];
           const b = books[j];
-          const isbnMatch = groupType === 'isbn';
+          // Re-check actual isbn values — do NOT trust groupType alone.
+          // The 2-min group cache can serve stale 'isbn' groups for books whose isbn
+          // was cleared after cache population, producing isbnMatch=true with isbn=null books.
+          const isbnMatch = !!(a.isbn?.trim() && b.isbn?.trim() && a.isbn.trim() === b.isbn.trim());
           const na = norm(a?.title); const nb = norm(b?.title);
           const aa = norm(a?.author); const ab = norm(b?.author);
           const titleMatch  = !!(na && nb && na === nb);

@@ -303,8 +303,10 @@ PENDING_REVIEW → (admin approves) → PENDING_PUBLICATION → (ozon publish) �
 The admin has two dedicated screens for managing books that are potential or confirmed copies:
 
 **Duplicates screen** (`GET /admin/books/duplicates`) — "На проверке: Копии":
-- Shows groups of books suspected to be duplicates (same ISBN, or same normalized title from completed sessions)
-- Each group has a probability level (High/Medium/Low based on matched fields)
+- Shows groups of books suspected to be duplicates (same ISBN, or same normalized title+author from completed sessions)
+- Each group has a probability level (High/Medium/Low based on matched fields): High=ISBN+title+author, Medium=any 2, Low=1 (filtered out, never shown)
+- `calcGroupProbability` in `books.service.ts` re-checks actual `isbn` values from the fetched Book entities — it does NOT trust the cached group `type` field. This prevents stale 'isbn' groups (2-min cache TTL) from showing `isbn=null` books as ISBN matches.
+- Title normalization in `calcGroupProbability`: lowercase + ё→е + Latin/Cyrillic homoglyph substitution + whitespace collapse. Intentionally does NOT strip punctuation (stripping caused false-positive title collisions).
 - Admin can: mark all as copies (`POST /books/mark-copies`), mark as not copies (adds to `duplicate_resolutions`), or delete individual unpublished books
 - Published books show "Опубликована на Ozon"; archived books show "В архиве" (no delete)
 - `duplicate_resolutions` table suppresses resolved (book1Id, book2Id) pairs
