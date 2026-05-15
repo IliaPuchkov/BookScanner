@@ -99,7 +99,7 @@ export class OzonService {
       );
     }
 
-    if (book.isCopy && !book.publishedToOzon) {
+    if (book.isCopy && !book.isCopyMaster && !book.publishedToOzon) {
       throw new BadRequestException('Книга помечена как копия и не может быть опубликована на Ozon.');
     }
 
@@ -503,7 +503,7 @@ export class OzonService {
     const failed: { id: string; title?: string; error: string }[] = [];
 
     for (const book of books) {
-      if (book.isCopy && !book.publishedToOzon) {
+      if (book.isCopy && !book.isCopyMaster && !book.publishedToOzon) {
         failed.push({ id: book.id, title: book.title, error: 'Копия — публикация на Ozon заблокирована' });
         continue;
       }
