@@ -27,6 +27,15 @@ import {
 } from "@bookscanner/shared";
 import { Book } from "../books/entities/book.entity";
 
+function normalizeCase(value: string | undefined | null): string | undefined {
+  if (!value) return value ?? undefined;
+  const letters = value.match(/[\p{L}]/gu) ?? [];
+  if (letters.length === 0) return value;
+  const upperCount = letters.filter((c) => c === c.toUpperCase()).length;
+  if (upperCount / letters.length < 0.8) return value;
+  return value.charAt(0).toUpperCase() + value.slice(1).toLowerCase();
+}
+
 function normalizePaperType(
   value: string | undefined | null,
 ): PaperType | undefined {
@@ -332,8 +341,8 @@ export class VisionService {
     };
 
     return {
-      title: extractedData.title,
-      author: extractedData.author,
+      title: normalizeCase(extractedData.title),
+      author: normalizeCase(extractedData.author),
       isbn: extractedData.isbn,
       publisher: extractedData.publisher,
       yearPublished: parseIntSafe(extractedData.yearPublished),
