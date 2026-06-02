@@ -109,7 +109,7 @@ export class GeminiVisionExtractor {
     }));
 
     const requestBody: ChatCompletionCreateParamsNonStreaming = {
-      model: "google/gemini-2.0-flash-lite-001",
+      model: "google/gemini-2.5-flash-lite",
       max_tokens: 1500,
       response_format: { type: "json_object" as const },
       messages: [
@@ -120,13 +120,18 @@ export class GeminiVisionExtractor {
       ],
     };
 
-    const response = await this.client.chat.completions.create(requestBody).catch((err: any) => {
-      console.error("[GeminiVisionExtractor] HTTP error from Polza.AI");
-      console.error("[GeminiVisionExtractor] HTTP status:", err?.status);
-      console.error("[GeminiVisionExtractor] Error message:", err?.message);
-      console.error("[GeminiVisionExtractor] Error body:", JSON.stringify(err?.error ?? err?.response?.data ?? null));
-      throw err;
-    });
+    const response = await this.client.chat.completions
+      .create(requestBody)
+      .catch((err: any) => {
+        console.error("[GeminiVisionExtractor] HTTP error from Polza.AI");
+        console.error("[GeminiVisionExtractor] HTTP status:", err?.status);
+        console.error("[GeminiVisionExtractor] Error message:", err?.message);
+        console.error(
+          "[GeminiVisionExtractor] Error body:",
+          JSON.stringify(err?.error ?? err?.response?.data ?? null),
+        );
+        throw err;
+      });
 
     const choice = response.choices[0];
     const raw = choice?.message?.content || "";
@@ -136,11 +141,26 @@ export class GeminiVisionExtractor {
       .trim();
     if (!cleaned) {
       console.error("[GeminiVisionExtractor] Empty response from AI");
-      console.error("[GeminiVisionExtractor] finish_reason:", choice?.finish_reason);
-      console.error("[GeminiVisionExtractor] usage:", JSON.stringify(response.usage));
-      console.error("[GeminiVisionExtractor] message.refusal:", choice?.message?.refusal);
-      console.error("[GeminiVisionExtractor] raw content repr:", JSON.stringify(raw));
-      console.error("[GeminiVisionExtractor] image_urls:", images.map(i => i.url));
+      console.error(
+        "[GeminiVisionExtractor] finish_reason:",
+        choice?.finish_reason,
+      );
+      console.error(
+        "[GeminiVisionExtractor] usage:",
+        JSON.stringify(response.usage),
+      );
+      console.error(
+        "[GeminiVisionExtractor] message.refusal:",
+        choice?.message?.refusal,
+      );
+      console.error(
+        "[GeminiVisionExtractor] raw content repr:",
+        JSON.stringify(raw),
+      );
+      console.error(
+        "[GeminiVisionExtractor] image_urls:",
+        images.map((i) => i.url),
+      );
       throw new Error(
         "AI returned empty response. Possibly image URL expired or inaccessible.",
       );
@@ -149,8 +169,14 @@ export class GeminiVisionExtractor {
       return JSON.parse(cleaned) as IExtractionResult;
     } catch (err) {
       console.error("[GeminiVisionExtractor] JSON parse failed");
-      console.error("[GeminiVisionExtractor] finish_reason:", choice?.finish_reason);
-      console.error("[GeminiVisionExtractor] usage:", JSON.stringify(response.usage));
+      console.error(
+        "[GeminiVisionExtractor] finish_reason:",
+        choice?.finish_reason,
+      );
+      console.error(
+        "[GeminiVisionExtractor] usage:",
+        JSON.stringify(response.usage),
+      );
       console.error("[GeminiVisionExtractor] raw response length:", raw.length);
       console.error("[GeminiVisionExtractor] raw response:\n", raw);
       throw err;
