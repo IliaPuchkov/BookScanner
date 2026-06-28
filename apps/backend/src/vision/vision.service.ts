@@ -200,10 +200,6 @@ export class VisionService {
       );
 
       const calculatedPrice = await this.calculatePrice(extractedData.price ?? undefined);
-      const updatePayload = this.buildUpdatePayload(extractedData, calculatedPrice);
-
-      this.logger.log(`[${bookId}] calling updateFromExtraction (preview)`);
-      await this.booksService.updateFromExtraction(bookId, updatePayload);
 
       ocrResult.photo01Extraction = (availablePhotos[0] ? result : null) as unknown as Record<string, unknown>;
       ocrResult.photo02Extraction = null as unknown as Record<string, unknown>;
@@ -241,14 +237,20 @@ export class VisionService {
     const extractor = new GeminiVisionExtractor(apiKey);
     const availablePhotos = photos
       .slice(0, 4)
-      .filter((p) => p && p.fileKey);
+      .filter((p) => p && (p.fileKey || p.fileUrl));
     const imageUrls = await Promise.all(
-      availablePhotos.map((p) => this.storage.getSignedUrl(p.fileKey, 3600)),
+      availablePhotos.map((p) =>
+        p.fileKey
+          ? this.storage.getSignedUrl(p.fileKey, 3600)
+          : Promise.resolve(p.fileUrl),
+      ),
     );
 
     this.logger.log(`[${bookId}] sending ${imageUrls.length} image(s) to AI`);
     if (imageUrls.length === 0) {
-      this.logger.warn(`[${bookId}] no images available — AI will get no visual input`);
+      throw new Error(
+        `No images available for book ${bookId}: ${photos.length} photo(s) in DB but none have a valid fileKey`,
+      );
     }
 
     return { extractor, imageUrls, availablePhotos, prompt };
