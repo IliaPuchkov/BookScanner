@@ -135,7 +135,7 @@ BookScanner/
 
 | Table | Key Columns |
 |-------|-------------|
-| `users` | id (UUID), fullName, phone (unique), email (unique), passwordHash, role (OPERATOR/ADMIN), isApproved, refreshToken |
+| `users` | id (UUID), fullName, phone (unique), email (unique), passwordHash, role (OPERATOR/ADMIN), isApproved, refreshToken, failedLoginAttempts (int, default 0), lockedUntil (timestamp, nullable) |
 | `boxes` | id (UUID), boxNumber, description, createdById (FK users) — unique (boxNumber, createdById) |
 | `books` | id (UUID), sku (unique), title, author, isbn, publisher, yearPublished, dimensions (JSONB), weightGross, weightNet, paperType, coverType, pageCount, language, price, annotation, hashtags[], condition, bookType, direction, boxId, createdById, workSessionId, status (PENDING_REVIEW/PENDING_PUBLICATION/PUBLISHED/PUBLICATION_FAILED/ARCHIVED), publishedToOzon, isCopy (boolean, default false) |
 | `book_photos` | id (UUID), bookId, fileUrl, fileKey, sortOrder, originalFilename, mimeType, fileSizeBytes |
@@ -152,6 +152,7 @@ Located in `apps/backend/src/database/migrations/`:
 - `1710700000000-AddBookStatus.ts`
 - `1710800000000-BoxNumberUniquePerUser.ts`
 - `1747100000000-AddBookIsCopy.ts` — adds `"isCopy"` boolean column (camelCase, default false)
+- `1747300000000-AddUserLoginLockout.ts` — adds `"failedLoginAttempts"` (int, default 0) and `"lockedUntil"` (timestamp, nullable) to `users` for brute-force lockout
 
 ---
 
@@ -338,6 +339,13 @@ The admin has two dedicated screens for managing books that are potential or con
 - `@CurrentUser()` decorator extracts user from JWT payload
 - Mobile: Axios interceptor auto-refreshes token on 401, retries original request
 
+#### Login brute-force protection
+
+- **Rate limit**: `@Throttle` 5 req/60s on `POST /api/auth/register` and `POST /api/auth/login` (`ThrottlerModule` global default is 30/60s). `main.ts` sets `app.set('trust proxy', 1)` so the limiter keys on the real client IP from `X-Forwarded-For` (nginx sets it to `$remote_addr`, replace-not-append). Without `trust proxy` every request looks like it comes from the nginx container and the login limit collapses to one global bucket.
+- **Account lockout**: `AuthService.validateUser` counts consecutive failures via `UsersService.recordFailedLogin`. After `MAX_FAILED_LOGIN_ATTEMPTS` (8, in `@bookscanner/shared` auth.constants) the account is locked for `LOGIN_LOCK_MS` (15 min); every further failure re-arms the window. A correct password during the lock returns `403` "заблокирован ... повторите через N мин" (safe to reveal — caller proved they know the password). `resetFailedLogin` clears the counter on any successful login.
+- **Constant-time**: `validateUser` always runs one `bcrypt.compare` (against a startup-generated `DUMMY_PASSWORD_HASH` when the account is not found), so a missing account can't be distinguished from a wrong password by response time.
+- **Server-side (fail2ban)**: the `bookscanner-login` jail on the prod host bans IPs with 10× `401/403/429` on `POST /api/auth/login` in 10 min (reads nginx's Docker JSON log); repeat offenders escalate via the `recidive` jail to a permanent ban. `maxretry` (10) sits above the in-app lockout (8) so honest mistakes hit the friendly app lock first.
+
 ### Mobile Navigation
 
 ```
@@ -429,3 +437,4 @@ Build order in Dockerfile: `shared` → `ocr-processor` → `backend`
 7. **TypeORM column naming — mixed**: Most DB columns are camelCase (e.g. `"isCopy"`, `"publishedToOzon"`, `"yearPublished"`), but several older FK columns are snake_case: `work_session_id`, `box_id`, `created_by`. In QueryBuilder `.andWhere()` always use the TypeORM **entity property name** (e.g. `book.workSession` or `book.work_session_id`). In raw `manager.query()` SQL, use the **actual DB column name** — check `\d books` if unsure.
 8. **Deployment uses rsync, not git**: the production server at `31.184.197.226` has no `.git` directory. Code is pushed via `bash deploy.sh 31.184.197.226 jollybook.duckdns.org`. The script rsyncs source, rebuilds the backend Docker image, restarts the container, and runs migrations.
 9. **`useFocusEffect` always passes `isRefresh=true`**: when fetching stores or other secondary data in an admin screen, guard on `pageNum === 1` only (not `&& !isRefresh`), otherwise the data never loads on navigation focus.
+10. **Prod host hardening** (`31.184.197.226`, not in code): SSH is key-only (`PasswordAuthentication no`, root `prohibit-password`); fail2ban runs three jails — `sshd`, `bookscanner-login` (nginx auth-endpoint abuse), and `recidive` (repeat offenders → permanent ban). TLS is Let's Encrypt via the `certbot` compose service (`restart: unless-stopped`); nginx access logs reach fail2ban through the Docker `json-file` driver.

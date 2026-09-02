@@ -12,6 +12,12 @@ import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
 
+  // Behind the nginx reverse proxy — trust the first hop so req.ip and
+  // req.ips reflect the real client IP (X-Forwarded-For), which the rate
+  // limiter keys on. Without this every request looks like it comes from
+  // the nginx container and the login throttle becomes a single global bucket.
+  app.set('trust proxy', 1);
+
   const configService = app.get(ConfigService);
 
   const isProd = configService.get<string>('NODE_ENV') === 'production';

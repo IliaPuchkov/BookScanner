@@ -11,6 +11,16 @@ import { RegisterDto } from './dto/register.dto';
 import { User } from '../users/entities/user.entity';
 import { BCRYPT_ROUNDS } from '@bookscanner/shared';
 
+/**
+ * A valid bcrypt hash of a random string, generated once at startup. Used to
+ * run a real bcrypt.compare when the supplied login has no matching account,
+ * so a missing user cannot be distinguished from a wrong password by timing.
+ */
+const DUMMY_PASSWORD_HASH = bcrypt.hashSync(
+  'no-such-user-placeholder',
+  BCRYPT_ROUNDS,
+);
+
 @Injectable()
 export class AuthService {
   constructor(
@@ -41,11 +51,34 @@ export class AuthService {
 
   async validateUser(phoneOrEmail: string, password: string): Promise<User | null> {
     const user = await this.usersService.findByPhoneOrEmail(phoneOrEmail);
-    if (!user) return null;
 
-    const isPasswordValid = await bcrypt.compare(password, user.passwordHash);
-    if (!isPasswordValid) return null;
+    // Always run one bcrypt comparison so a non-existent account does not
+    // respond faster than a real account with a wrong password (enumeration).
+    const isPasswordValid = await bcrypt.compare(
+      password,
+      user?.passwordHash || DUMMY_PASSWORD_HASH,
+    );
 
+    if (!user || !user.passwordHash) return null;
+
+    if (!isPasswordValid) {
+      await this.usersService.recordFailedLogin(user);
+      return null;
+    }
+
+    // Password is correct beyond this point. If the account is locked because
+    // of earlier failed attempts, reveal it (the caller proved they know the
+    // password) but do not let them in until the window passes.
+    if (user.lockedUntil && user.lockedUntil.getTime() > Date.now()) {
+      const minutes = Math.ceil(
+        (user.lockedUntil.getTime() - Date.now()) / 60_000,
+      );
+      throw new ForbiddenException(
+        `Аккаунт временно заблокирован из-за неудачных попыток входа. Повторите через ${minutes} мин.`,
+      );
+    }
+
+    await this.usersService.resetFailedLogin(user);
     return user;
   }
 

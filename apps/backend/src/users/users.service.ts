@@ -10,7 +10,12 @@ import { User } from './entities/user.entity';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { PaginationDto } from '../common/dto/pagination.dto';
-import { BCRYPT_ROUNDS, UserRole } from '@bookscanner/shared';
+import {
+  BCRYPT_ROUNDS,
+  UserRole,
+  MAX_FAILED_LOGIN_ATTEMPTS,
+  LOGIN_LOCK_MS,
+} from '@bookscanner/shared';
 
 @Injectable()
 export class UsersService {
@@ -104,6 +109,29 @@ export class UsersService {
 
   async giveConsent(id: string): Promise<void> {
     await this.usersRepository.update(id, { consentGivenAt: new Date() });
+  }
+
+  /**
+   * Record a failed login for the user. Once the consecutive-failure count
+   * reaches MAX_FAILED_LOGIN_ATTEMPTS the account is locked for LOGIN_LOCK_MS;
+   * every further failure re-arms the lock window.
+   */
+  async recordFailedLogin(user: User): Promise<void> {
+    const attempts = (user.failedLoginAttempts ?? 0) + 1;
+    const patch: Partial<User> = { failedLoginAttempts: attempts };
+    if (attempts >= MAX_FAILED_LOGIN_ATTEMPTS) {
+      patch.lockedUntil = new Date(Date.now() + LOGIN_LOCK_MS);
+    }
+    await this.usersRepository.update(user.id, patch);
+  }
+
+  /** Clear the failed-login counter and any lock (called on successful login). */
+  async resetFailedLogin(user: User): Promise<void> {
+    if (!user.failedLoginAttempts && !user.lockedUntil) return;
+    await this.usersRepository.update(user.id, {
+      failedLoginAttempts: 0,
+      lockedUntil: null,
+    });
   }
 
   async anonymizeUser(id: string): Promise<void> {

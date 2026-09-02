@@ -36,6 +36,14 @@ export class User {
   @Exclude()
   refreshToken: string;
 
+  @Column({ type: 'int', default: 0 })
+  @Exclude()
+  failedLoginAttempts: number;
+
+  @Column({ type: 'timestamp', nullable: true })
+  @Exclude()
+  lockedUntil: Date | null;
+
   @Column({ type: 'timestamp', nullable: true })
   consentGivenAt: Date | null;
 
