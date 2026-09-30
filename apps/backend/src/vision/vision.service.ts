@@ -16,6 +16,7 @@ import {
 import {
   GeminiVisionExtractor,
   applyDefaults,
+  isPlausibleWeight,
 } from "@bookscanner/ocr-processor";
 import {
   PaperType,
@@ -320,6 +321,11 @@ export class VisionService {
       }
     }
 
+    if (result!.weightGross != null && !isPlausibleWeight(result!.weightGross)) {
+      this.logger.warn(
+        `[${bookId}] implausible AI weightGross=${result!.weightGross}g — replacing with default`,
+      );
+    }
     const extractedData = applyDefaults(result!);
     this.logger.log(
       `[${bookId}] after applyDefaults: ` +

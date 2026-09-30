@@ -2,6 +2,8 @@ import { IExtractionResult } from '@bookscanner/shared';
 import {
   DEFAULT_HEIGHT_MM,
   DEFAULT_WEIGHT_G,
+  MIN_PLAUSIBLE_WEIGHT_G,
+  MAX_PLAUSIBLE_WEIGHT_G,
   DEFAULT_PAPER_TYPE,
   DEFAULT_COVER_TYPE,
   DEFAULT_LANGUAGE,
@@ -51,13 +53,26 @@ export function mergeExtractionResults(
 }
 
 /**
+ * True if the weight is present and within the plausible range for a book.
+ */
+export function isPlausibleWeight(weight: number | null | undefined): boolean {
+  return (
+    weight != null &&
+    weight >= MIN_PLAUSIBLE_WEIGHT_G &&
+    weight <= MAX_PLAUSIBLE_WEIGHT_G
+  );
+}
+
+/**
  * Apply default values for missing fields.
+ * Weight is usually estimated by the AI rather than read from the book,
+ * so implausible values are replaced with the default too.
  */
 export function applyDefaults(data: IExtractionResult): IExtractionResult {
   return {
     ...data,
     height: data.height || DEFAULT_HEIGHT_MM,
-    weightGross: data.weightGross || DEFAULT_WEIGHT_G,
+    weightGross: isPlausibleWeight(data.weightGross) ? data.weightGross : DEFAULT_WEIGHT_G,
     paperType: data.paperType || DEFAULT_PAPER_TYPE,
     coverType: data.coverType || DEFAULT_COVER_TYPE,
     language: data.language || DEFAULT_LANGUAGE,

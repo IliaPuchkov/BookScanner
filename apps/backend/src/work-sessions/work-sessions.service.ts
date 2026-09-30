@@ -32,7 +32,9 @@ export class WorkSessionsService {
   async getActiveSession(userId: string): Promise<WorkSession | null> {
     return this.sessionRepository.findOne({
       where: { userId, status: 'active' },
-      relations: ['books', 'books.photos', 'books.box'],
+      // No book relations: the client only needs the session id and loads
+      // books via the paginated /books endpoint. Embedding them made this
+      // response grow past 1 MB for long sessions.
       order: { startedAt: 'DESC' },
     });
   }

@@ -192,7 +192,7 @@ export interface WorkSession {
   id: string;
   userId: string;
   status: 'active' | 'completed';
-  books: Book[];
+  books?: Book[];
   startedAt: string;
   endedAt?: string;
 }

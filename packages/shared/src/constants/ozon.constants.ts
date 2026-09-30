@@ -42,6 +42,9 @@ export const ANNOTATION_PREFIX =
 
 export const DEFAULT_HEIGHT_MM = 35;
 export const DEFAULT_WEIGHT_G = 450;
+/** AI-estimated weights outside this range are treated as hallucinations. */
+export const MIN_PLAUSIBLE_WEIGHT_G = 50;
+export const MAX_PLAUSIBLE_WEIGHT_G = 2000;
 export const DEFAULT_PAPER_TYPE = "Офсетная";
 export const DEFAULT_COVER_TYPE = "Твердый переплет";
 export const DEFAULT_LANGUAGE = "Русский";
