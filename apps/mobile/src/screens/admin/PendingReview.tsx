@@ -5,11 +5,16 @@ import React, {
   useLayoutEffect,
   useEffect,
   useRef,
+  useContext,
 } from "react";
 import {
   View,
   FlatList,
+  Animated,
   type ViewToken,
+  type LayoutChangeEvent,
+  type StyleProp,
+  type ViewStyle,
   StyleSheet,
   RefreshControl,
   TouchableOpacity,
@@ -221,6 +226,47 @@ type Row = Book | HeaderRow;
 const isHeaderRow = (row: Row): row is HeaderRow =>
   (row as HeaderRow).kind === "header";
 const rowKey = (row: Row) => (isHeaderRow(row) ? row.key : row.id);
+
+// Header rows report their content-y (null when unmounted) so the floating
+// box bar can be pushed away by the next header and fade in at its own one.
+type ReportHeaderY = (key: string, y: number | null) => void;
+const HeaderLayoutContext = React.createContext<ReportHeaderY>(() => {});
+
+type ListCellProps = {
+  cellKey: string;
+  index: number;
+  item: Row;
+  children: React.ReactNode;
+  style?: StyleProp<ViewStyle>;
+  onLayout?: (e: LayoutChangeEvent) => void;
+  onFocusCapture?: (e: any) => void;
+};
+
+// Cell wrapper (FlatList CellRendererComponent): its onLayout y is in content
+// coordinates, unlike a layout measured inside the row.
+function ListCell({
+  cellKey: _cellKey,
+  index: _index,
+  item,
+  onLayout,
+  ...rest
+}: ListCellProps) {
+  const report = useContext(HeaderLayoutContext);
+  const headerKey = isHeaderRow(item) ? item.key : null;
+  useEffect(
+    () => (headerKey ? () => report(headerKey, null) : undefined),
+    [headerKey, report],
+  );
+  return (
+    <View
+      {...rest}
+      onLayout={(e) => {
+        if (headerKey) report(headerKey, e.nativeEvent.layout.y);
+        onLayout?.(e);
+      }}
+    />
+  );
+}
 
 export function PendingReviewScreen() {
   const navigation = useNavigation<Nav>();
@@ -1123,10 +1169,13 @@ export function PendingReviewScreen() {
     return out;
   }, [sections]);
 
-  // Box shown in the fixed bar above the list. Native sticky headers jitter
-  // between two positions on Android + New Architecture (RN keeps a debounced
-  // JS copy of the header's native translateY that lags behind when the JS
-  // thread is busy), so the bar sits outside the scroll content instead.
+  // Box shown in a floating bar above the list, acting as a sticky header.
+  // Native sticky headers jitter between two positions on Android + New
+  // Architecture (RN keeps a debounced JS copy of the header's native
+  // translateY that lags behind when the JS thread is busy), so the bar sits
+  // outside the scroll content. Its push-away and fade-in are interpolated
+  // from the native scroll offset; JS only picks which box it shows, so a JS
+  // stall at a box boundary at worst delays the bar, never misplaces it.
   const [currentBoxKey, setCurrentBoxKey] = useState<string | null>(null);
   const onViewableItemsChanged = useRef(
     ({ viewableItems }: { viewableItems: ViewToken<Row>[] }) => {
@@ -1135,15 +1184,81 @@ export function PendingReviewScreen() {
         if (v.index != null && (top?.index == null || v.index < top.index))
           top = v;
       }
-      // Hide the bar while the box's own header row is at the top.
-      if (!top || isHeaderRow(top.item)) setCurrentBoxKey(null);
+      if (!top) setCurrentBoxKey(null);
+      else if (isHeaderRow(top.item)) setCurrentBoxKey(top.item.section.title);
       else setCurrentBoxKey(boxKeyOf(top.item));
     },
   ).current;
-  const currentSection = useMemo(
-    () => sections.find((s) => s.title === currentBoxKey),
-    [sections, currentBoxKey],
+  const currentIndex = sections.findIndex((s) => s.title === currentBoxKey);
+  const currentSection = currentIndex >= 0 ? sections[currentIndex] : undefined;
+  const nextSection = currentIndex >= 0 ? sections[currentIndex + 1] : undefined;
+
+  const [headerYs, setHeaderYs] = useState<Record<string, number>>({});
+  const reportHeaderY = useCallback<ReportHeaderY>((key, y) => {
+    setHeaderYs((prev) => {
+      if (y == null) {
+        if (!(key in prev)) return prev;
+        const next = { ...prev };
+        delete next[key];
+        return next;
+      }
+      return prev[key] === y ? prev : { ...prev, [key]: y };
+    });
+  }, []);
+
+  const scrollY = useRef(new Animated.Value(0)).current;
+  const onScroll = useMemo(
+    () =>
+      Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], {
+        useNativeDriver: true,
+      }),
+    [scrollY],
   );
+  const [barHeight, setBarHeight] = useState(0);
+  // Fade on box switch: covers the case where JS switched late and the box's
+  // header row has already scrolled past (otherwise the bar would pop in).
+  const switchFade = useRef(new Animated.Value(1)).current;
+  useEffect(() => {
+    switchFade.setValue(0);
+    Animated.timing(switchFade, {
+      toValue: 1,
+      duration: 150,
+      useNativeDriver: true,
+    }).start();
+  }, [currentBoxKey, switchFade]);
+
+  const currentHeaderY = currentSection
+    ? headerYs[`header:${currentSection.title}`]
+    : undefined;
+  const nextHeaderY = nextSection
+    ? headerYs[`header:${nextSection.title}`]
+    : undefined;
+  const barStyle = useMemo(() => {
+    // Pushed up by the next box's header as it reaches the bar's bottom edge.
+    const translateY =
+      nextHeaderY != null && barHeight > 0
+        ? scrollY.interpolate({
+            inputRange: [nextHeaderY - barHeight, nextHeaderY],
+            outputRange: [0, -barHeight],
+            extrapolate: "clamp",
+          })
+        : 0;
+    // Visible once the box's own header row reaches the top, where it looks
+    // identical — so the header appears to stick. Unknown (unmounted, far
+    // above) means we're deep in the box: show it.
+    const reveal =
+      currentHeaderY != null
+        ? scrollY.interpolate({
+            inputRange: [currentHeaderY - 1, currentHeaderY],
+            outputRange: [0, 1],
+            extrapolate: "clamp",
+          })
+        : 1;
+    return {
+      opacity: Animated.multiply(reveal, switchFade),
+      transform: [{ translateY }],
+    };
+  }, [scrollY, switchFade, nextHeaderY, currentHeaderY, barHeight]);
 
   const renderSectionHeader = useCallback(
     (section: BookSection) => {
@@ -1180,12 +1295,15 @@ export function PendingReviewScreen() {
 
   const list = useMemo(
     () => (
-      <FlatList<Row>
+      <Animated.FlatList
         style={styles.container}
         data={rows}
         keyExtractor={rowKey}
         renderItem={renderRow}
+        CellRendererComponent={ListCell}
         onViewableItemsChanged={onViewableItemsChanged}
+        onScroll={onScroll}
+        scrollEventThrottle={16}
         contentContainerStyle={styles.list}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
@@ -1231,6 +1349,7 @@ export function PendingReviewScreen() {
       rows,
       renderRow,
       onViewableItemsChanged,
+      onScroll,
       refreshing,
       loadingMore,
       hasMore,
@@ -1750,12 +1869,18 @@ export function PendingReviewScreen() {
         </View>
       ) : (
         <View style={styles.listWrapper}>
-          {list}
+          <HeaderLayoutContext.Provider value={reportHeaderY}>
+            {list}
+          </HeaderLayoutContext.Provider>
           {/* Absolute so showing/hiding it never shifts the list content */}
           {currentSection && (
-            <View style={styles.currentBoxBar}>
+            <Animated.View
+              pointerEvents="box-none"
+              onLayout={(e) => setBarHeight(e.nativeEvent.layout.height)}
+              style={[styles.currentBoxBar, barStyle]}
+            >
               {renderSectionHeader(currentSection)}
-            </View>
+            </Animated.View>
           )}
         </View>
       )}
@@ -1926,6 +2051,8 @@ const styles = StyleSheet.create({
   },
   listWrapper: {
     flex: 1,
+    // clips the bar while the next header pushes it up out of view
+    overflow: "hidden",
   },
   currentBoxBar: {
     position: "absolute",
