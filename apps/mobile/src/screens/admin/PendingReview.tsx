@@ -92,7 +92,13 @@ const PendingBookItem = React.memo(function PendingBookItem({
     >
       <View style={styles.imageWrapper}>
         {coverPhoto ? (
-          <Image source={{ uri: coverPhoto.fileUrl }} style={styles.image} />
+          // Covers are ~2000px JPEGs — downsample on decode instead of
+          // decoding full size for a 70x100 thumbnail (Android).
+          <Image
+            source={{ uri: coverPhoto.fileUrl }}
+            style={styles.image}
+            resizeMethod="resize"
+          />
         ) : (
           <View style={[styles.image, styles.placeholder]}>
             <AppText style={styles.placeholderText}>Нет фото</AppText>
@@ -142,6 +148,70 @@ const PendingBookItem = React.memo(function PendingBookItem({
     </TouchableOpacity>
   );
 });
+
+type BookSection = {
+  title: string;
+  data: Book[];
+  operatorName?: string;
+  sectionDate?: string;
+};
+
+type SectionHeaderProps = {
+  section: BookSection;
+  selectMode: boolean;
+  allSelected: boolean;
+  count: number;
+  onToggleSelectBox: (sectionBooks: Book[]) => void;
+};
+
+const SectionHeader = React.memo(function SectionHeader({
+  section: s,
+  selectMode,
+  allSelected,
+  count,
+  onToggleSelectBox,
+}: SectionHeaderProps) {
+  return (
+    <View style={styles.sectionHeader}>
+      <View style={styles.sectionHeaderLeft}>
+        <AppText style={styles.sectionHeaderText}>📦 Коробка {s.title}</AppText>
+        <View style={styles.sectionHeaderMeta}>
+          {s.operatorName ? (
+            <AppText style={styles.sectionHeaderMetaText}>
+              {s.operatorName}
+            </AppText>
+          ) : null}
+          {s.sectionDate ? (
+            <AppText style={styles.sectionHeaderMetaText}>
+              {s.operatorName ? "  ·  " : ""}
+              {formatDate(s.sectionDate)}
+            </AppText>
+          ) : null}
+        </View>
+      </View>
+      {selectMode ? (
+        <TouchableOpacity
+          onPress={() => onToggleSelectBox(s.data)}
+          style={[styles.selectBoxBtn, allSelected && styles.selectBoxBtnActive]}
+          activeOpacity={0.7}
+        >
+          <AppText
+            style={[
+              styles.selectBoxBtnText,
+              allSelected && styles.selectBoxBtnTextActive,
+            ]}
+          >
+            {allSelected ? "Снять все" : "Выбрать всё"}
+          </AppText>
+        </TouchableOpacity>
+      ) : (
+        <AppText style={styles.sectionHeaderCount}>{count} шт.</AppText>
+      )}
+    </View>
+  );
+});
+
+const keyExtractor = (item: Book) => item.id;
 
 export function PendingReviewScreen() {
   const navigation = useNavigation<Nav>();
@@ -400,7 +470,12 @@ export function PendingReviewScreen() {
         if (mode !== "more" && gen !== fetchGenRef.current) return;
 
         if (mode === "more") {
-          setBooks((prev) => [...prev, ...res.data]);
+          // Offset pages can overlap if books were approved/deleted meanwhile;
+          // a duplicate key makes the list jump.
+          setBooks((prev) => {
+            const seen = new Set(prev.map((b) => b.id));
+            return [...prev, ...res.data.filter((b) => !seen.has(b.id))];
+          });
         } else {
           setBooks(res.data);
         }
@@ -681,6 +756,7 @@ export function PendingReviewScreen() {
     (filters.priceMin || filters.priceMax ? 1 : 0) +
     (filters.yearFrom || filters.yearTo ? 1 : 0) +
     (filters.printRunMin || filters.printRunMax ? 1 : 0);
+  const hasActiveFilters = activeFilterCount > 0;
 
   const executePublish = async (
     action: { type: "single"; book: Book } | { type: "bulk"; ids: string[] },
@@ -754,13 +830,6 @@ export function PendingReviewScreen() {
     },
     [navigation],
   );
-
-  type BookSection = {
-    title: string;
-    data: Book[];
-    operatorName?: string;
-    sectionDate?: string;
-  };
 
   const sections = useMemo((): BookSection[] => {
     const grouped: Record<string, Book[]> = {};
@@ -989,6 +1058,126 @@ export function PendingReviewScreen() {
       toggleSelect,
       handleNavigateToPending,
       handlePublish,
+    ],
+  );
+
+  // SectionList re-renders every visible cell whenever it re-renders (it
+  // builds a fresh internal renderItem each time), so the list element below
+  // is memoized and only rebuilt when list-relevant state changes. Handlers
+  // that close over frequently-changing state go through a ref to stay stable.
+  const latestHandlers = useRef({
+    toggleSelectBox,
+    handleRefresh,
+    handleLoadMore,
+    resetFilters,
+  });
+  latestHandlers.current = {
+    toggleSelectBox,
+    handleRefresh,
+    handleLoadMore,
+    resetFilters,
+  };
+  const onToggleSelectBox = useCallback(
+    (sectionBooks: Book[]) =>
+      latestHandlers.current.toggleSelectBox(sectionBooks),
+    [],
+  );
+  const onRefresh = useCallback(() => latestHandlers.current.handleRefresh(), []);
+  const onEndReached = useCallback(
+    () => latestHandlers.current.handleLoadMore(),
+    [],
+  );
+  const onResetFilters = useCallback(
+    () => latestHandlers.current.resetFilters(),
+    [],
+  );
+
+  const renderSectionHeader = useCallback(
+    ({ section }: { section: BookSection }) => {
+      const firstBoxId = section.data[0]?.boxId;
+      const cachedIds = firstBoxId ? boxAllIds[firstBoxId] : undefined;
+      const idsToCheck = cachedIds ?? section.data.map((b) => b.id);
+      const allSelected =
+        selectMode &&
+        idsToCheck.length > 0 &&
+        idsToCheck.every((id) => selectedIds.has(id));
+      const count = firstBoxId
+        ? (boxCounts[firstBoxId] ?? section.data.length)
+        : section.data.length;
+      return (
+        <SectionHeader
+          section={section}
+          selectMode={selectMode}
+          allSelected={allSelected}
+          count={count}
+          onToggleSelectBox={onToggleSelectBox}
+        />
+      );
+    },
+    [boxAllIds, boxCounts, selectMode, selectedIds, onToggleSelectBox],
+  );
+
+  const list = useMemo(
+    () => (
+      <SectionList
+        style={styles.container}
+        sections={sections}
+        keyExtractor={keyExtractor}
+        renderItem={renderItem}
+        renderSectionHeader={renderSectionHeader}
+        contentContainerStyle={styles.list}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+        }
+        onEndReached={onEndReached}
+        onEndReachedThreshold={0.3}
+        stickySectionHeadersEnabled={true}
+        // removeClippedSubviews + sticky headers makes cells flicker and the
+        // scroll position jump on Android; a wider window avoids blank areas
+        // that get re-measured (and shift the content) while scrolling fast.
+        removeClippedSubviews={false}
+        maxToRenderPerBatch={10}
+        updateCellsBatchingPeriod={50}
+        windowSize={11}
+        ListEmptyComponent={
+          <View style={styles.emptyContainer}>
+            <AppText style={styles.empty}>
+              Нет карточек ожидающих проверки
+            </AppText>
+            {hasActiveFilters && (
+              <TouchableOpacity
+                style={styles.emptyResetBtn}
+                onPress={onResetFilters}
+              >
+                <AppText style={styles.emptyResetText}>
+                  Сбросить фильтры
+                </AppText>
+              </TouchableOpacity>
+            )}
+          </View>
+        }
+        // Fixed-height footer while more pages exist, so content height
+        // doesn't shrink/grow (and shift the scroll) as the spinner toggles.
+        ListFooterComponent={
+          hasMore || loadingMore ? (
+            <View style={styles.listFooter}>
+              {loadingMore && <ActivityIndicator size="small" color="#1976D2" />}
+            </View>
+          ) : null
+        }
+      />
+    ),
+    [
+      sections,
+      renderItem,
+      renderSectionHeader,
+      refreshing,
+      loadingMore,
+      hasMore,
+      hasActiveFilters,
+      onRefresh,
+      onEndReached,
+      onResetFilters,
     ],
   );
 
@@ -1500,106 +1689,7 @@ export function PendingReviewScreen() {
           <ActivityIndicator size="large" color="#1976D2" />
         </View>
       ) : (
-        <SectionList
-          style={styles.container}
-          sections={sections}
-          keyExtractor={(item) => item.id}
-          renderItem={renderItem}
-          renderSectionHeader={({ section }) => {
-            const s = section as BookSection;
-            const firstBoxId = s.data[0]?.boxId;
-            const cachedIds = firstBoxId ? boxAllIds[firstBoxId] : undefined;
-            const idsToCheck = cachedIds ?? s.data.map((b) => b.id);
-            const allSelected =
-              idsToCheck.length > 0 &&
-              idsToCheck.every((id) => selectedIds.has(id));
-            const sectionCount = firstBoxId
-              ? (boxCounts[firstBoxId] ?? s.data.length)
-              : s.data.length;
-            return (
-              <View style={styles.sectionHeader}>
-                <View style={styles.sectionHeaderLeft}>
-                  <AppText style={styles.sectionHeaderText}>
-                    📦 Коробка {s.title}
-                  </AppText>
-                  <View style={styles.sectionHeaderMeta}>
-                    {s.operatorName ? (
-                      <AppText style={styles.sectionHeaderMetaText}>
-                        {s.operatorName}
-                      </AppText>
-                    ) : null}
-                    {s.sectionDate ? (
-                      <AppText style={styles.sectionHeaderMetaText}>
-                        {s.operatorName ? "  ·  " : ""}
-                        {formatDate(s.sectionDate)}
-                      </AppText>
-                    ) : null}
-                  </View>
-                </View>
-                {selectMode ? (
-                  <TouchableOpacity
-                    onPress={() => toggleSelectBox(s.data)}
-                    style={[
-                      styles.selectBoxBtn,
-                      allSelected && styles.selectBoxBtnActive,
-                    ]}
-                    activeOpacity={0.7}
-                  >
-                    <AppText
-                      style={[
-                        styles.selectBoxBtnText,
-                        allSelected && styles.selectBoxBtnTextActive,
-                      ]}
-                    >
-                      {allSelected ? "Снять все" : "Выбрать всё"}
-                    </AppText>
-                  </TouchableOpacity>
-                ) : (
-                  <AppText style={styles.sectionHeaderCount}>
-                    {sectionCount} шт.
-                  </AppText>
-                )}
-              </View>
-            );
-          }}
-          contentContainerStyle={styles.list}
-          refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
-          }
-          onEndReached={handleLoadMore}
-          onEndReachedThreshold={0.3}
-          stickySectionHeadersEnabled={true}
-          removeClippedSubviews={true}
-          maxToRenderPerBatch={8}
-          updateCellsBatchingPeriod={50}
-          windowSize={7}
-          ListEmptyComponent={
-            <View style={styles.emptyContainer}>
-              <AppText style={styles.empty}>
-                Нет карточек ожидающих проверки
-              </AppText>
-              {activeFilterCount > 0 && (
-                <TouchableOpacity
-                  style={styles.emptyResetBtn}
-                  onPress={resetFilters}
-                >
-                  <AppText style={styles.emptyResetText}>
-                    Сбросить фильтры
-                  </AppText>
-                </TouchableOpacity>
-              )}
-            </View>
-          }
-          ListFooterComponent={
-            loadingMore ? (
-              <ActivityIndicator
-                size="small"
-                color="#1976D2"
-                style={{ marginVertical: 16 }}
-              />
-            ) : null
-          }
-        />
+        list
       )}
       <TouchableOpacity
         style={styles.fab}
@@ -1765,6 +1855,11 @@ const styles = StyleSheet.create({
   },
   list: {
     padding: 16,
+  },
+  listFooter: {
+    height: 52,
+    alignItems: "center",
+    justifyContent: "center",
   },
   loadingContainer: {
     flex: 1,

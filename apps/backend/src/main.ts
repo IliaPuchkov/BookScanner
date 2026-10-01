@@ -1,5 +1,5 @@
-import { NestFactory } from '@nestjs/core';
-import { ValidationPipe } from '@nestjs/common';
+import { NestFactory, Reflector } from '@nestjs/core';
+import { ClassSerializerInterceptor, ValidationPipe } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { ConfigService } from '@nestjs/config';
 import { NestExpressApplication } from '@nestjs/platform-express';
@@ -80,6 +80,14 @@ async function bootstrap() {
       transform: true,
       forbidNonWhitelisted: true,
     }),
+  );
+
+  // Global serializer — applies class-transformer decorators to responses.
+  // Without it @Exclude() on User (passwordHash, refreshToken, lockout fields)
+  // is ignored and those fields leak wherever a User is returned, e.g.
+  // book.createdBy in every book list.
+  app.useGlobalInterceptors(
+    new ClassSerializerInterceptor(app.get(Reflector)),
   );
 
   // Global filters

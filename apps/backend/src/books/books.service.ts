@@ -97,12 +97,14 @@ export class BooksService {
     printRunMin?: string,
     printRunMax?: string,
   ) {
+    // Paged in two steps: this query picks the page of book ids using only
+    // to-one joins, then the relations are loaded for those ids alone.
+    // Joining photos (one-to-many) here would make TypeORM wrap skip/take in a
+    // SELECT DISTINCT over the whole books×photos join, sorted by boxNumber —
+    // that got slower with every page and eventually timed out.
     const qb = this.booksRepository
       .createQueryBuilder('book')
-      .leftJoinAndSelect('book.box', 'box')
-      .leftJoinAndSelect('book.photos', 'photos')
-      .leftJoinAndSelect('book.createdBy', 'createdBy')
-      .leftJoinAndSelect('book.ozonProduct', 'ozonProduct');
+      .leftJoin('book.box', 'box');
 
     if (role !== UserRole.ADMIN || workSessionId) {
       // Operators always see only their own books.
@@ -184,10 +186,30 @@ export class BooksService {
     } else {
       qb.orderBy('book.createdAt', pagination.order);
     }
+    // Unique tie-breaker so offset pages never overlap or skip rows
+    qb.addOrderBy('book.id', 'ASC');
 
-    qb.skip(pagination.skip).take(pagination.limit);
+    // offset/limit (not skip/take) is safe: only to-one joins, so one row per book.
+    qb.offset(pagination.skip).limit(pagination.limit);
 
-    const [data, total] = await qb.getManyAndCount();
+    const [pageBooks, total] = await qb.getManyAndCount();
+
+    const ids = pageBooks.map((b) => b.id);
+    const loaded = ids.length
+      ? await this.booksRepository.find({
+          where: { id: In(ids) },
+          relations: {
+            box: true,
+            photos: true,
+            createdBy: true,
+            ozonProduct: true,
+          },
+        })
+      : [];
+    const byId = new Map(loaded.map((b) => [b.id, b]));
+    const data = ids
+      .map((id) => byId.get(id))
+      .filter((b): b is Book => b !== undefined);
 
     return {
       data,

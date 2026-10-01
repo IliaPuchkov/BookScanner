@@ -21,6 +21,36 @@ api.interceptors.request.use(async (config) => {
   return config;
 });
 
+// Dev-only request log: method, url, status, duration, response size.
+// RN DevTools' network panel doesn't reliably show axios (XHR) bodies.
+if (__DEV__) {
+  api.interceptors.request.use((config) => {
+    (config as { _startedAt?: number })._startedAt = Date.now();
+    return config;
+  });
+  const logResponse = (config: any, status: number | string, request: any) => {
+    const started = config?._startedAt;
+    const ms = started ? Date.now() - started : -1;
+    const size = request?.responseText?.length ?? 0;
+    const query = config?.params
+      ? '?' + new URLSearchParams(config.params).toString()
+      : '';
+    console.log(
+      `[api] ${config?.method?.toUpperCase()} ${config?.url}${query} → ${status} ${ms}ms ${(size / 1024).toFixed(1)}KB`,
+    );
+  };
+  api.interceptors.response.use(
+    (response) => {
+      logResponse(response.config, response.status, response.request);
+      return response;
+    },
+    (error) => {
+      logResponse(error.config, error.response?.status ?? 'ERR', error.request);
+      return Promise.reject(error);
+    },
+  );
+}
+
 let isRefreshing = false;
 let failedQueue: Array<{
   resolve: (token: string) => void;
