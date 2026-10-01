@@ -8,8 +8,8 @@ import React, {
 } from "react";
 import {
   View,
-  SectionList,
   FlatList,
+  type ViewToken,
   StyleSheet,
   RefreshControl,
   TouchableOpacity,
@@ -211,14 +211,23 @@ const SectionHeader = React.memo(function SectionHeader({
   );
 });
 
-const keyExtractor = (item: Book) => item.id;
+const boxKeyOf = (book: Book) =>
+  book.box?.boxNumber ?? book.boxId ?? "Без коробки";
+
+// Flat list rows: a box header, or the Book itself (stable identity across
+// pages, so already-mounted rows skip re-rendering when a page is appended).
+type HeaderRow = { kind: "header"; key: string; section: BookSection };
+type Row = Book | HeaderRow;
+const isHeaderRow = (row: Row): row is HeaderRow =>
+  (row as HeaderRow).kind === "header";
+const rowKey = (row: Row) => (isHeaderRow(row) ? row.key : row.id);
 
 export function PendingReviewScreen() {
   const navigation = useNavigation<Nav>();
   const [books, setBooks] = useState<Book[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [page, setPage] = useState(1);
+  const pageRef = useRef(1);
   const [hasMore, setHasMore] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [publishingId, setPublishingId] = useState<string | null>(null);
@@ -285,8 +294,12 @@ export function PendingReviewScreen() {
           boxesService.getAllBoxes(),
           adminService.getUsers(1, 100),
         ]);
+        // One Collator instead of localeCompare-with-options per comparison:
+        // Hermes builds a collator on every call, which stalled the JS thread
+        // for ~0.9s on ~600 boxes.
+        const collator = new Intl.Collator(undefined, { numeric: true });
         const sorted = [...allBoxes].sort((a, b) =>
-          a.boxNumber.localeCompare(b.boxNumber, undefined, { numeric: true }),
+          collator.compare(a.boxNumber, b.boxNumber),
         );
         setBoxes(sorted);
         setFilterUsers(
@@ -480,7 +493,7 @@ export function PendingReviewScreen() {
           setBooks(res.data);
         }
         setHasMore(p < res.meta.totalPages);
-        setPage(p);
+        pageRef.current = p;
       } catch {
         console.error("PendingReview fetch error");
       } finally {
@@ -603,7 +616,9 @@ export function PendingReviewScreen() {
     if (hasMore && !loadingMoreRef.current && !loading) {
       loadingMoreRef.current = true;
       const { search: s, filters: f } = activeParamsRef.current;
-      fetchBooks(page + 1, s, f, "more");
+      // pageRef, not `page` state: onEndReached can fire again before the
+      // re-render that commits the new page, which re-requested the same page.
+      fetchBooks(pageRef.current + 1, s, f, "more");
     }
   };
 
@@ -832,13 +847,17 @@ export function PendingReviewScreen() {
   );
 
   const sections = useMemo((): BookSection[] => {
-    const grouped: Record<string, Book[]> = {};
+    // Map, not a plain object: object keys like "514" are iterated in numeric
+    // order, which reordered boxes vs. the server's sort and shifted content
+    // when a new page arrived.
+    const grouped = new Map<string, Book[]>();
     for (const book of books) {
-      const key = book.box?.boxNumber ?? book.boxId ?? "Без коробки";
-      if (!grouped[key]) grouped[key] = [];
-      grouped[key].push(book);
+      const key = boxKeyOf(book);
+      const list = grouped.get(key);
+      if (list) list.push(book);
+      else grouped.set(key, [book]);
     }
-    return Object.entries(grouped).map(([title, data]) => ({
+    return Array.from(grouped, ([title, data]) => ({
       title,
       data,
       operatorName: data[0]?.createdBy?.fullName,
@@ -1061,10 +1080,9 @@ export function PendingReviewScreen() {
     ],
   );
 
-  // SectionList re-renders every visible cell whenever it re-renders (it
-  // builds a fresh internal renderItem each time), so the list element below
-  // is memoized and only rebuilt when list-relevant state changes. Handlers
-  // that close over frequently-changing state go through a ref to stay stable.
+  // The list element below is memoized and only rebuilt when list-relevant
+  // state changes. Handlers that close over frequently-changing state go
+  // through a ref to stay stable.
   const latestHandlers = useRef({
     toggleSelectBox,
     handleRefresh,
@@ -1092,8 +1110,43 @@ export function PendingReviewScreen() {
     [],
   );
 
+  // Flat rows instead of SectionList: SectionList hands its cells a new
+  // renderItem on every render, so appending a page re-rendered every mounted
+  // row (~0.5s JS stall per page). FlatList cells are PureComponents, so
+  // existing rows are skipped.
+  const rows = useMemo((): Row[] => {
+    const out: Row[] = [];
+    for (const section of sections) {
+      out.push({ kind: "header", key: `header:${section.title}`, section });
+      out.push(...section.data);
+    }
+    return out;
+  }, [sections]);
+
+  // Box shown in the fixed bar above the list. Native sticky headers jitter
+  // between two positions on Android + New Architecture (RN keeps a debounced
+  // JS copy of the header's native translateY that lags behind when the JS
+  // thread is busy), so the bar sits outside the scroll content instead.
+  const [currentBoxKey, setCurrentBoxKey] = useState<string | null>(null);
+  const onViewableItemsChanged = useRef(
+    ({ viewableItems }: { viewableItems: ViewToken<Row>[] }) => {
+      let top: ViewToken<Row> | undefined;
+      for (const v of viewableItems) {
+        if (v.index != null && (top?.index == null || v.index < top.index))
+          top = v;
+      }
+      // Hide the bar while the box's own header row is at the top.
+      if (!top || isHeaderRow(top.item)) setCurrentBoxKey(null);
+      else setCurrentBoxKey(boxKeyOf(top.item));
+    },
+  ).current;
+  const currentSection = useMemo(
+    () => sections.find((s) => s.title === currentBoxKey),
+    [sections, currentBoxKey],
+  );
+
   const renderSectionHeader = useCallback(
-    ({ section }: { section: BookSection }) => {
+    (section: BookSection) => {
       const firstBoxId = section.data[0]?.boxId;
       const cachedIds = firstBoxId ? boxAllIds[firstBoxId] : undefined;
       const idsToCheck = cachedIds ?? section.data.map((b) => b.id);
@@ -1117,24 +1170,31 @@ export function PendingReviewScreen() {
     [boxAllIds, boxCounts, selectMode, selectedIds, onToggleSelectBox],
   );
 
+  const renderRow = useCallback(
+    ({ item }: { item: Row }) =>
+      isHeaderRow(item)
+        ? renderSectionHeader(item.section)
+        : renderItem({ item }),
+    [renderSectionHeader, renderItem],
+  );
+
   const list = useMemo(
     () => (
-      <SectionList
+      <FlatList<Row>
         style={styles.container}
-        sections={sections}
-        keyExtractor={keyExtractor}
-        renderItem={renderItem}
-        renderSectionHeader={renderSectionHeader}
+        data={rows}
+        keyExtractor={rowKey}
+        renderItem={renderRow}
+        onViewableItemsChanged={onViewableItemsChanged}
         contentContainerStyle={styles.list}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
         }
         onEndReached={onEndReached}
         onEndReachedThreshold={0.3}
-        stickySectionHeadersEnabled={true}
-        // removeClippedSubviews + sticky headers makes cells flicker and the
-        // scroll position jump on Android; a wider window avoids blank areas
-        // that get re-measured (and shift the content) while scrolling fast.
+        // removeClippedSubviews makes cells flicker on Android; a wider window
+        // avoids blank areas that get re-measured (and shift the content)
+        // while scrolling fast.
         removeClippedSubviews={false}
         maxToRenderPerBatch={10}
         updateCellsBatchingPeriod={50}
@@ -1168,9 +1228,9 @@ export function PendingReviewScreen() {
       />
     ),
     [
-      sections,
-      renderItem,
-      renderSectionHeader,
+      rows,
+      renderRow,
+      onViewableItemsChanged,
       refreshing,
       loadingMore,
       hasMore,
@@ -1689,7 +1749,15 @@ export function PendingReviewScreen() {
           <ActivityIndicator size="large" color="#1976D2" />
         </View>
       ) : (
-        list
+        <View style={styles.listWrapper}>
+          {list}
+          {/* Absolute so showing/hiding it never shifts the list content */}
+          {currentSection && (
+            <View style={styles.currentBoxBar}>
+              {renderSectionHeader(currentSection)}
+            </View>
+          )}
+        </View>
       )}
       <TouchableOpacity
         style={styles.fab}
@@ -1855,6 +1923,20 @@ const styles = StyleSheet.create({
   },
   list: {
     padding: 16,
+  },
+  listWrapper: {
+    flex: 1,
+  },
+  currentBoxBar: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    paddingHorizontal: 16,
+    backgroundColor: "#F5F5F5",
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: "#DDD",
+    elevation: 2,
   },
   listFooter: {
     height: 52,
