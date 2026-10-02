@@ -2,7 +2,7 @@
   "expo": {
     "name": "Джолли Бук",
     "slug": "bookscanner",
-    "version": "1.10.3",
+    "version": "1.11.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
