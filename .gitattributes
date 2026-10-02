@@ -1,0 +1,5 @@
+# Shell scripts run on Linux (deploy.sh rsyncs the working tree to the prod
+# server). Keep LF even on Windows checkouts with core.autocrlf=true, otherwise
+# the shebang becomes "bash\r" and the script can't run — this silently broke
+# the nightly DB backup for a month.
+*.sh text eol=lf
