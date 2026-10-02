@@ -13,6 +13,7 @@ import { IStorageProvider, STORAGE_PROVIDER } from './storage/storage.interface'
 import { ReorderPhotosDto } from './dto/reorder-photos.dto';
 import { MAX_PHOTOS_PER_BOOK, MAX_FILE_SIZE_BYTES, ALLOWED_MIME_TYPES } from '@bookscanner/shared';
 import { SettingsService } from '../settings/settings.service';
+import { ThumbnailService } from './thumbnail.service';
 
 @Injectable()
 export class PhotosService {
@@ -22,6 +23,7 @@ export class PhotosService {
     @Inject(STORAGE_PROVIDER)
     private readonly storage: IStorageProvider,
     private readonly settingsService: SettingsService,
+    private readonly thumbnails: ThumbnailService,
   ) {}
 
   async upload(
@@ -81,10 +83,13 @@ export class PhotosService {
       throw new NotFoundException('Фотография не найдена');
     }
 
-    // Delete old file
+    // Delete old file (and its thumbnail; a new one is made on next load)
     if (photo.fileKey) {
       await this.storage.delete(photo.fileKey);
     }
+    await this.thumbnails.deleteFor(photo);
+    photo.thumbnailUrl = null;
+    photo.thumbnailKey = null;
 
     // Upload new file
     const ext = path.extname(file.originalname);
@@ -112,6 +117,7 @@ export class PhotosService {
     if (photo.fileKey) {
       await this.storage.delete(photo.fileKey);
     }
+    await this.thumbnails.deleteFor(photo);
 
     await this.photosRepository.remove(photo);
   }
@@ -145,6 +151,7 @@ export class PhotosService {
       if (photo.fileKey) {
         await this.storage.delete(photo.fileKey);
       }
+      await this.thumbnails.deleteFor(photo);
     }
     await this.photosRepository.remove(photos);
   }

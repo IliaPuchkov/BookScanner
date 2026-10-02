@@ -30,6 +30,7 @@ import { boxesService } from "../../services/boxes.service";
 import { BookStatus } from "../../types";
 import type { DuplicateGroup, Book } from "../../types";
 import type { AdminMainStackParamList } from "../../navigation/AdminNavigator";
+import { thumbUri } from "../../utils/photos";
 
 type Nav = NativeStackNavigationProp<AdminMainStackParamList, "Duplicates">;
 
@@ -66,7 +67,7 @@ function BookMiniCard({
       <TouchableOpacity activeOpacity={0.8} onPress={() => onNavigate(book.id)}>
         {coverPhoto ? (
           <Image
-            source={{ uri: coverPhoto.fileUrl }}
+            source={{ uri: thumbUri(coverPhoto) }}
             style={styles.miniImage}
           />
         ) : (
@@ -1021,7 +1022,7 @@ export function DuplicatesScreen() {
                       >
                         {cover ? (
                           <Image
-                            source={{ uri: cover.fileUrl }}
+                            source={{ uri: thumbUri(cover) }}
                             style={styles.masterPickerThumb}
                           />
                         ) : (

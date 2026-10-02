@@ -18,6 +18,7 @@ import { adminService, type OzonStore } from "../../services/admin.service";
 import { booksService } from "../../services/books.service";
 import type { Book } from "../../types";
 import type { AdminMainStackParamList } from "../../navigation/AdminNavigator";
+import { thumbUri } from "../../utils/photos";
 
 type Nav = NativeStackNavigationProp<AdminMainStackParamList, "Underpriced">;
 
@@ -48,7 +49,7 @@ function UnderpricedBookItem({
       >
         <View style={styles.imageWrapper}>
           {coverPhoto ? (
-            <Image source={{ uri: coverPhoto.fileUrl }} style={styles.image} />
+            <Image source={{ uri: thumbUri(coverPhoto) }} style={styles.image} />
           ) : (
             <View style={[styles.image, styles.placeholder]}>
               <AppText style={styles.placeholderText}>Нет фото</AppText>

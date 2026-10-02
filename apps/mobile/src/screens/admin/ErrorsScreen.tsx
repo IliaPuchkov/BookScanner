@@ -19,6 +19,7 @@ import { booksService } from "../../services/books.service";
 import { visionService } from "../../services/vision.service";
 import type { Book } from "../../types";
 import type { AdminMainStackParamList } from "../../navigation/AdminNavigator";
+import { thumbUri } from "../../utils/photos";
 
 type Nav = NativeStackNavigationProp<AdminMainStackParamList, "Errors">;
 
@@ -46,7 +47,7 @@ const OcrBookItem = React.memo(function OcrBookItem({
     >
       <View style={styles.imageWrapper}>
         {coverPhoto ? (
-          <Image source={{ uri: coverPhoto.fileUrl }} style={styles.image} />
+          <Image source={{ uri: thumbUri(coverPhoto) }} style={styles.image} />
         ) : (
           <View style={[styles.image, styles.placeholder]}>
             <AppText style={styles.placeholderText}>Нет фото</AppText>
@@ -95,7 +96,7 @@ const OzonFailedItem = React.memo(function OzonFailedItem({
     >
       <View style={styles.imageWrapper}>
         {coverPhoto ? (
-          <Image source={{ uri: coverPhoto.fileUrl }} style={styles.image} />
+          <Image source={{ uri: thumbUri(coverPhoto) }} style={styles.image} />
         ) : (
           <View style={[styles.image, styles.placeholder]}>
             <AppText style={styles.placeholderText}>Нет фото</AppText>

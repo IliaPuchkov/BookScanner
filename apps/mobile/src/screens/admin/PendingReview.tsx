@@ -45,6 +45,7 @@ import type {
 } from "../../navigation/AdminNavigator";
 import { formatDate } from "../../utils/format";
 import { bookEvents } from "../../utils/bookEvents";
+import { thumbUri } from "../../utils/photos";
 
 interface Filters {
   boxId?: string;
@@ -100,7 +101,7 @@ const PendingBookItem = React.memo(function PendingBookItem({
           // Covers are ~2000px JPEGs — downsample on decode instead of
           // decoding full size for a 70x100 thumbnail (Android).
           <Image
-            source={{ uri: coverPhoto.fileUrl }}
+            source={{ uri: thumbUri(coverPhoto) }}
             style={styles.image}
             resizeMethod="resize"
           />

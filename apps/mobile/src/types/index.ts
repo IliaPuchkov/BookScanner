@@ -51,6 +51,7 @@ export interface BookPhoto {
   id: string;
   bookId: string;
   fileUrl: string;
+  thumbnailUrl?: string | null;
   sortOrder: number;
   originalFilename?: string;
   mimeType?: string;

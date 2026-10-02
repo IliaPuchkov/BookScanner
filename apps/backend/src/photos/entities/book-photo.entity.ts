@@ -26,6 +26,13 @@ export class BookPhoto {
   @Column({ nullable: true })
   fileKey: string;
 
+  // Cover thumbnail (~320px JPEG) for list screens; null until generated.
+  @Column({ type: 'varchar', nullable: true })
+  thumbnailUrl: string | null;
+
+  @Column({ type: 'varchar', nullable: true })
+  thumbnailKey: string | null;
+
   @Column()
   sortOrder: number;
 

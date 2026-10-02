@@ -21,6 +21,7 @@ import { booksService } from "../../services/books.service";
 import { BookStatus } from "../../types";
 import type { Book, CopyGroup } from "../../types";
 import type { AdminMainStackParamList } from "../../navigation/AdminNavigator";
+import { thumbUri } from "../../utils/photos";
 
 type Nav = NativeStackNavigationProp<AdminMainStackParamList, "Copies">;
 type StatusFilter = "all" | "published" | "not_published" | "archived";
@@ -85,7 +86,7 @@ function BookMiniCard({
         >
           {coverPhoto ? (
             <Image
-              source={{ uri: coverPhoto.fileUrl }}
+              source={{ uri: thumbUri(coverPhoto) }}
               style={styles.miniImage}
             />
           ) : (

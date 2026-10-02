@@ -3,6 +3,7 @@ import { View, StyleSheet, TouchableOpacity, Image } from "react-native";
 import { AppText } from './AppText';
 import { BookStatus, UserRole } from "../types";
 import type { Book } from "../types";
+import { thumbUri } from "../utils/photos";
 
 function formatDate(iso: string): string {
   const d = new Date(iso);
@@ -43,7 +44,7 @@ export function BookCard({ book, onPress, userRole, storeName }: Props) {
   return (
     <TouchableOpacity style={styles.card} onPress={onPress} activeOpacity={0.7}>
       {coverPhoto ? (
-        <Image source={{ uri: coverPhoto.fileUrl }} style={styles.image} />
+        <Image source={{ uri: thumbUri(coverPhoto) }} style={styles.image} />
       ) : (
         <View style={[styles.image, styles.placeholder]}>
           <AppText style={styles.placeholderText}>Нет фото</AppText>
