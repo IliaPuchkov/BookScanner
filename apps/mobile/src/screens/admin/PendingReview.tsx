@@ -132,23 +132,25 @@ const PendingBookItem = React.memo(function PendingBookItem({
             {Number(item.price).toFixed(0)} ₽
           </AppText>
         )}
-        {!selectMode && (
-          <TouchableOpacity
-            style={[
-              styles.publishBtn,
-              isPublishing && styles.publishBtnDisabled,
-            ]}
-            onPress={() => onPublish(item)}
-            disabled={isPublishing}
-            activeOpacity={0.7}
-          >
-            {isPublishing ? (
-              <ActivityIndicator size="small" color="#fff" />
-            ) : (
-              <AppText style={styles.publishBtnText}>Загрузить в Озон</AppText>
-            )}
-          </TouchableOpacity>
-        )}
+        {/* Hidden, not removed, in select mode: removing it changed every
+            card's height on Cancel, shifting the content (and making the
+            list jump as remounted cells came back taller). */}
+        <TouchableOpacity
+          style={[
+            styles.publishBtn,
+            isPublishing && styles.publishBtnDisabled,
+            selectMode && styles.publishBtnHidden,
+          ]}
+          onPress={() => onPublish(item)}
+          disabled={isPublishing || selectMode}
+          activeOpacity={0.7}
+        >
+          {isPublishing ? (
+            <ActivityIndicator size="small" color="#fff" />
+          ) : (
+            <AppText style={styles.publishBtnText}>Загрузить в Озон</AppText>
+          )}
+        </TouchableOpacity>
       </View>
     </TouchableOpacity>
   );
@@ -226,6 +228,9 @@ type Row = Book | HeaderRow;
 const isHeaderRow = (row: Row): row is HeaderRow =>
   (row as HeaderRow).kind === "header";
 const rowKey = (row: Row) => (isHeaderRow(row) ? row.key : row.id);
+
+// Scroll distance over which the box bar fades in after its header leaves.
+const BAR_FADE_DISTANCE = 24;
 
 // Header rows report their content-y (null when unmounted) so the floating
 // box bar can be pushed away by the next header and fade in at its own one.
@@ -1243,13 +1248,15 @@ export function PendingReviewScreen() {
             extrapolate: "clamp",
           })
         : 0;
-    // Visible once the box's own header row reaches the top, where it looks
-    // identical — so the header appears to stick. Unknown (unmounted, far
-    // above) means we're deep in the box: show it.
+    // Fades in only after the box's own header row has fully scrolled off
+    // the top, so it never covers the real header. Unknown header position
+    // (unmounted, far above) means we're deep in the box: show it.
+    const revealFrom =
+      currentHeaderY != null ? currentHeaderY + barHeight : null;
     const reveal =
-      currentHeaderY != null
+      revealFrom != null
         ? scrollY.interpolate({
-            inputRange: [currentHeaderY - 1, currentHeaderY],
+            inputRange: [revealFrom, revealFrom + BAR_FADE_DISTANCE],
             outputRange: [0, 1],
             extrapolate: "clamp",
           })
@@ -2102,7 +2109,13 @@ const styles = StyleSheet.create({
     backgroundColor: "#fff",
     borderRadius: 12,
     marginBottom: 12,
-    padding: 12,
+    // Always-present border (only its color changes when selected): adding
+    // and removing it changed the card height by 4px and left Android's
+    // elevation shadow as a square ghost under the card after Cancel.
+    // padding 10 + border 2 keeps the previous 12px inset.
+    padding: 10,
+    borderWidth: 2,
+    borderColor: "transparent",
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.08,
@@ -2159,6 +2172,9 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: "#aaa",
     flexShrink: 1,
+  },
+  publishBtnHidden: {
+    opacity: 0,
   },
   publishBtn: {
     marginTop: 8,
@@ -2259,7 +2275,6 @@ const styles = StyleSheet.create({
   },
   // Card select mode
   cardSelected: {
-    borderWidth: 2,
     borderColor: "#1976D2",
   },
   imageWrapper: {
