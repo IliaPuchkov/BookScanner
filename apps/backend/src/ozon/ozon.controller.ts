@@ -29,6 +29,7 @@ import {
   CreateOzonStoreDto,
   ImportOzonStoresDto,
   ImportOzonStoresResponse,
+  UpdateOzonStoreDto,
   OzonStoreRecord,
   OzonStoreResponse,
 } from "./dto/ozon-store.dto";
@@ -355,6 +356,50 @@ export class OzonController {
         apiKeyMasked: maskApiKey(this.encryptionService.decrypt(s.apiKey)),
         isActive: s.id === activeId,
       })),
+    };
+  }
+
+  @Patch("stores/:id")
+  @Roles(UserRole.ADMIN)
+  @ApiOperation({ summary: "Изменить название или Api-Key магазина Ozon" })
+  async updateStore(
+    @Param("id") id: string,
+    @Body() dto: UpdateOzonStoreDto,
+  ): Promise<OzonStoreResponse> {
+    const name = dto.name?.trim();
+    const apiKey = dto.apiKey?.trim();
+    if (!name && !apiKey) {
+      throw new BadRequestException("Укажите название или Api-Key");
+    }
+
+    const stores = await this.settingsService.getValue<OzonStoreRecord[]>(
+      OZON_STORES_KEY,
+      [],
+    );
+    const store = stores.find((s) => s.id === id);
+    if (!store) {
+      throw new BadRequestException("Магазин не найден");
+    }
+    if (name) store.name = name;
+    if (apiKey) store.apiKey = this.encryptionService.encrypt(apiKey);
+
+    await this.settingsService.upsert({
+      key: OZON_STORES_KEY,
+      value: JSON.stringify(stores),
+      valueType: "json",
+      description: "Список подключённых магазинов Ozon",
+    });
+
+    const activeId = await this.settingsService.getValue<string>(
+      ACTIVE_STORE_KEY,
+      "",
+    );
+    return {
+      id: store.id,
+      name: store.name,
+      clientId: store.clientId,
+      apiKeyMasked: maskApiKey(this.encryptionService.decrypt(store.apiKey)),
+      isActive: store.id === activeId,
     };
   }
 

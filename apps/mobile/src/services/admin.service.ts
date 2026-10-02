@@ -158,6 +158,14 @@ export const adminService = {
     return data;
   },
 
+  async updateOzonStore(
+    id: string,
+    dto: { name?: string; apiKey?: string },
+  ): Promise<OzonStore> {
+    const { data } = await api.patch<OzonStore>(`/ozon/stores/${id}`, dto);
+    return data;
+  },
+
   async importOzonStores(
     stores: { name: string; clientId: string; apiKey: string }[],
   ): Promise<{ added: number; updated: number; stores: OzonStore[] }> {

@@ -37,6 +37,10 @@ export function OzonStoresScreen() {
   const [draftStoreName, setDraftStoreName] = useState("");
   const [draftClientId, setDraftClientId] = useState("");
   const [draftApiKey, setDraftApiKey] = useState("");
+  const [editingStoreId, setEditingStoreId] = useState<string | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editApiKey, setEditApiKey] = useState("");
+  const [savingEdit, setSavingEdit] = useState(false);
 
   const loadStores = useCallback(async () => {
     setLoadingStores(true);
@@ -103,6 +107,55 @@ export function OzonStoresScreen() {
         },
       },
     ]);
+  };
+
+  const handleStartEdit = (store: OzonStore) => {
+    setEditingStoreId(store.id);
+    setEditName(store.name);
+    setEditApiKey("");
+  };
+
+  const handleCancelEdit = () => {
+    setEditingStoreId(null);
+    setEditName("");
+    setEditApiKey("");
+  };
+
+  const handleSaveEdit = async (store: OzonStore) => {
+    const name = editName.trim();
+    const apiKey = editApiKey.trim();
+    if (!name) {
+      Alert.alert("Ошибка", "Введите название магазина");
+      return;
+    }
+    const dto: { name?: string; apiKey?: string } = {};
+    if (name !== store.name) dto.name = name;
+    if (apiKey) dto.apiKey = apiKey;
+    if (!dto.name && !dto.apiKey) {
+      handleCancelEdit();
+      return;
+    }
+    setSavingEdit(true);
+    try {
+      const updated = await adminService.updateOzonStore(store.id, dto);
+      setOzonStores((prev) =>
+        prev.map((s) => (s.id === updated.id ? updated : s)),
+      );
+      handleCancelEdit();
+      if (dto.apiKey) {
+        // New key → its expiry date and limits change; re-check just this store
+        const [limits, expiry] = await Promise.all([
+          adminService.getOzonStoreLimits(store.id).catch(() => null),
+          adminService.getOzonStoreKeyExpiry(store.id).catch(() => null),
+        ]);
+        setStoreLimits((prev) => ({ ...prev, [store.id]: limits }));
+        setStoreKeyExpiry((prev) => ({ ...prev, [store.id]: expiry }));
+      }
+    } catch {
+      Alert.alert("Ошибка", "Не удалось сохранить изменения");
+    } finally {
+      setSavingEdit(false);
+    }
   };
 
   const handleCancelAddStore = () => {
@@ -310,15 +363,75 @@ export function OzonStoresScreen() {
                           </AppText>
                         </View>
                       )}
+
+                      {editingStoreId === store.id && (
+                        <>
+                          <TextInput
+                            style={styles.storeInput}
+                            value={editName}
+                            onChangeText={setEditName}
+                            placeholder="Название магазина"
+                            placeholderTextColor="#aaa"
+                            editable={!savingEdit}
+                          />
+                          <TextInput
+                            style={styles.storeInput}
+                            value={editApiKey}
+                            onChangeText={setEditApiKey}
+                            placeholder="Новый Api-Key (пусто — не менять)"
+                            placeholderTextColor="#aaa"
+                            autoCapitalize="none"
+                            autoCorrect={false}
+                            secureTextEntry
+                            editable={!savingEdit}
+                            autoFocus
+                          />
+                          <View style={styles.editActions}>
+                            <TouchableOpacity
+                              style={[styles.actionBtn, styles.cancelBtn]}
+                              onPress={handleCancelEdit}
+                              disabled={savingEdit}
+                            >
+                              <AppText style={styles.cancelBtnText}>Отмена</AppText>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                              style={[
+                                styles.actionBtn,
+                                styles.saveBtn,
+                                savingEdit && styles.disabledBtn,
+                              ]}
+                              onPress={() => handleSaveEdit(store)}
+                              disabled={savingEdit}
+                            >
+                              {savingEdit ? (
+                                <ActivityIndicator size="small" color="#fff" />
+                              ) : (
+                                <AppText style={styles.saveBtnText}>Сохранить</AppText>
+                              )}
+                            </TouchableOpacity>
+                          </View>
+                        </>
+                      )}
                     </View>
 
-                    <TouchableOpacity
-                      style={styles.storeDeleteBtn}
-                      onPress={() => handleDeleteStore(store)}
-                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                    >
-                      <AppText style={styles.storeDeleteIcon}>✕</AppText>
-                    </TouchableOpacity>
+                    {editingStoreId !== store.id && (
+                      <>
+                        <TouchableOpacity
+                          style={styles.storeDeleteBtn}
+                          onPress={() => handleStartEdit(store)}
+                          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                        >
+                          <AppText style={styles.storeEditIcon}>✎</AppText>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={styles.storeDeleteBtn}
+                          onPress={() => handleDeleteStore(store)}
+                          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                        >
+                          <AppText style={styles.storeDeleteIcon}>✕</AppText>
+                        </TouchableOpacity>
+                      </>
+                    )}
                   </View>
                 );
               })}
@@ -490,6 +603,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     marginLeft: 8,
+  },
+  storeEditIcon: {
+    fontSize: 16,
+    color: "#1976D2",
+    fontWeight: "600",
   },
   storeDeleteIcon: {
     fontSize: 14,

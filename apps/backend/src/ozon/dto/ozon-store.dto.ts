@@ -1,6 +1,7 @@
 import {
   IsString,
   IsNotEmpty,
+  IsOptional,
   MaxLength,
   IsArray,
   ArrayNotEmpty,
@@ -26,6 +27,21 @@ export class CreateOzonStoreDto {
   @IsString()
   @IsNotEmpty()
   apiKey: string;
+}
+
+export class UpdateOzonStoreDto {
+  @ApiProperty({ description: 'Новое название магазина', required: false })
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(100)
+  name?: string;
+
+  @ApiProperty({ description: 'Новый Api-Key из Seller API', required: false })
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty()
+  apiKey?: string;
 }
 
 export class ImportOzonStoresDto {
