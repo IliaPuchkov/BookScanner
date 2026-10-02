@@ -11,7 +11,10 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from "react-native";
+import * as DocumentPicker from "expo-document-picker";
+import * as FileSystem from "expo-file-system/legacy";
 import { AppText } from '../../components/AppText';
+import { parseStoresCsv, type StoreCsvRow } from "../../utils/csv";
 import {
   adminService,
   type OzonStore,
@@ -30,6 +33,7 @@ export function OzonStoresScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [addingStore, setAddingStore] = useState(false);
   const [savingStore, setSavingStore] = useState(false);
+  const [importing, setImporting] = useState(false);
   const [draftStoreName, setDraftStoreName] = useState("");
   const [draftClientId, setDraftClientId] = useState("");
   const [draftApiKey, setDraftApiKey] = useState("");
@@ -135,6 +139,70 @@ export function OzonStoresScreen() {
     } finally {
       setSavingStore(false);
     }
+  };
+
+  const runImport = async (rows: StoreCsvRow[]) => {
+    setImporting(true);
+    try {
+      const res = await adminService.importOzonStores(rows);
+      setOzonStores(res.stores);
+      Alert.alert(
+        "Импорт завершён",
+        `Добавлено: ${res.added}\nОбновлено ключей: ${res.updated}`,
+      );
+      loadStores();
+    } catch {
+      Alert.alert("Ошибка", "Не удалось импортировать магазины");
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  const handleImportCsv = async () => {
+    let text: string;
+    try {
+      // "*/*": Android often reports CSV under odd MIME types and greys it out
+      const picked = await DocumentPicker.getDocumentAsync({
+        type: "*/*",
+        copyToCacheDirectory: true,
+      });
+      if (picked.canceled || !picked.assets?.[0]) return;
+      text = await FileSystem.readAsStringAsync(picked.assets[0].uri);
+    } catch {
+      Alert.alert("Ошибка", "Не удалось прочитать файл");
+      return;
+    }
+
+    const { stores, errors } = parseStoresCsv(text);
+    const skipped = errors.length
+      ? `\n\nПропущено строк: ${errors.length}\n${errors.slice(0, 5).join("\n")}`
+      : "";
+    if (stores.length === 0) {
+      Alert.alert(
+        "Нет магазинов",
+        `Ожидается CSV со столбцами: название, Client-Id, Api-Key${skipped}`,
+      );
+      return;
+    }
+
+    const existingIds = new Set(ozonStores.map((s) => s.clientId));
+    const updates = stores.filter((s) => existingIds.has(s.clientId)).length;
+    const list = stores
+      .slice(0, 10)
+      .map((s) => `• ${s.name} (${s.clientId})`)
+      .join("\n");
+    const more = stores.length > 10 ? `\n…и ещё ${stores.length - 10}` : "";
+    const updateNote = updates
+      ? `\n\nУже подключены (ключ будет заменён): ${updates}`
+      : "";
+    Alert.alert(
+      `Импортировать магазины: ${stores.length}?`,
+      `${list}${more}${updateNote}${skipped}`,
+      [
+        { text: "Отмена", style: "cancel" },
+        { text: "Импортировать", onPress: () => runImport(stores) },
+      ],
+    );
   };
 
   return (
@@ -310,12 +378,26 @@ export function OzonStoresScreen() {
                   </View>
                 </>
               ) : (
-                <TouchableOpacity
-                  style={styles.addStoreBtn}
-                  onPress={() => setAddingStore(true)}
-                >
-                  <AppText style={styles.addStoreBtnText}>+ Добавить магазин</AppText>
-                </TouchableOpacity>
+                <View style={styles.addActions}>
+                  <TouchableOpacity
+                    style={styles.addStoreBtn}
+                    onPress={() => setAddingStore(true)}
+                    disabled={importing}
+                  >
+                    <AppText style={styles.addStoreBtnText}>+ Добавить магазин</AppText>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.addStoreBtn, importing && styles.disabledBtn]}
+                    onPress={handleImportCsv}
+                    disabled={importing}
+                  >
+                    {importing ? (
+                      <ActivityIndicator size="small" color="#1976D2" />
+                    ) : (
+                      <AppText style={styles.addStoreBtnText}>Импорт из CSV</AppText>
+                    )}
+                  </TouchableOpacity>
+                </View>
               )}
             </>
           )}
@@ -426,9 +508,14 @@ const styles = StyleSheet.create({
     backgroundColor: "#FAFAFA",
     marginTop: 8,
   },
+  addActions: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 10,
+    marginTop: 12,
+  },
   addStoreBtn: {
     alignSelf: "flex-start",
-    marginTop: 12,
     paddingVertical: 8,
     paddingHorizontal: 16,
     borderRadius: 8,

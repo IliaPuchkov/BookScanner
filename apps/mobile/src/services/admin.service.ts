@@ -158,6 +158,13 @@ export const adminService = {
     return data;
   },
 
+  async importOzonStores(
+    stores: { name: string; clientId: string; apiKey: string }[],
+  ): Promise<{ added: number; updated: number; stores: OzonStore[] }> {
+    const { data } = await api.post('/ozon/stores/import', { stores });
+    return data;
+  },
+
   async removeOzonStore(id: string): Promise<void> {
     await api.delete(`/ozon/stores/${id}`);
   },

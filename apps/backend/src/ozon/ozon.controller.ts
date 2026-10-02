@@ -27,6 +27,8 @@ import { BulkPublishDto } from "./dto/bulk-publish.dto";
 import { ImportOzonDto } from "./dto/import-ozon.dto";
 import {
   CreateOzonStoreDto,
+  ImportOzonStoresDto,
+  ImportOzonStoresResponse,
   OzonStoreRecord,
   OzonStoreResponse,
 } from "./dto/ozon-store.dto";
@@ -280,6 +282,79 @@ export class OzonController {
       clientId: newStore.clientId,
       apiKeyMasked: maskApiKey(dto.apiKey),
       isActive: newStore.id === activeId,
+    };
+  }
+
+  @Post("stores/import")
+  @Roles(UserRole.ADMIN)
+  @ApiOperation({
+    summary: "Импорт магазинов Ozon (CSV)",
+    description:
+      "Добавляет магазины списком. Если Client-Id уже подключён — обновляет название и Api-Key.",
+  })
+  async importStores(
+    @Body() dto: ImportOzonStoresDto,
+  ): Promise<ImportOzonStoresResponse> {
+    const stores = await this.settingsService.getValue<OzonStoreRecord[]>(
+      OZON_STORES_KEY,
+      [],
+    );
+    const activeId = await this.settingsService.getValue<string>(
+      ACTIVE_STORE_KEY,
+      "",
+    );
+
+    let added = 0;
+    let updated = 0;
+    const touchedIds = new Set<string>();
+
+    for (const row of dto.stores) {
+      const name = row.name.trim();
+      const clientId = row.clientId.trim();
+      const apiKey = row.apiKey.trim();
+      if (!name || !clientId || !apiKey) {
+        throw new BadRequestException(
+          "У каждого магазина должны быть название, Client-Id и Api-Key",
+        );
+      }
+
+      const existing = stores.find((s) => s.clientId === clientId);
+      if (existing) {
+        existing.name = name;
+        existing.apiKey = this.encryptionService.encrypt(apiKey);
+        // A clientId repeated within the file counts once
+        if (!touchedIds.has(existing.id)) updated++;
+        touchedIds.add(existing.id);
+      } else {
+        const newStore: OzonStoreRecord = {
+          id: randomUUID(),
+          name,
+          clientId,
+          apiKey: this.encryptionService.encrypt(apiKey),
+        };
+        stores.push(newStore);
+        touchedIds.add(newStore.id);
+        added++;
+      }
+    }
+
+    await this.settingsService.upsert({
+      key: OZON_STORES_KEY,
+      value: JSON.stringify(stores),
+      valueType: "json",
+      description: "Список подключённых магазинов Ozon",
+    });
+
+    return {
+      added,
+      updated,
+      stores: stores.map((s) => ({
+        id: s.id,
+        name: s.name,
+        clientId: s.clientId,
+        apiKeyMasked: maskApiKey(this.encryptionService.decrypt(s.apiKey)),
+        isActive: s.id === activeId,
+      })),
     };
   }
 
