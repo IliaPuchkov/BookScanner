@@ -219,6 +219,7 @@ export class BooksService {
             photos: true,
             createdBy: true,
             ozonProduct: true,
+            libraryOwner: true,
           },
         })
       : [];
@@ -417,6 +418,7 @@ export class BooksService {
       .leftJoinAndSelect('book.box', 'box')
       .leftJoinAndSelect('book.createdBy', 'createdBy')
       .leftJoinAndSelect('book.ozonProduct', 'ozonProduct')
+      .leftJoinAndSelect('book.libraryOwner', 'libraryOwner')
       .where('book.isCopy = true')
       .orderBy('book.createdAt', 'DESC');
 
@@ -462,6 +464,65 @@ export class BooksService {
     return this.booksRepository.count({ where: { isCopy: true } });
   }
 
+  // "Домашняя книга": an admin takes a pending-review book into their own collection.
+  // Status IN_LIBRARY removes it from the review queue and blocks Ozon publication.
+  async addToLibrary(id: string, adminId: string): Promise<Book> {
+    const result = await this.booksRepository
+      .createQueryBuilder()
+      .update(Book)
+      .set({ status: BookStatus.IN_LIBRARY, libraryOwnerId: adminId, addedToLibraryAt: () => 'NOW()' })
+      .where('id = :id', { id })
+      .andWhere('status = :status', { status: BookStatus.PENDING_REVIEW })
+      .andWhere('"publishedToOzon" IS NULL')
+      .execute();
+    if (!result.affected) {
+      await this.findOne(id); // 404 if missing
+      throw new BadRequestException('В библиотеку можно добавить только неопубликованную книгу на проверке.');
+    }
+    return this.findOne(id);
+  }
+
+  async removeFromLibrary(id: string): Promise<Book> {
+    const result = await this.booksRepository.update(
+      { id, status: BookStatus.IN_LIBRARY },
+      { status: BookStatus.PENDING_REVIEW, libraryOwnerId: null, addedToLibraryAt: null },
+    );
+    if (!result.affected) {
+      await this.findOne(id);
+      throw new BadRequestException('Книга не находится в библиотеке.');
+    }
+    return this.findOne(id);
+  }
+
+  async getLibraryBooks(pagination: PaginationDto, filters: { ownerId?: string; search?: string } = {}) {
+    const { page = 1, limit = 20 } = pagination;
+    const qb = this.booksRepository
+      .createQueryBuilder('book')
+      .leftJoinAndSelect('book.photos', 'photos')
+      .leftJoinAndSelect('book.box', 'box')
+      .leftJoinAndSelect('book.libraryOwner', 'libraryOwner')
+      .where('book.status = :status', { status: BookStatus.IN_LIBRARY })
+      .orderBy('book.addedToLibraryAt', 'DESC')
+      .addOrderBy('book.id', 'ASC')
+      .skip((page - 1) * limit)
+      .take(limit);
+    if (filters.ownerId) {
+      qb.andWhere('book.libraryOwnerId = :ownerId', { ownerId: filters.ownerId });
+    }
+    if (filters.search) {
+      qb.andWhere(
+        '(book.title ILIKE :s OR book.author ILIKE :s OR book.isbn ILIKE :s)',
+        { s: `%${filters.search}%` },
+      );
+    }
+    const [data, total] = await qb.getManyAndCount();
+    return { data, meta: { total, page, limit, totalPages: Math.ceil(total / limit) } };
+  }
+
+  async countLibrary(): Promise<number> {
+    return this.booksRepository.count({ where: { status: BookStatus.IN_LIBRARY } });
+  }
+
   async countByBox(userId: string, role: UserRole, workSessionId?: string): Promise<Array<{ boxId: string; boxNumber: string; count: number }>> {
     const qb = this.booksRepository
       .createQueryBuilder('book')
@@ -487,7 +548,7 @@ export class BooksService {
   async findOne(id: string): Promise<Book> {
     const book = await this.booksRepository.findOne({
       where: { id },
-      relations: ['photos', 'box', 'ocrResult', 'ozonProduct', 'createdBy'],
+      relations: ['photos', 'box', 'ocrResult', 'ozonProduct', 'createdBy', 'libraryOwner'],
     });
     if (!book) {
       throw new NotFoundException('Книга не найдена');
@@ -628,6 +689,7 @@ export class BooksService {
       .leftJoinAndSelect('book.photos', 'photos')
       .leftJoinAndSelect('book.box', 'box')
       .leftJoinAndSelect('book.ozonProduct', 'ozonProduct')
+      .leftJoinAndSelect('book.libraryOwner', 'libraryOwner')
       .where('book.yearPublished <= :maxYear', { maxYear })
       .andWhere('book.printRun IS NOT NULL')
       .andWhere('book.printRun < :maxPrintRun', { maxPrintRun })
@@ -823,7 +885,7 @@ export class BooksService {
     if (pageIds.length > 0) {
       const books = await this.booksRepository.find({
         where: { id: In(pageIds) },
-        relations: ['photos', 'box', 'ozonProduct'],
+        relations: ['photos', 'box', 'ozonProduct', 'libraryOwner'],
       });
       books.forEach((b) => bookMap.set(b.id, b));
     }

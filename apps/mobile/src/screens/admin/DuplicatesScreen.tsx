@@ -31,6 +31,7 @@ import { BookStatus } from "../../types";
 import type { DuplicateGroup, Book } from "../../types";
 import type { AdminMainStackParamList } from "../../navigation/AdminNavigator";
 import { thumbUri } from "../../utils/photos";
+import { libraryLabel } from "../../utils/format";
 
 type Nav = NativeStackNavigationProp<AdminMainStackParamList, "Duplicates">;
 
@@ -121,6 +122,12 @@ function BookMiniCard({
       ) : book.status === BookStatus.ARCHIVED ? (
         <View style={styles.archivedLabel}>
           <AppText style={styles.archivedLabelText}>В архиве</AppText>
+        </View>
+      ) : book.status === BookStatus.IN_LIBRARY ? (
+        <View style={styles.libraryLabel}>
+          <AppText style={styles.libraryLabelText} numberOfLines={2}>
+            {libraryLabel(book)}
+          </AppText>
         </View>
       ) : (
         <TouchableOpacity
@@ -1444,6 +1451,20 @@ const styles = StyleSheet.create({
     color: "#546E7A",
     fontSize: 11,
     fontWeight: "600",
+  },
+  libraryLabel: {
+    marginTop: 8,
+    backgroundColor: "#F3E5F5",
+    borderRadius: 6,
+    paddingVertical: 6,
+    paddingHorizontal: 4,
+    alignItems: "center",
+  },
+  libraryLabelText: {
+    color: "#6A1B9A",
+    fontSize: 11,
+    fontWeight: "600",
+    textAlign: "center",
   },
   notDuplicateBtn: {
     marginTop: 6,

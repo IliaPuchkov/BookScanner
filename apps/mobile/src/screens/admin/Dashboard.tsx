@@ -28,6 +28,7 @@ export function DashboardScreen() {
   const [ozonErrorsCount, setOzonErrorsCount] = useState(0);
   const [underpricedCount, setUnderpricedCount] = useState(0);
   const [copiesCount, setCopiesCount] = useState(0);
+  const [libraryCount, setLibraryCount] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
 
   const fetchData = useCallback(async () => {
@@ -57,6 +58,7 @@ export function DashboardScreen() {
       setOzonErrorsCount(statsData.ozonErrorsCount ?? 0);
       setUnderpricedCount(statsData.underpricedCount ?? 0);
       setCopiesCount(statsData.copiesCount ?? 0);
+      setLibraryCount(statsData.libraryCount ?? 0);
     } catch {
       // silent
     } finally {
@@ -123,7 +125,19 @@ export function DashboardScreen() {
           </AppText>
         </TouchableOpacity>
 
-        {/* Cell 4: Заниженная цена */}
+        {/* Cell 4: Ошибки */}
+        <TouchableOpacity
+          style={[styles.gridCard, styles.cardOrangeRed]}
+          activeOpacity={0.75}
+          onPress={() => navigation.navigate("Errors")}
+        >
+          <AppText style={styles.gridCardTitle}>Ошибки</AppText>
+          <AppText style={[styles.gridCardCount, { color: "#BF360C" }]}>
+            {errorsCount}
+          </AppText>
+        </TouchableOpacity>
+
+        {/* Cell 5: Заниженная цена */}
         <TouchableOpacity
           style={[styles.gridCard, styles.cardAmber]}
           activeOpacity={0.75}
@@ -135,15 +149,15 @@ export function DashboardScreen() {
           </AppText>
         </TouchableOpacity>
 
-        {/* Cell 4: Ошибки */}
+        {/* Cell 6: Домашняя книга */}
         <TouchableOpacity
-          style={[styles.gridCard, styles.cardOrangeRed]}
+          style={[styles.gridCard, styles.cardPurple]}
           activeOpacity={0.75}
-          onPress={() => navigation.navigate("Errors")}
+          onPress={() => navigation.navigate("Library")}
         >
-          <AppText style={styles.gridCardTitle}>Ошибки</AppText>
-          <AppText style={[styles.gridCardCount, { color: "#BF360C" }]}>
-            {errorsCount}
+          <AppText style={styles.gridCardTitle}>Домашняя книга</AppText>
+          <AppText style={[styles.gridCardCount, { color: "#8E24AA" }]}>
+            {libraryCount}
           </AppText>
         </TouchableOpacity>
       </View>

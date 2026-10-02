@@ -23,6 +23,7 @@ import { PaginationDto } from '../common/dto/pagination.dto';
 import { SearchBooksDto } from './dto/search-books.dto';
 import { ResolveDuplicateDto } from './dto/resolve-duplicate.dto';
 import { DuplicateFiltersDto } from './dto/duplicate-filters.dto';
+import { LibraryFiltersDto } from './dto/library-filters.dto';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 
 @ApiTags('Admin')
@@ -152,6 +153,25 @@ export class AdminController {
       search,
       status,
     });
+  }
+
+  // Home library ("Домашняя книга")
+  @Get('books/library')
+  @ApiOperation({ summary: 'Книги в домашних библиотеках администраторов' })
+  getLibraryBooks(@Query() dto: LibraryFiltersDto) {
+    return this.adminService.getLibraryBooks(dto, { ownerId: dto.ownerId, search: dto.search });
+  }
+
+  @Post('books/:id/library')
+  @ApiOperation({ summary: 'Добавить книгу на проверке в мою библиотеку' })
+  addToLibrary(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: any) {
+    return this.adminService.addToLibrary(id, user.id);
+  }
+
+  @Delete('books/:id/library')
+  @ApiOperation({ summary: 'Убрать книгу из библиотеки — вернуть на проверку' })
+  removeFromLibrary(@Param('id', ParseUUIDPipe) id: string) {
+    return this.adminService.removeFromLibrary(id);
   }
 
   // OCR errors

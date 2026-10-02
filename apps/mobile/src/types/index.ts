@@ -20,6 +20,7 @@ export enum BookStatus {
   PUBLISHED = 'published',
   PUBLICATION_FAILED = 'publication_failed',
   ARCHIVED = 'archived',
+  IN_LIBRARY = 'in_library',
 }
 
 export interface User {
@@ -92,6 +93,9 @@ export interface Book {
   isCopy?: boolean;
   isCopyMaster?: boolean;
   ozonProduct?: { errorMessage?: string; status?: string; storeId?: string };
+  libraryOwnerId?: string | null;
+  libraryOwner?: { id: string; fullName: string } | null;
+  addedToLibraryAt?: string | null;
   ocrResult?: { status: string; errorMessage?: string };
   createdAt: string;
   updatedAt: string;
@@ -142,6 +146,7 @@ export interface StatsSummary {
   ozonErrorsCount?: number;
   underpricedCount?: number;
   copiesCount?: number;
+  libraryCount?: number;
   perUser: Array<{
     userId: string;
     fullName: string;

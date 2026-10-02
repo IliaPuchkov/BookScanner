@@ -68,6 +68,7 @@ export class AdminService {
       ozonErrorsCount,
       underpricedCount,
       copiesCount,
+      libraryCount,
     ] = await Promise.all([
       this.booksService.countCreatedSince(startOfToday, endOfToday, true),
       this.booksService.countCreatedSince(periodStart, periodEnd, true),
@@ -82,6 +83,7 @@ export class AdminService {
       this.booksService.countOzonFailed(),
       this.booksService.countUnderpriced(),
       this.booksService.countCopies(),
+      this.booksService.countLibrary(),
     ]);
 
     return {
@@ -97,6 +99,7 @@ export class AdminService {
       ozonErrorsCount,
       underpricedCount,
       copiesCount,
+      libraryCount,
       perUser: perUserRaw.map((u) => {
         const completed = parseInt(u.completedCount, 10);
         const active = parseInt(u.activeCount, 10);
@@ -181,6 +184,18 @@ export class AdminService {
   async unmarkCopies(bookIds: string[]) {
     if (!bookIds.length) return;
     await this.booksService.unmarkCopies(bookIds);
+  }
+
+  async addToLibrary(bookId: string, adminId: string) {
+    return this.booksService.addToLibrary(bookId, adminId);
+  }
+
+  async removeFromLibrary(bookId: string) {
+    return this.booksService.removeFromLibrary(bookId);
+  }
+
+  async getLibraryBooks(pagination: PaginationDto, filters: { ownerId?: string; search?: string }) {
+    return this.booksService.getLibraryBooks(pagination, filters);
   }
 
   async getCopyGroups(dto: {

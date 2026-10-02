@@ -20,3 +20,12 @@ export function formatDate(iso: string): string {
     year: 'numeric',
   });
 }
+
+/** Caption for a book an admin took into their home library ("Домашняя книга"), or null. */
+export function libraryLabel(book: {
+  status?: string;
+  libraryOwner?: { fullName: string } | null;
+}): string | null {
+  if (book.status !== 'in_library') return null;
+  return `В библиотеке: ${book.libraryOwner?.fullName ?? 'администратора'}`;
+}

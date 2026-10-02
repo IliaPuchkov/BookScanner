@@ -22,6 +22,7 @@ import { ErrorsScreen } from "../screens/admin/ErrorsScreen";
 import { DuplicatesScreen } from "../screens/admin/DuplicatesScreen";
 import { UnderpricedScreen } from "../screens/admin/UnderpricedScreen";
 import { CopiesScreen } from "../screens/admin/CopiesScreen";
+import { LibraryScreen } from "../screens/admin/LibraryScreen";
 
 export type AdminMainStackParamList = {
   Dashboard: undefined;
@@ -36,6 +37,7 @@ export type AdminMainStackParamList = {
   Duplicates: undefined;
   Copies: undefined;
   Underpriced: undefined;
+  Library: undefined;
 };
 
 export type AdminCardCreationParamList = {
@@ -130,6 +132,11 @@ function MainStackScreen() {
         name="Underpriced"
         component={UnderpricedScreen}
         options={{ title: "Заниженная цена" }}
+      />
+      <MainStack.Screen
+        name="Library"
+        component={LibraryScreen}
+        options={{ title: "Домашняя книга" }}
       />
     </MainStack.Navigator>
   );

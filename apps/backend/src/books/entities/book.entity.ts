@@ -127,6 +127,17 @@ export class Book {
   @Column({ default: false })
   isCopyMaster: boolean;
 
+  // "Домашняя книга": the admin who took this book into their own collection (status IN_LIBRARY)
+  @ManyToOne(() => User, { onDelete: 'SET NULL', nullable: true })
+  @JoinColumn({ name: 'libraryOwnerId' })
+  libraryOwner: User | null;
+
+  @Column({ type: 'uuid', nullable: true })
+  libraryOwnerId: string | null;
+
+  @Column({ type: 'timestamp', nullable: true })
+  addedToLibraryAt: Date | null;
+
   @Column({ type: 'enum', enum: BookStatus, default: BookStatus.PENDING_REVIEW })
   status: BookStatus;
 

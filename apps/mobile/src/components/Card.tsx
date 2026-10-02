@@ -4,6 +4,7 @@ import { AppText } from './AppText';
 import { BookStatus, UserRole } from "../types";
 import type { Book } from "../types";
 import { thumbUri } from "../utils/photos";
+import { libraryLabel } from "../utils/format";
 
 function formatDate(iso: string): string {
   const d = new Date(iso);
@@ -31,6 +32,8 @@ function getStatusConfig(status: BookStatus): { color: string; label: string } {
       return { color: "#E53935", label: "Ошибка публикации" };
     case BookStatus.ARCHIVED:
       return { color: "#757575", label: "В архиве" };
+    case BookStatus.IN_LIBRARY:
+      return { color: "#8E24AA", label: "Домашняя книга" };
     case BookStatus.PENDING_REVIEW:
     default:
       return { color: "#FB8C00", label: "Ожидает проверки администратора" };
@@ -80,6 +83,9 @@ export function BookCard({ book, onPress, userRole, storeName }: Props) {
         )}
         {storeName ? (
           <AppText style={styles.storeName}>Магазин: {storeName}</AppText>
+        ) : null}
+        {userRole === UserRole.ADMIN && libraryLabel(book) ? (
+          <AppText style={styles.libraryOwner}>{libraryLabel(book)}</AppText>
         ) : null}
         {userRole === "admin" && (
           <View style={styles.meta}>
@@ -178,6 +184,11 @@ const styles = StyleSheet.create({
   storeName: {
     fontSize: 11,
     color: '#1976D2',
+    marginTop: 2,
+  },
+  libraryOwner: {
+    fontSize: 11,
+    color: '#8E24AA',
     marginTop: 2,
   },
 });

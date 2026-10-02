@@ -19,6 +19,7 @@ import { booksService } from "../../services/books.service";
 import type { Book } from "../../types";
 import type { AdminMainStackParamList } from "../../navigation/AdminNavigator";
 import { thumbUri } from "../../utils/photos";
+import { libraryLabel } from "../../utils/format";
 
 type Nav = NativeStackNavigationProp<AdminMainStackParamList, "Underpriced">;
 
@@ -75,6 +76,8 @@ function UnderpricedBookItem({
               </AppText>
             ) : item.status === "pending_review" ? (
               <AppText style={styles.pendingChip}>На проверке</AppText>
+            ) : libraryLabel(item) ? (
+              <AppText style={styles.libraryChip}>{libraryLabel(item)}</AppText>
             ) : null}
           </View>
           {item.price != null ? (
@@ -725,6 +728,15 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: "#2E7D32",
     backgroundColor: "#E8F5E9",
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    fontWeight: "600",
+  },
+  libraryChip: {
+    fontSize: 11,
+    color: "#6A1B9A",
+    backgroundColor: "#F3E5F5",
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 4,

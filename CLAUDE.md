@@ -137,7 +137,7 @@ BookScanner/
 |-------|-------------|
 | `users` | id (UUID), fullName, phone (unique), email (unique), passwordHash, role (OPERATOR/ADMIN), isApproved, refreshToken, failedLoginAttempts (int, default 0), lockedUntil (timestamp, nullable) |
 | `boxes` | id (UUID), boxNumber, description, createdById (FK users) — unique (boxNumber, createdById) |
-| `books` | id (UUID), sku (unique), title, author, isbn, publisher, yearPublished, dimensions (JSONB), weightGross, weightNet, paperType, coverType, pageCount, language, price, annotation, hashtags[], condition, bookType, direction, boxId, createdById, workSessionId, status (PENDING_REVIEW/PENDING_PUBLICATION/PUBLISHED/PUBLICATION_FAILED/ARCHIVED), publishedToOzon, isCopy (boolean, default false) |
+| `books` | id (UUID), sku (unique), title, author, isbn, publisher, yearPublished, dimensions (JSONB), weightGross, weightNet, paperType, coverType, pageCount, language, price, annotation, hashtags[], condition, bookType, direction, boxId, createdById, workSessionId, status (PENDING_REVIEW/PENDING_PUBLICATION/PUBLISHED/PUBLICATION_FAILED/ARCHIVED/IN_LIBRARY), publishedToOzon, isCopy (boolean, default false), libraryOwnerId (FK users, nullable), addedToLibraryAt (timestamp, nullable) |
 | `book_photos` | id (UUID), bookId, fileUrl, fileKey, sortOrder, originalFilename, mimeType, fileSizeBytes |
 | `ocr_results` | id (UUID), bookId (unique), rawOcrText, extractedData (JSONB), photo01Extraction (JSONB), photo02Extraction (JSONB), status, errorMessage |
 | `ozon_products` | id (UUID), bookId (unique), ozonProductId, taskId, publishPayload (JSONB), status, averageMarketPrice, errorMessage |
@@ -153,6 +153,7 @@ Located in `apps/backend/src/database/migrations/`:
 - `1710800000000-BoxNumberUniquePerUser.ts`
 - `1747100000000-AddBookIsCopy.ts` — adds `"isCopy"` boolean column (camelCase, default false)
 - `1747300000000-AddUserLoginLockout.ts` — adds `"failedLoginAttempts"` (int, default 0) and `"lockedUntil"` (timestamp, nullable) to `users` for brute-force lockout
+- `1747600000000-AddBookLibrary.ts` — adds `'in_library'` to `books_status_enum`, plus `"libraryOwnerId"` (uuid FK users, ON DELETE SET NULL) and `"addedToLibraryAt"` to `books`
 
 ---
 
@@ -260,6 +261,9 @@ All routes prefixed with `/api`.
 - `POST /books/duplicates/resolve` — Mark a (book1Id, book2Id) pair as not duplicates
 - `POST /books/mark-copies` — Set `isCopy=true` on a list of bookIds (confirms they are copies)
 - `GET /books/copies/groups` — Books with `isCopy=true`, grouped by ISBN or normalized title. Filters: `search`, `status` (published/not_published/archived)
+- `GET /books/library` — "Домашняя книга": books with status `IN_LIBRARY`. Filters: `ownerId`, `search`
+- `POST /books/:id/library` — Add a PENDING_REVIEW, never-published book to the current admin's library
+- `DELETE /books/:id/library` — Remove from library → back to PENDING_REVIEW
 
 ### Settings (`/api/settings`)
 - `GET /` — Get all system settings (includes Ozon store configs)
@@ -297,7 +301,15 @@ All routes prefixed with `/api`.
 PENDING_REVIEW → (admin approves) → PENDING_PUBLICATION → (ozon publish) → PUBLISHED
                                                                           ↘ PUBLICATION_FAILED
                                                                           ↘ ARCHIVED
+PENDING_REVIEW ⇄ IN_LIBRARY   (admin: ⋮ → "Добавить в мою библиотеку" / "Вернуть на проверку")
 ```
+
+### Home Library ("Домашняя книга")
+
+- An admin can take a book from the PendingReview list into their own collection via the card's ⋮ menu. Status becomes `IN_LIBRARY`, `libraryOwnerId` = that admin.
+- `IN_LIBRARY` books are out of the review queue (status filter) and **blocked from Ozon publication** in both `OzonService.publish` and `publishBulk`.
+- Dashboard tile "Домашняя книга" → `LibraryScreen` (Моя библиотека / Все администраторы, "Вернуть на проверку"). ProductDetail also has "Вернуть на проверку".
+- Copies, Duplicates, BookDatabase (`BookCard`), Rare books and ProductDetail show the caption "В библиотеке: <admin fullName>" via `libraryLabel()` in `apps/mobile/src/utils/format.ts`; library books get no delete button on Copies/Duplicates. Backend queries for those screens join `libraryOwner` (User fields are `@Exclude`d by the global ClassSerializerInterceptor).
 
 ### Copies / Duplicates System
 
@@ -359,7 +371,7 @@ AppNavigator (root)
 │   └── ProfileTab → ProfileScreen
 ├── AdminNavigator (role: ADMIN)
 │   ├── MainTab (AdminMainStack) → Dashboard / Statistics / BookDatabase /
-│   │                              PendingReview / Duplicates / Copies / ProductDetail
+│   │                              PendingReview / Duplicates / Copies / Library / ProductDetail
 │   ├── CardCreationTab → CardsList / CreateCard / CardDetail / PhotoUpload
 │   ├── SettingsTab → SettingsScreen / UserManagement
 │   └── ProfileTab → ProfileScreen

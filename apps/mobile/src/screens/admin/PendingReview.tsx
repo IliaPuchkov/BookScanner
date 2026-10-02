@@ -75,6 +75,7 @@ type PendingBookItemProps = {
   onToggleSelect: (id: string) => void;
   onNavigate: (bookId: string) => void;
   onPublish: (book: Book) => void;
+  onOpenMenu: (book: Book) => void;
 };
 
 const PendingBookItem = React.memo(function PendingBookItem({
@@ -85,6 +86,7 @@ const PendingBookItem = React.memo(function PendingBookItem({
   onToggleSelect,
   onNavigate,
   onPublish,
+  onOpenMenu,
 }: PendingBookItemProps) {
   const coverPhoto = item.photos?.find((p) => p.sortOrder === 0);
   return (
@@ -153,6 +155,17 @@ const PendingBookItem = React.memo(function PendingBookItem({
           )}
         </TouchableOpacity>
       </View>
+      {/* Absolutely positioned and hidden (not removed) in select mode so the
+          card size never changes. */}
+      <TouchableOpacity
+        style={[styles.kebabBtn, selectMode && styles.publishBtnHidden]}
+        onPress={() => onOpenMenu(item)}
+        disabled={selectMode}
+        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+        activeOpacity={0.6}
+      >
+        <AppText style={styles.kebabText}>⋮</AppText>
+      </TouchableOpacity>
     </TouchableOpacity>
   );
 });
@@ -285,6 +298,7 @@ export function PendingReviewScreen() {
   const [publishingId, setPublishingId] = useState<string | null>(null);
   const [menuVisible, setMenuVisible] = useState(false);
   const [selectMode, setSelectMode] = useState(false);
+  const [bookMenu, setBookMenu] = useState<Book | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkPublishing, setBulkPublishing] = useState(false);
   const [bulkDeleting, setBulkDeleting] = useState(false);
@@ -898,6 +912,30 @@ export function PendingReviewScreen() {
     [navigation],
   );
 
+  const handleAddToLibrary = (book: Book) => {
+    Alert.alert(
+      "Добавить в мою библиотеку?",
+      `«${book.title}» исчезнет из списка на проверке и больше не сможет быть загружена в Ozon.`,
+      [
+        { text: "Отмена", style: "cancel" },
+        {
+          text: "Добавить",
+          onPress: async () => {
+            try {
+              await adminService.addToLibrary(book.id);
+              setBooks((prev) => prev.filter((b) => b.id !== book.id));
+            } catch (e: any) {
+              Alert.alert(
+                "Ошибка",
+                e?.response?.data?.message ?? "Не удалось добавить книгу в библиотеку",
+              );
+            }
+          },
+        },
+      ],
+    );
+  };
+
   const sections = useMemo((): BookSection[] => {
     // Map, not a plain object: object keys like "514" are iterated in numeric
     // order, which reordered boxes vs. the server's sort and shifted content
@@ -1120,6 +1158,7 @@ export function PendingReviewScreen() {
         onToggleSelect={toggleSelect}
         onNavigate={handleNavigateToPending}
         onPublish={handlePublish}
+        onOpenMenu={setBookMenu}
       />
     ),
     [
@@ -1465,6 +1504,46 @@ export function PendingReviewScreen() {
                 >
                   <AppText style={styles.menuItemText}>
                     Выбрать несколько
+                  </AppText>
+                </TouchableOpacity>
+              </View>
+            </TouchableWithoutFeedback>
+          </View>
+        </TouchableWithoutFeedback>
+      </Modal>
+      <Modal
+        visible={bookMenu !== null}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setBookMenu(null)}
+      >
+        <TouchableWithoutFeedback onPress={() => setBookMenu(null)}>
+          <View style={styles.bookMenuOverlay}>
+            <TouchableWithoutFeedback>
+              <View style={styles.bookMenuSheet}>
+                <AppText style={styles.bookMenuTitle} numberOfLines={2}>
+                  {bookMenu?.title}
+                </AppText>
+                <TouchableOpacity
+                  style={styles.menuItem}
+                  activeOpacity={0.7}
+                  onPress={() => {
+                    const book = bookMenu;
+                    setBookMenu(null);
+                    if (book) handleAddToLibrary(book);
+                  }}
+                >
+                  <AppText style={styles.menuItemText}>
+                    📚 Добавить в мою библиотеку
+                  </AppText>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.menuItem}
+                  activeOpacity={0.7}
+                  onPress={() => setBookMenu(null)}
+                >
+                  <AppText style={[styles.menuItemText, styles.bookMenuCancel]}>
+                    Отмена
                   </AppText>
                 </TouchableOpacity>
               </View>
@@ -2147,11 +2226,45 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: "#222",
     marginBottom: 2,
+    paddingRight: 22, // room for the kebab button
   },
   author: {
     fontSize: 13,
     color: "#666",
     marginBottom: 4,
+  },
+  kebabBtn: {
+    position: "absolute",
+    top: 6,
+    right: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+  },
+  kebabText: {
+    fontSize: 20,
+    fontWeight: "700",
+    color: "#999",
+  },
+  bookMenuOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.3)",
+    justifyContent: "flex-end",
+  },
+  bookMenuSheet: {
+    backgroundColor: "#fff",
+    borderTopLeftRadius: 14,
+    borderTopRightRadius: 14,
+    paddingTop: 14,
+    paddingBottom: 24,
+  },
+  bookMenuTitle: {
+    fontSize: 13,
+    color: "#888",
+    paddingHorizontal: 16,
+    paddingBottom: 6,
+  },
+  bookMenuCancel: {
+    color: "#888",
   },
   sku: {
     fontSize: 12,

@@ -30,6 +30,8 @@ export enum BookStatus {
   PUBLISHED = "published",
   PUBLICATION_FAILED = "publication_failed",
   ARCHIVED = "archived",
+  /** Taken by an admin into their own collection ("Домашняя книга") — never published. */
+  IN_LIBRARY = "in_library",
 }
 
 export interface IBookCard {
@@ -58,6 +60,8 @@ export interface IBookCard {
   createdById: string;
   status: BookStatus;
   publishedToOzon: Date | null;
+  libraryOwnerId: string | null;
+  addedToLibraryAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
 }

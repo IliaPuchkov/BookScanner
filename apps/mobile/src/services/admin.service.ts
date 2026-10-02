@@ -324,4 +324,25 @@ export const adminService = {
     });
     return data;
   },
+
+  async getLibraryBooks(
+    page = 1,
+    limit = 20,
+    filters: { ownerId?: string; search?: string } = {},
+  ): Promise<PaginatedResponse<Book>> {
+    const { data } = await api.get<PaginatedResponse<Book>>('/admin/books/library', {
+      params: { page, limit, ...filters },
+    });
+    return data;
+  },
+
+  async addToLibrary(bookId: string): Promise<Book> {
+    const { data } = await api.post<Book>(`/admin/books/${bookId}/library`);
+    return data;
+  },
+
+  async removeFromLibrary(bookId: string): Promise<Book> {
+    const { data } = await api.delete<Book>(`/admin/books/${bookId}/library`);
+    return data;
+  },
 };

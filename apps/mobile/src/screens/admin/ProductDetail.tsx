@@ -31,7 +31,7 @@ import type { OzonStore, OzonStoreLimits } from "../../services/admin.service";
 import type { Book, UpdateBookDto } from "../../types";
 import { BookStatus, PaperType, CoverType } from "../../types";
 import type { AdminCardCreationParamList } from "../../navigation/AdminNavigator";
-import { formatPrice, formatDate, formatPrintRun } from "../../utils/format";
+import { formatPrice, formatDate, formatPrintRun, libraryLabel } from "../../utils/format";
 import { bookEvents } from "../../utils/bookEvents";
 
 type Route = RouteProp<AdminCardCreationParamList, "ProductDetail">;
@@ -261,6 +261,11 @@ const STATUS_CONFIG: Record<
     color: "#D32F2F",
     bg: "#FFEBEE",
   },
+  [BookStatus.IN_LIBRARY]: {
+    label: "Домашняя книга",
+    color: "#6A1B9A",
+    bg: "#F3E5F5",
+  },
 };
 
 export function ProductDetailScreen() {
@@ -273,6 +278,7 @@ export function ProductDetailScreen() {
   const [book, setBook] = useState<Book | null>(null);
   const [aiPrice, setAiPrice] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
+  const [removingFromLibrary, setRemovingFromLibrary] = useState(false);
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [publishing, setPublishing] = useState(false);
@@ -486,6 +492,31 @@ export function ProductDetailScreen() {
     }
   };
 
+  const handleRemoveFromLibrary = () => {
+    if (!book) return;
+    Alert.alert(
+      "Вернуть на проверку?",
+      "Книга будет убрана из библиотеки и снова появится в списке на проверке.",
+      [
+        { text: "Отмена", style: "cancel" },
+        {
+          text: "Вернуть",
+          onPress: async () => {
+            setRemovingFromLibrary(true);
+            try {
+              await adminService.removeFromLibrary(book.id);
+              setBook(await booksService.getBook(bookId));
+            } catch {
+              Alert.alert("Ошибка", "Не удалось вернуть книгу на проверку");
+            } finally {
+              setRemovingFromLibrary(false);
+            }
+          },
+        },
+      ],
+    );
+  };
+
   const handleCheckStatus = async () => {
     if (!book) return;
     setCheckingStatus(true);
@@ -646,8 +677,12 @@ export function ProductDetailScreen() {
   const sortedPhotos = [...(book.photos ?? [])].sort(
     (a, b) => a.sortOrder - b.sortOrder,
   );
-  const statusCfg =
+  const baseStatusCfg =
     STATUS_CONFIG[book.status] || STATUS_CONFIG[BookStatus.PENDING_REVIEW];
+  const statusCfg = {
+    ...baseStatusCfg,
+    label: libraryLabel(book) ?? baseStatusCfg.label,
+  };
 
   return (
     <>
@@ -1122,6 +1157,15 @@ export function ProductDetailScreen() {
                       title="Загрузить в Озон"
                       onPress={handlePublish}
                       loading={publishing}
+                      style={{ marginBottom: 8 }}
+                    />
+                  )}
+                  {book.status === BookStatus.IN_LIBRARY && (
+                    <Button
+                      title="Вернуть на проверку"
+                      onPress={handleRemoveFromLibrary}
+                      loading={removingFromLibrary}
+                      variant="secondary"
                       style={{ marginBottom: 8 }}
                     />
                   )}

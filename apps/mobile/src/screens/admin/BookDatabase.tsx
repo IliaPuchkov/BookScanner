@@ -412,7 +412,9 @@ export function BookDatabaseScreen() {
                   ? "Загружено в Ozon"
                   : filters.status === BookStatus.ARCHIVED
                     ? "В архиве"
-                    : undefined
+                    : filters.status === BookStatus.IN_LIBRARY
+                      ? "Домашняя книга"
+                      : undefined
             }
             onOpen={() => openPicker("status")}
             onClear={() => removeFilter("status")}
@@ -541,6 +543,7 @@ export function BookDatabaseScreen() {
                           [BookStatus.PENDING_REVIEW, "На проверке"],
                           [BookStatus.PUBLISHED, "Загружено в Ozon"],
                           [BookStatus.ARCHIVED, "В архиве"],
+                          [BookStatus.IN_LIBRARY, "Домашняя книга"],
                         ] as const
                       ).map(([val, label]) => {
                         const active = filters.status === val;

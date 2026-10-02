@@ -22,6 +22,7 @@ import { BookStatus } from "../../types";
 import type { Book, CopyGroup } from "../../types";
 import type { AdminMainStackParamList } from "../../navigation/AdminNavigator";
 import { thumbUri } from "../../utils/photos";
+import { libraryLabel } from "../../utils/format";
 
 type Nav = NativeStackNavigationProp<AdminMainStackParamList, "Copies">;
 type StatusFilter = "all" | "published" | "not_published" | "archived";
@@ -71,6 +72,7 @@ function BookMiniCard({
     book.ozonProduct?.status === "published" ||
     book.ozonProduct?.status === "PUBLISHED";
   const isArchived = book.status === BookStatus.ARCHIVED;
+  const inLibrary = libraryLabel(book);
   const storeName =
     isPublished && book.ozonProduct?.storeId
       ? (stores.find((s) => s.id === book.ozonProduct!.storeId)?.name ??
@@ -136,6 +138,18 @@ function BookMiniCard({
             >
               <AppText style={styles.statusArchivedText}>В архиве</AppText>
             </View>
+          ) : inLibrary ? (
+            <View
+              style={[
+                styles.statusBadge,
+                styles.statusLibrary,
+                styles.statusBadgeMt,
+              ]}
+            >
+              <AppText style={styles.statusLibraryText} numberOfLines={2}>
+                {inLibrary}
+              </AppText>
+            </View>
           ) : (
             <View
               style={[
@@ -150,7 +164,7 @@ function BookMiniCard({
         </TouchableOpacity>
       </View>
 
-      {!isPublished && !isArchived && (
+      {!isPublished && !isArchived && !inLibrary && (
         <TouchableOpacity
           style={[styles.deleteBtn, deleting && styles.deleteBtnDisabled]}
           onPress={() => onDelete(book)}
@@ -672,6 +686,8 @@ const styles = StyleSheet.create({
   storeBadgeText: { fontSize: 10, fontWeight: "600", color: "#1565C0" },
   statusPendingText: { fontSize: 10, fontWeight: "600", color: "#E65100" },
   statusArchivedText: { fontSize: 10, fontWeight: "600", color: "#546E7A" },
+  statusLibrary: { backgroundColor: "#F3E5F5" },
+  statusLibraryText: { fontSize: 10, fontWeight: "600", color: "#6A1B9A" },
   deleteBtn: {
     marginTop: 8,
     backgroundColor: "#E53935",
