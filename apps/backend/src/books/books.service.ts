@@ -16,7 +16,7 @@ import { BoxesService } from '../boxes/boxes.service';
 import { StatsService } from '../stats/stats.service';
 import { PhotosService } from '../photos/photos.service';
 import { SettingsService } from '../settings/settings.service';
-import { UserRole, BookStatus } from '@bookscanner/shared';
+import { UserRole, BookStatus, isValidIsbn } from '@bookscanner/shared';
 import {
   DEFAULT_HEIGHT_MM,
   DEFAULT_WEIGHT_G,
@@ -27,18 +27,34 @@ import {
   DEFAULT_PRICE,
 } from '@bookscanner/shared';
 
+type DuplicateGroupRaw = { type: 'isbn' | 'title'; key: string; authorKey?: string; ids: string[] };
+
+// Duplicate-matching normalization: lowercase + ё→е + Latin/Cyrillic homoglyphs + whitespace collapse.
+// Intentionally does NOT strip punctuation from titles to avoid false-positive title collisions.
+const HOMOGLYPHS: Record<string, string> = { a: 'а', c: 'с', e: 'е', o: 'о', p: 'р', x: 'х', y: 'у' };
+const normalizeTitle = (s?: string | null) =>
+  (s ?? '')
+    .toLowerCase()
+    .replace(/ё/g, 'е')
+    .replace(/[acoepxy]/g, (ch) => HOMOGLYPHS[ch] ?? ch)
+    .replace(/\s+/g, ' ')
+    .trim();
+// Authors are compared as a sorted bag of name parts, so word order doesn't matter:
+// "Пушкин Александр Сергеевич" = "Александр Сергеевич Пушкин", "Пушкин А.С." = "А. С. Пушкин".
+const normalizeAuthor = (s?: string | null) =>
+  normalizeTitle(s).split(/[\s,.]+/).filter(Boolean).sort().join(' ');
+// Returns the ISBN digits only when the checksum is valid. Placeholders like
+// "978-5-0000-0000-0" and OCR junk like "501(13)-86" are treated as "no ISBN".
+const canonicalIsbn = (s?: string | null): string | null => {
+  const cleaned = (s ?? '').replace(/[-\s]/g, '').toUpperCase();
+  return cleaned && isValidIsbn(cleaned) ? cleaned : null;
+};
+
 @Injectable()
 export class BooksService {
   private readonly logger = new Logger(BooksService.name);
-  private _groupsCache: {
-    isbnGroupsRaw: Array<{ isbn: string; ids: unknown }>;
-    titleGroupsRaw: Array<{ normalizedTitle: string; normalizedAuthor: string; ids: unknown }>;
-    cachedAt: number;
-  } | null = null;
-  private _groupsCachePending: Promise<{
-    isbnGroupsRaw: Array<{ isbn: string; ids: unknown }>;
-    titleGroupsRaw: Array<{ normalizedTitle: string; normalizedAuthor: string; ids: unknown }>;
-  }> | null = null;
+  private _groupsCache: { groups: DuplicateGroupRaw[]; cachedAt: number } | null = null;
+  private _groupsCachePending: Promise<DuplicateGroupRaw[]> | null = null;
 
   private _filterCache: {
     key: string;
@@ -679,14 +695,6 @@ export class BooksService {
       resolvedPairs.map((p) => [p.book1Id, p.book2Id].sort().join(':')),
     );
 
-    const parseIds = (raw: unknown): string[] => {
-      if (Array.isArray(raw)) return raw as string[];
-      if (typeof raw === 'string' && raw.startsWith('{')) {
-        return raw.slice(1, -1).split(',').filter(Boolean);
-      }
-      return raw ? [raw as string] : [];
-    };
-
     const allPairsResolved = (ids: string[]) => {
       for (let i = 0; i < ids.length; i++) {
         for (let j = i + 1; j < ids.length; j++) {
@@ -696,75 +704,12 @@ export class BooksService {
       return true;
     };
 
-    // Step 1: Fetch group keys + IDs (cached for 2 minutes to avoid repeated heavy queries)
-    // Promise deduplication: concurrent requests share one in-flight query instead of each spawning their own.
-    const CACHE_TTL = 2 * 60 * 1000;
+    // Step 1: Fetch candidate groups (cached for 2 minutes, see getDuplicateGroups)
     const now = Date.now();
-    let isbnGroupsRaw: Array<{ isbn: string; ids: unknown }>;
-    let titleGroupsRaw: Array<{ normalizedTitle: string; normalizedAuthor: string; ids: unknown }>;
+    const rawGroups = await this.getDuplicateGroups();
 
-    if (this._groupsCache && now - this._groupsCache.cachedAt < CACHE_TTL) {
-      isbnGroupsRaw = this._groupsCache.isbnGroupsRaw;
-      titleGroupsRaw = this._groupsCache.titleGroupsRaw;
-    } else {
-      if (!this._groupsCachePending) {
-        this._groupsCachePending = Promise.all([
-          this.booksRepository
-            .createQueryBuilder('book')
-            .select('book.isbn', 'isbn')
-            .addSelect('array_agg(book.id)', 'ids')
-            .leftJoin('book.workSession', 'ws')
-            .where('book.isbn IS NOT NULL')
-            .andWhere("book.isbn != ''")
-            .andWhere("(book.work_session_id IS NULL OR ws.status = 'completed')")
-            .groupBy('book.isbn')
-            .having('COUNT(*) >= 2')
-            .getRawMany<{ isbn: string; ids: unknown }>(),
-          // Group by (title + author) so each group already has both fields matched (prob=60).
-          // This avoids noise from generic titles like "Избранное" with many different authors.
-          this.booksRepository.manager.query<{ normalizedTitle: string; normalizedAuthor: string; ids: unknown }[]>(`
-            SELECT
-              REPLACE(LOWER(TRIM(book.title)), 'ё', 'е') AS "normalizedTitle",
-              REPLACE(LOWER(TRIM(book.author)), 'ё', 'е') AS "normalizedAuthor",
-              array_agg(book.id::text) AS ids
-            FROM books book
-            LEFT JOIN work_sessions ws ON ws.id = book.work_session_id
-            WHERE REPLACE(LOWER(TRIM(book.title)), 'ё', 'е') NOT ILIKE 'новая книга'
-              AND (book.isbn IS NULL OR book.isbn = '')
-              AND book.author IS NOT NULL AND TRIM(book.author) <> ''
-              AND (book.work_session_id IS NULL OR ws.status = 'completed')
-            GROUP BY REPLACE(LOWER(TRIM(book.title)), 'ё', 'е'), REPLACE(LOWER(TRIM(book.author)), 'ё', 'е')
-            HAVING COUNT(*) >= 2
-          `),
-        ]).then(([isbnRaw, titleRaw]) => {
-          this._groupsCache = { isbnGroupsRaw: isbnRaw, titleGroupsRaw: titleRaw, cachedAt: Date.now() };
-          this._groupsCachePending = null;
-          this.logger.debug(`[duplicates] cache miss: isbn_groups=${isbnRaw.length} title_groups=${titleRaw.length}`);
-          return { isbnGroupsRaw: isbnRaw, titleGroupsRaw: titleRaw };
-        }).catch((err) => {
-          this._groupsCachePending = null;
-          throw err;
-        });
-      }
-      ({ isbnGroupsRaw, titleGroupsRaw } = await this._groupsCachePending);
-    }
-
-    // Step 2: Filter resolved, build flat list
-    type RawGroup = { type: 'isbn' | 'title'; key: string; authorKey?: string; ids: string[] };
-    const allGroups: RawGroup[] = [];
-
-    for (const g of isbnGroupsRaw) {
-      const ids = parseIds(g.ids);
-      if (ids.length >= 2 && !allPairsResolved(ids)) {
-        allGroups.push({ type: 'isbn', key: g.isbn, ids });
-      }
-    }
-    for (const g of titleGroupsRaw) {
-      const ids = parseIds(g.ids);
-      if (ids.length >= 2 && !allPairsResolved(ids)) {
-        allGroups.push({ type: 'title', key: g.normalizedTitle, authorKey: g.normalizedAuthor, ids });
-      }
-    }
+    // Step 2: Filter resolved
+    const allGroups = rawGroups.filter((g) => !allPairsResolved(g.ids));
 
     // Step 2.5: Server-side filtering
     // Build a set of book IDs matching all book-level filter criteria, then keep only groups
@@ -887,17 +832,6 @@ export class BooksService {
     const isbnDuplicates: GroupResult[] = [];
     const possibleDuplicates: GroupResult[] = [];
 
-    // Normalization consistent with SQL GROUP BY: lowercase + trim + ё→е + homoglyphs.
-    // Intentionally does NOT strip punctuation to avoid false-positive title collisions.
-    const HOMO: Record<string, string> = { a: 'а', c: 'с', e: 'е', o: 'о', p: 'р', x: 'х', y: 'у' };
-    const norm = (s?: string | null) =>
-      (s ?? '')
-        .toLowerCase()
-        .replace(/ё/g, 'е')
-        .replace(/[acoepxy]/g, (ch) => HOMO[ch] ?? ch)
-        .replace(/\s+/g, ' ')
-        .trim();
-
     const calcGroupProbability = (books: Book[], groupType: 'isbn' | 'title') => {
       let bestProb = 0;
       let bestFields: string[] = [];
@@ -908,9 +842,12 @@ export class BooksService {
           // Re-check actual isbn values — do NOT trust groupType alone.
           // The 2-min group cache can serve stale 'isbn' groups for books whose isbn
           // was cleared after cache population, producing isbnMatch=true with isbn=null books.
-          const isbnMatch = !!(a.isbn?.trim() && b.isbn?.trim() && a.isbn.trim() === b.isbn.trim());
-          const na = norm(a?.title); const nb = norm(b?.title);
-          const aa = norm(a?.author); const ab = norm(b?.author);
+          const ia = canonicalIsbn(a.isbn); const ib = canonicalIsbn(b.isbn);
+          // Two different valid ISBNs = different editions, not duplicates.
+          if (ia && ib && ia !== ib) continue;
+          const isbnMatch = !!(ia && ia === ib);
+          const na = normalizeTitle(a?.title); const nb = normalizeTitle(b?.title);
+          const aa = normalizeAuthor(a?.author); const ab = normalizeAuthor(b?.author);
           const titleMatch  = !!(na && nb && na === nb);
           const authorMatch = !!(aa && ab && aa === ab);
           const fields: string[] = [];
@@ -947,31 +884,70 @@ export class BooksService {
   }
 
   async countDuplicates(): Promise<number> {
-    // getCount() strips GROUP BY/HAVING internally — use raw subqueries to count groups
-    // Title groups only count books missing ISBN to avoid double-counting isbn+title groups
-    const [isbnResult, titleResult] = await Promise.all([
-      this.booksRepository.manager.query<[{ cnt: string }]>(`
-        SELECT COUNT(*) AS cnt FROM (
-          SELECT b.isbn FROM books b
-          LEFT JOIN work_sessions ws ON ws.id = b.work_session_id
-          WHERE b.isbn IS NOT NULL AND b.isbn != ''
-            AND (b.work_session_id IS NULL OR ws.status = 'completed')
-          GROUP BY b.isbn HAVING COUNT(*) >= 2
-        ) sub
-      `),
-      this.booksRepository.manager.query<[{ cnt: string }]>(`
-        SELECT COUNT(*) AS cnt FROM (
-          SELECT REPLACE(LOWER(TRIM(b.title)), 'ё', 'е'), REPLACE(LOWER(TRIM(b.author)), 'ё', 'е') FROM books b
-          LEFT JOIN work_sessions ws ON ws.id = b.work_session_id
-          WHERE REPLACE(LOWER(TRIM(b.title)), 'ё', 'е') NOT ILIKE 'новая книга'
-            AND (b.isbn IS NULL OR b.isbn = '')
-            AND b.author IS NOT NULL AND TRIM(b.author) <> ''
-            AND (b.work_session_id IS NULL OR ws.status = 'completed')
-          GROUP BY REPLACE(LOWER(TRIM(b.title)), 'ё', 'е'), REPLACE(LOWER(TRIM(b.author)), 'ё', 'е') HAVING COUNT(*) >= 2
-        ) sub
-      `),
-    ]);
-    return parseInt(isbnResult[0].cnt, 10) + parseInt(titleResult[0].cnt, 10);
+    return (await this.getDuplicateGroups()).length;
+  }
+
+  /**
+   * Candidate duplicate groups among books outside active work sessions.
+   * Grouping happens in JS (not SQL GROUP BY) so it can use ISBN checksum validation and
+   * word-order-insensitive author matching, and stays identical to calcGroupProbability's checks.
+   * Cached for 2 minutes; concurrent callers share one in-flight query.
+   */
+  private async getDuplicateGroups(): Promise<DuplicateGroupRaw[]> {
+    const CACHE_TTL = 2 * 60 * 1000;
+    if (this._groupsCache && Date.now() - this._groupsCache.cachedAt < CACHE_TTL) {
+      return this._groupsCache.groups;
+    }
+    if (!this._groupsCachePending) {
+      this._groupsCachePending = this.booksRepository.manager
+        .query<{ id: string; isbn: string | null; title: string | null; author: string | null }[]>(`
+          SELECT book.id::text AS id, book.isbn, book.title, book.author
+          FROM books book
+          LEFT JOIN work_sessions ws ON ws.id = book.work_session_id
+          WHERE book.work_session_id IS NULL OR ws.status = 'completed'
+        `)
+        .then((rows) => {
+          const byIsbn = new Map<string, string[]>();
+          const byTitle = new Map<string, { title: string; author: string; ids: string[]; withoutIsbn: number }>();
+          for (const r of rows) {
+            const isbn = canonicalIsbn(r.isbn);
+            if (isbn) {
+              const ids = byIsbn.get(isbn);
+              if (ids) ids.push(r.id); else byIsbn.set(isbn, [r.id]);
+            }
+            // Group by (title + author) so each group already has both fields matched (prob=60).
+            // This avoids noise from generic titles like "Избранное" with many different authors.
+            const title = normalizeTitle(r.title);
+            const author = normalizeAuthor(r.author);
+            if (!title || !author || title === 'новая книга') continue;
+            const key = `${title}\n${author}`;
+            let g = byTitle.get(key);
+            if (!g) byTitle.set(key, (g = { title, author, ids: [], withoutIsbn: 0 }));
+            g.ids.push(r.id);
+            if (!isbn) g.withoutIsbn++;
+          }
+
+          const groups: DuplicateGroupRaw[] = [];
+          for (const [isbn, ids] of byIsbn) {
+            if (ids.length >= 2) groups.push({ type: 'isbn', key: isbn, ids });
+          }
+          // Title groups need at least one book without a valid ISBN: pairs where both books have
+          // valid ISBNs are either already an ISBN group (same ISBN) or different editions.
+          for (const g of byTitle.values()) {
+            if (g.ids.length >= 2 && g.withoutIsbn >= 1) {
+              groups.push({ type: 'title', key: g.title, authorKey: g.author, ids: g.ids });
+            }
+          }
+
+          this._groupsCache = { groups, cachedAt: Date.now() };
+          this.logger.debug(`[duplicates] cache miss: books=${rows.length} groups=${groups.length}`);
+          return groups;
+        })
+        .finally(() => {
+          this._groupsCachePending = null;
+        });
+    }
+    return this._groupsCachePending;
   }
 
   private generateSku(boxNumber: string): string {
