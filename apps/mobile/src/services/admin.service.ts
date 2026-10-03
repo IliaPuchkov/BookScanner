@@ -289,8 +289,9 @@ export const adminService = {
     await api.post('/admin/books/duplicates/resolve', { book1Id, book2Id });
   },
 
-  async markCopies(bookIds: string[], masterBookId?: string): Promise<void> {
-    await api.post('/admin/books/mark-copies', { bookIds, masterBookId });
+  /** `restBookIds`: the other books of the duplicate group when only a subset is marked */
+  async markCopies(bookIds: string[], masterBookId?: string, restBookIds?: string[]): Promise<void> {
+    await api.post('/admin/books/mark-copies', { bookIds, masterBookId, restBookIds });
   },
 
   async unmarkCopies(bookIds: string[]): Promise<void> {

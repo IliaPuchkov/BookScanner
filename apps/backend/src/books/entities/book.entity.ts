@@ -127,6 +127,11 @@ export class Book {
   @Column({ default: false })
   isCopyMaster: boolean;
 
+  // Copy set this book belongs to (set by mark-copies). Null for legacy copies,
+  // which are grouped by ISBN/title instead.
+  @Column({ type: 'uuid', nullable: true })
+  copyGroupId: string | null;
+
   // "Домашняя книга": the admin who took this book into their own collection (status IN_LIBRARY)
   @ManyToOne(() => User, { onDelete: 'SET NULL', nullable: true })
   @JoinColumn({ name: 'libraryOwnerId' })

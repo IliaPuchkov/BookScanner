@@ -154,6 +154,7 @@ Located in `apps/backend/src/database/migrations/`:
 - `1747100000000-AddBookIsCopy.ts` — adds `"isCopy"` boolean column (camelCase, default false)
 - `1747300000000-AddUserLoginLockout.ts` — adds `"failedLoginAttempts"` (int, default 0) and `"lockedUntil"` (timestamp, nullable) to `users` for brute-force lockout
 - `1747600000000-AddBookLibrary.ts` — adds `'in_library'` to `books_status_enum`, plus `"libraryOwnerId"` (uuid FK users, ON DELETE SET NULL) and `"addedToLibraryAt"` to `books`
+- `1747700000000-AddBookCopyGroupId.ts` — adds `"copyGroupId"` (uuid, nullable, partial index) to `books`: id of the copy set a book was marked into
 
 ---
 
@@ -309,6 +310,7 @@ PENDING_REVIEW ⇄ IN_LIBRARY   (admin: ⋮ → "Добавить в мою би
 - An admin can take a book from the PendingReview list into their own collection via the card's ⋮ menu. Status becomes `IN_LIBRARY`, `libraryOwnerId` = that admin.
 - `IN_LIBRARY` books are out of the review queue (status filter) and **blocked from Ozon publication** in both `OzonService.publish` and `publishBulk`.
 - Dashboard tile "Домашняя книга" → `LibraryScreen` (Моя библиотека / Все администраторы, "Вернуть на проверку"). ProductDetail also has "Вернуть на проверку".
+- Duplicates and Copies screens have a per-book "В библиотеку" button (PENDING_REVIEW, never-published books). The book **stays in its group** — only its status/caption changes (`replaceBookInGroups` in `utils/bookEvents.ts`); grouping queries don't filter on status.
 - Copies, Duplicates, BookDatabase (`BookCard`), Rare books and ProductDetail show the caption "В библиотеке: <admin fullName>" via `libraryLabel()` in `apps/mobile/src/utils/format.ts`; library books get no delete button on Copies/Duplicates. Backend queries for those screens join `libraryOwner` (User fields are `@Exclude`d by the global ClassSerializerInterceptor).
 
 ### Copies / Duplicates System
@@ -322,11 +324,12 @@ The admin has two dedicated screens for managing books that are potential or con
 - `calcGroupProbability` in `books.service.ts` re-checks actual `isbn` values from the fetched Book entities — it does NOT trust the cached group `type` field. This prevents stale 'isbn' groups (2-min cache TTL) from showing `isbn=null` books as ISBN matches.
 - Title normalization (`normalizeTitle`, shared by grouping and `calcGroupProbability`): lowercase + ё→е + Latin/Cyrillic homoglyph substitution + whitespace collapse. Intentionally does NOT strip punctuation (stripping caused false-positive title collisions).
 - Admin can: mark all as copies (`POST /books/mark-copies`), mark as not copies (adds to `duplicate_resolutions`), or delete individual unpublished books
+- **Splitting a mixed group** (A, A′, B, B′…): "Выбрать копии из группы" → select a subset → "Это копии (N)". Mobile sends `restBookIds` (the unselected books); the backend marks the subset as one copy set and inserts `duplicate_resolutions` for every selected×rest pair. `getDuplicatePairs` splits each candidate group into connected components of *unresolved* pairs (`splitByResolutions`), so the rest stays visible as its own group; parts of one split group carry a `componentKey` (mobile `groupId()` includes it).
 - Published books show "Опубликована на Ozon"; archived books show "В архиве" (no delete)
 - `duplicate_resolutions` table suppresses resolved (book1Id, book2Id) pairs
 
 **Copies screen** (`GET /admin/books/copies/groups`) — "Копии":
-- Shows only books where `isCopy=true`, grouped by ISBN or LOWER(TRIM(title))
+- Shows only books where `isCopy=true`, grouped by `copyGroupId` (set by mark-copies; several copy sets can share an ISBN/title), falling back to ISBN or LOWER(TRIM(title)) for legacy copies with `copyGroupId IS NULL`. Each group has a unique `id`.
 - Each book card shows: cover photo, title, author, SKU, price, box number, publication status
 - Published books display store name (e.g. "Основной магазин") + "Опубликована на Ozon"
 - Archived books show "В архиве" badge (no delete); unpublished books have a delete button

@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
+import { randomUUID } from 'crypto';
 import { nanoid } from 'nanoid';
 import { Book } from './entities/book.entity';
 import { CreateBookDto } from './dto/create-book.dto';
@@ -394,7 +395,21 @@ export class BooksService {
   }
 
   async markAsCopies(bookIds: string[], masterBookId?: string): Promise<void> {
-    await this.booksRepository.update({ id: In(bookIds) }, { isCopy: true, isCopyMaster: false });
+    // Join an existing copy set if any of these books already belongs to one; books of other
+    // existing sets touched here are merged into it.
+    const existing = await this.booksRepository.find({
+      select: ['id', 'copyGroupId'],
+      where: { id: In(bookIds) },
+    });
+    const oldGroupIds = [...new Set(existing.map((b) => b.copyGroupId).filter((g): g is string => !!g))];
+    const copyGroupId = oldGroupIds[0] ?? randomUUID();
+    if (oldGroupIds.length > 1) {
+      await this.booksRepository.update({ copyGroupId: In(oldGroupIds.slice(1)) }, { copyGroupId });
+    }
+    await this.booksRepository.update(
+      { id: In(bookIds) },
+      { isCopy: true, isCopyMaster: false, copyGroupId },
+    );
     if (masterBookId) {
       await this.booksRepository.update({ id: masterBookId }, { isCopyMaster: true });
     }
@@ -403,7 +418,10 @@ export class BooksService {
 
   async unmarkCopies(bookIds: string[]): Promise<void> {
     if (!bookIds.length) return;
-    await this.booksRepository.update({ id: In(bookIds) }, { isCopy: false, isCopyMaster: false });
+    await this.booksRepository.update(
+      { id: In(bookIds) },
+      { isCopy: false, isCopyMaster: false, copyGroupId: null },
+    );
     this._groupsCache = null;
   }
 
@@ -439,18 +457,22 @@ export class BooksService {
 
     const books = await qb.getMany();
 
-    const groupMap = new Map<string, { type: 'isbn' | 'title'; key: string; books: Book[] }>();
+    // `id` is the unique group key; `type`/`key` are only for display. Books with a copyGroupId
+    // are grouped by it (several sets can share an ISBN/title); legacy copies by ISBN or title.
+    const groupMap = new Map<string, { id: string; type: 'isbn' | 'title'; key: string; books: Book[] }>();
     for (const book of books) {
-      if (book.isbn?.trim()) {
-        const gk = `isbn:${book.isbn}`;
-        if (!groupMap.has(gk)) groupMap.set(gk, { type: 'isbn', key: book.isbn, books: [] });
-        groupMap.get(gk)!.books.push(book);
-      } else {
-        const normalized = book.title?.toLowerCase().trim() ?? '';
-        const gk = `title:${normalized}`;
-        if (!groupMap.has(gk)) groupMap.set(gk, { type: 'title', key: book.title ?? '', books: [] });
-        groupMap.get(gk)!.books.push(book);
+      const isbn = book.isbn?.trim();
+      const gk = book.copyGroupId
+        ? `set:${book.copyGroupId}`
+        : isbn
+          ? `isbn:${book.isbn}`
+          : `title:${book.title?.toLowerCase().trim() ?? ''}`;
+      if (!groupMap.has(gk)) {
+        groupMap.set(gk, isbn
+          ? { id: gk, type: 'isbn', key: book.isbn, books: [] }
+          : { id: gk, type: 'title', key: book.title ?? '', books: [] });
       }
+      groupMap.get(gk)!.books.push(book);
     }
 
     const allGroups = Array.from(groupMap.values());
@@ -616,31 +638,45 @@ export class BooksService {
   async remove(id: string, userId: string, role: UserRole): Promise<void> {
     const book = await this.findOne(id);
     this.checkOwnership(book, userId, role);
-    const { boxId, isCopy, isbn, title } = book;
+    const { boxId, isCopy, isbn, title, copyGroupId } = book;
     await this.photosService.deleteAllForBook(id);
     await this.booksRepository.remove(book);
     if (boxId) {
       await this.boxesService.deleteIfEmpty(boxId);
     }
     if (isCopy) {
-      await this.unmarkSingletonCopy(isbn, title);
+      await this.unmarkSingletonCopy(isbn, title, copyGroupId);
     }
   }
 
-  private async unmarkSingletonCopy(isbn: string | null, title: string): Promise<void> {
+  private async unmarkSingletonCopy(
+    isbn: string | null,
+    title: string,
+    copyGroupId: string | null,
+  ): Promise<void> {
     const qb = this.booksRepository
       .createQueryBuilder('book')
       .where('book.isCopy = true');
 
-    if (isbn?.trim()) {
-      qb.andWhere('book.isbn = :isbn', { isbn });
+    if (copyGroupId) {
+      qb.andWhere('book.copyGroupId = :copyGroupId', { copyGroupId });
     } else {
-      qb.andWhere("LOWER(TRIM(book.title)) = LOWER(TRIM(:title))", { title });
+      // Legacy copies (no copy set) are grouped by ISBN/title, same as getCopyGroups
+      qb.andWhere('book.copyGroupId IS NULL');
+      if (isbn?.trim()) {
+        qb.andWhere('book.isbn = :isbn', { isbn });
+      } else {
+        qb.andWhere("LOWER(TRIM(book.title)) = LOWER(TRIM(:title))", { title });
+      }
     }
 
     const remaining = await qb.getMany();
     if (remaining.length === 1) {
-      await this.booksRepository.update(remaining[0].id, { isCopy: false });
+      await this.booksRepository.update(remaining[0].id, {
+        isCopy: false,
+        isCopyMaster: false,
+        copyGroupId: null,
+      });
       this._groupsCache = null;
     }
   }
@@ -890,7 +926,7 @@ export class BooksService {
       books.forEach((b) => bookMap.set(b.id, b));
     }
 
-    type GroupResult = { type: 'isbn' | 'title'; key: string; authorKey?: string; books: Book[]; probability: number; matchedFields: string[] };
+    type GroupResult = { type: 'isbn' | 'title'; key: string; authorKey?: string; componentKey?: string; books: Book[]; probability: number; matchedFields: string[] };
     const isbnDuplicates: GroupResult[] = [];
     const possibleDuplicates: GroupResult[] = [];
 
@@ -928,17 +964,44 @@ export class BooksService {
       return { probability: bestProb, matchedFields: bestFields };
     };
 
-    for (const group of pageGroups) {
-      const books = group.ids.map((id) => bookMap.get(id)).filter(Boolean) as Book[];
-      if (books.length < 2) continue;
-      if (books.some((b) => b.isCopy)) continue;
-      const { probability, matchedFields } = calcGroupProbability(books, group.type);
-      if (probability < 60) continue; // skip Low-probability groups (only 1 field matched)
+    // Split a group into connected components of still-unresolved pairs. A book marked
+    // "not a copy" of all others drops out, and a subset split off as its own copy set
+    // (resolved against the rest) becomes a separate component.
+    const splitByResolutions = (books: Book[]): Book[][] => {
+      const parent = books.map((_, i) => i);
+      const find = (i: number): number => (parent[i] === i ? i : (parent[i] = find(parent[i])));
+      for (let i = 0; i < books.length; i++) {
+        for (let j = i + 1; j < books.length; j++) {
+          if (!resolvedSet.has([books[i].id, books[j].id].sort().join(':'))) {
+            parent[find(i)] = find(j);
+          }
+        }
+      }
+      const components = new Map<number, Book[]>();
+      books.forEach((b, i) => {
+        const root = find(i);
+        const c = components.get(root);
+        if (c) c.push(b); else components.set(root, [b]);
+      });
+      return [...components.values()];
+    };
 
-      if (group.type === 'isbn') {
-        isbnDuplicates.push({ type: 'isbn', key: group.key, books, probability, matchedFields });
-      } else {
-        possibleDuplicates.push({ type: 'title', key: group.key, authorKey: group.authorKey, books, probability, matchedFields });
+    for (const group of pageGroups) {
+      const groupBooks = group.ids.map((id) => bookMap.get(id)).filter(Boolean) as Book[];
+      const components = splitByResolutions(groupBooks);
+      for (const books of components) {
+        if (books.length < 2) continue;
+        if (books.some((b) => b.isCopy)) continue;
+        const { probability, matchedFields } = calcGroupProbability(books, group.type);
+        if (probability < 60) continue; // skip Low-probability groups (only 1 field matched)
+
+        // Several components of one group share type/key/authorKey; componentKey keeps them apart.
+        const componentKey = components.length > 1 ? books[0].id : undefined;
+        if (group.type === 'isbn') {
+          isbnDuplicates.push({ type: 'isbn', key: group.key, componentKey, books, probability, matchedFields });
+        } else {
+          possibleDuplicates.push({ type: 'title', key: group.key, authorKey: group.authorKey, componentKey, books, probability, matchedFields });
+        }
       }
     }
 

@@ -92,6 +92,7 @@ export interface Book {
   priceReviewed?: boolean;
   isCopy?: boolean;
   isCopyMaster?: boolean;
+  copyGroupId?: string | null;
   ozonProduct?: { errorMessage?: string; status?: string; storeId?: string };
   libraryOwnerId?: string | null;
   libraryOwner?: { id: string; fullName: string } | null;
@@ -111,6 +112,8 @@ export interface Box {
 }
 
 export interface CopyGroup {
+  /** Unique group key (copy set id, or legacy ISBN/title key) */
+  id: string;
   type: 'isbn' | 'title';
   key: string;
   books: Book[];
@@ -160,6 +163,8 @@ export interface DuplicateGroup {
   type: 'isbn' | 'title';
   key: string;
   authorKey?: string;
+  /** Set when the server split one candidate group into several parts (same type/key/authorKey) */
+  componentKey?: string;
   books: Book[];
   probability?: number;
   matchedFields?: string[];

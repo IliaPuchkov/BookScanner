@@ -23,6 +23,7 @@ import type { Book, CopyGroup } from "../../types";
 import type { AdminMainStackParamList } from "../../navigation/AdminNavigator";
 import { thumbUri } from "../../utils/photos";
 import { libraryLabel } from "../../utils/format";
+import { bookEvents, replaceBookInGroups } from "../../utils/bookEvents";
 
 type Nav = NativeStackNavigationProp<AdminMainStackParamList, "Copies">;
 type StatusFilter = "all" | "published" | "not_published" | "archived";
@@ -59,12 +60,16 @@ function BookMiniCard({
   onDelete,
   deleting,
   stores,
+  onAddToLibrary,
+  addingToLibrary,
 }: {
   book: Book;
   onNavigate: (id: string) => void;
   onDelete: (book: Book) => void;
   deleting: boolean;
   stores: OzonStore[];
+  onAddToLibrary: (book: Book) => void;
+  addingToLibrary: boolean;
 }) {
   const coverPhoto = book.photos?.find((p) => p.sortOrder === 0);
   const isPublished =
@@ -178,6 +183,20 @@ function BookMiniCard({
           )}
         </TouchableOpacity>
       )}
+      {book.status === BookStatus.PENDING_REVIEW && !book.publishedToOzon && (
+        <TouchableOpacity
+          style={[styles.libraryBtn, addingToLibrary && styles.deleteBtnDisabled]}
+          onPress={() => onAddToLibrary(book)}
+          disabled={addingToLibrary || deleting}
+          activeOpacity={0.7}
+        >
+          {addingToLibrary ? (
+            <ActivityIndicator size="small" color="#6A1B9A" />
+          ) : (
+            <AppText style={styles.libraryBtnText}>В библиотеку</AppText>
+          )}
+        </TouchableOpacity>
+      )}
     </View>
   );
 }
@@ -191,7 +210,11 @@ function CopyGroupCard({
   onUnmark,
   deletingId,
   stores,
+  onAddToLibrary,
+  addingToLibraryId,
 }: {
+  onAddToLibrary: (book: Book) => void;
+  addingToLibraryId: string | null;
   group: CopyGroup;
   onNavigate: (id: string) => void;
   onDelete: (book: Book) => void;
@@ -246,6 +269,8 @@ function CopyGroupCard({
             onDelete={onDelete}
             deleting={deletingId === book.id}
             stores={stores}
+            onAddToLibrary={onAddToLibrary}
+            addingToLibrary={addingToLibraryId === book.id}
           />
         ))}
       </ScrollView>
@@ -293,6 +318,9 @@ export function CopiesScreen() {
   const [hasMore, setHasMore] = useState(false);
   const [total, setTotal] = useState(0);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [addingToLibraryId, setAddingToLibraryId] = useState<string | null>(
+    null,
+  );
   const [stores, setStores] = useState<OzonStore[]>([]);
 
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
@@ -420,6 +448,32 @@ export function CopiesScreen() {
     );
   }, []);
 
+  // The book stays in its copy group — only its status/caption changes to "В библиотеке"
+  const handleAddToLibrary = useCallback((book: Book) => {
+    Alert.alert(
+      "Добавить в мою библиотеку?",
+      `"${book.title}" станет книгой вашей домашней библиотеки и не будет публиковаться на Ozon.`,
+      [
+        { text: "Отмена", style: "cancel" },
+        {
+          text: "Добавить",
+          onPress: async () => {
+            setAddingToLibraryId(book.id);
+            try {
+              const updated = await adminService.addToLibrary(book.id);
+              setGroups((prev) => replaceBookInGroups(prev, updated));
+              bookEvents.emitBookUpdated(updated);
+            } catch {
+              Alert.alert("Ошибка", "Не удалось добавить книгу в библиотеку");
+            } finally {
+              setAddingToLibraryId(null);
+            }
+          },
+        },
+      ],
+    );
+  }, []);
+
   const handleUnmarkGroup = useCallback((group: CopyGroup) => {
     Alert.alert(
       "Вернуть на проверку?",
@@ -429,12 +483,12 @@ export function CopiesScreen() {
         {
           text: "Вернуть",
           onPress: async () => {
-            const groupKey = `${group.type}:${group.key}`;
+            const groupKey = group.id;
             try {
               const bookIds = group.books.map((b) => b.id);
               await adminService.unmarkCopies(bookIds);
               setGroups((prev) =>
-                prev.filter((g) => `${g.type}:${g.key}` !== groupKey),
+                prev.filter((g) => g.id !== groupKey),
               );
               setTotal((t) => Math.max(0, t - 1));
             } catch {
@@ -496,7 +550,7 @@ export function CopiesScreen() {
       ) : (
         <FlatList
           data={groups}
-          keyExtractor={(item) => `${item.type}:${item.key}`}
+          keyExtractor={(item) => item.id}
           renderItem={({ item }) => (
             <CopyGroupCard
               group={item}
@@ -510,6 +564,8 @@ export function CopiesScreen() {
               onUnmark={handleUnmarkGroup}
               deletingId={deletingId}
               stores={stores}
+              onAddToLibrary={handleAddToLibrary}
+              addingToLibraryId={addingToLibraryId}
             />
           )}
           contentContainerStyle={styles.list}
@@ -697,6 +753,16 @@ const styles = StyleSheet.create({
   },
   deleteBtnDisabled: { opacity: 0.5 },
   deleteBtnText: { color: "#fff", fontSize: 12, fontWeight: "600" },
+  libraryBtn: {
+    marginTop: 6,
+    borderWidth: 1,
+    borderColor: "#CE93D8",
+    backgroundColor: "#F3E5F5",
+    borderRadius: 6,
+    paddingVertical: 5,
+    alignItems: "center",
+  },
+  libraryBtnText: { color: "#6A1B9A", fontSize: 12, fontWeight: "600" },
 
   kebabBtn: {
     marginLeft: 4,

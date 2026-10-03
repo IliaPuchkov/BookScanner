@@ -279,6 +279,7 @@ export function ProductDetailScreen() {
   const [aiPrice, setAiPrice] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [removingFromLibrary, setRemovingFromLibrary] = useState(false);
+  const [addingToLibrary, setAddingToLibrary] = useState(false);
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [publishing, setPublishing] = useState(false);
@@ -492,6 +493,33 @@ export function ProductDetailScreen() {
     }
   };
 
+  const handleAddToLibrary = () => {
+    if (!book) return;
+    Alert.alert(
+      "Добавить в мою библиотеку?",
+      `"${book.title}" станет книгой вашей домашней библиотеки и не будет публиковаться на Ozon.`,
+      [
+        { text: "Отмена", style: "cancel" },
+        {
+          text: "Добавить",
+          onPress: async () => {
+            setAddingToLibrary(true);
+            try {
+              await adminService.addToLibrary(book.id);
+              const updated = await booksService.getBook(bookId);
+              setBook(updated);
+              bookEvents.emitBookUpdated(updated);
+            } catch {
+              Alert.alert("Ошибка", "Не удалось добавить книгу в библиотеку");
+            } finally {
+              setAddingToLibrary(false);
+            }
+          },
+        },
+      ],
+    );
+  };
+
   const handleRemoveFromLibrary = () => {
     if (!book) return;
     Alert.alert(
@@ -505,7 +533,9 @@ export function ProductDetailScreen() {
             setRemovingFromLibrary(true);
             try {
               await adminService.removeFromLibrary(book.id);
-              setBook(await booksService.getBook(bookId));
+              const updated = await booksService.getBook(bookId);
+              setBook(updated);
+              bookEvents.emitBookUpdated(updated);
             } catch {
               Alert.alert("Ошибка", "Не удалось вернуть книгу на проверку");
             } finally {
@@ -1160,6 +1190,16 @@ export function ProductDetailScreen() {
                       style={{ marginBottom: 8 }}
                     />
                   )}
+                  {book.status === BookStatus.PENDING_REVIEW &&
+                    !book.publishedToOzon && (
+                      <Button
+                        title="Добавить в мою библиотеку"
+                        onPress={handleAddToLibrary}
+                        loading={addingToLibrary}
+                        variant="secondary"
+                        style={{ marginBottom: 8 }}
+                      />
+                    )}
                   {book.status === BookStatus.IN_LIBRARY && (
                     <Button
                       title="Вернуть на проверку"

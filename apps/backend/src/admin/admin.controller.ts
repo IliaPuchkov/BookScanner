@@ -123,9 +123,15 @@ export class AdminController {
   }
 
   @Post('books/mark-copies')
-  @ApiOperation({ summary: 'Пометить группу книг как копии друг друга' })
-  markCopies(@Body() dto: { bookIds: string[]; masterBookId?: string }) {
-    return this.adminService.markCopies(dto.bookIds, dto.masterBookId);
+  @ApiOperation({
+    summary: 'Пометить группу книг как копии друг друга',
+    description: 'restBookIds — остальные книги группы дубликатов, если админ выделил из неё только часть',
+  })
+  markCopies(
+    @Body() dto: { bookIds: string[]; masterBookId?: string; restBookIds?: string[] },
+    @CurrentUser() user: any,
+  ) {
+    return this.adminService.markCopies(dto.bookIds, dto.masterBookId, dto.restBookIds ?? [], user.id);
   }
 
   @Post('books/unmark-copies')

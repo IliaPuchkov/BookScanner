@@ -176,8 +176,30 @@ export class AdminService {
       .execute();
   }
 
-  async markCopies(bookIds: string[], masterBookId?: string) {
+  /**
+   * Marks `bookIds` as one copy set. `restBookIds` are the other books of the suspected group
+   * when the admin splits it: each selected book is resolved as "not a duplicate" of them,
+   * so the rest stays in the duplicates queue as its own group.
+   */
+  async markCopies(bookIds: string[], masterBookId: string | undefined, restBookIds: string[], adminId: string) {
     if (!bookIds.length) return;
+    const selected = new Set(bookIds);
+    const rest = [...new Set(restBookIds)].filter((id) => !selected.has(id));
+    if (rest.length) {
+      const values = bookIds.flatMap((a) =>
+        rest.map((b) => {
+          const [book1Id, book2Id] = [a, b].sort();
+          return { book1Id, book2Id, resolvedById: adminId };
+        }),
+      );
+      await this.dupResRepository
+        .createQueryBuilder()
+        .insert()
+        .into(DuplicateResolution)
+        .values(values)
+        .orIgnore()
+        .execute();
+    }
     await this.booksService.markAsCopies(bookIds, masterBookId);
   }
 
