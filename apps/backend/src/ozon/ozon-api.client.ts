@@ -212,10 +212,16 @@ export class OzonApiClient {
     return this.post<OzonProductLimits>('/v4/product/info/limit', {}, credentials);
   }
 
-  async getImportInfo(taskId: number): Promise<OzonImportInfoItem[]> {
+  // task_id is scoped to the seller account — query with the same store's credentials
+  // that created the task, otherwise Ozon answers 404 as if the task had expired.
+  async getImportInfo(taskId: number, storeId?: string): Promise<OzonImportInfoItem[]> {
+    const credentials = storeId
+      ? await this.getCredentialsForStore(storeId)
+      : await this.getCredentials();
     const response = await this.post<{ result: { items: OzonImportInfoItem[] } }>(
       '/v1/product/import/info',
       { task_id: taskId },
+      credentials,
     );
     return response.result.items;
   }
@@ -281,6 +287,29 @@ export class OzonApiClient {
       credentials,
     );
     return response.result.items?.[0] ?? null;
+  }
+
+  /** Batch lookup: Ozon accepts up to 1000 offer_ids per /v3/product/list call. */
+  async findProductsByOfferIds(
+    offerIds: string[],
+    storeId?: string,
+  ): Promise<OzonProductListItem[]> {
+    const credentials = storeId
+      ? await this.getCredentialsForStore(storeId)
+      : await this.getCredentials();
+    const found: OzonProductListItem[] = [];
+    for (let i = 0; i < offerIds.length; i += 1000) {
+      const chunk = offerIds.slice(i, i + 1000);
+      const response = await this.post<{
+        result: { items: OzonProductListItem[]; total: number };
+      }>(
+        '/v3/product/list',
+        { filter: { offer_id: chunk, visibility: 'ALL' }, last_id: '', limit: 1000 },
+        credentials,
+      );
+      found.push(...(response.result.items ?? []));
+    }
+    return found;
   }
 
   async getProductAttributesList(

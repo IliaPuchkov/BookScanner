@@ -11,13 +11,15 @@ import { Book } from '../books/entities/book.entity';
 import { BookPhoto } from '../photos/entities/book-photo.entity';
 import { Box } from '../boxes/entities/box.entity';
 import { BooksService } from '../books/books.service';
-import { OzonApiClient, OzonApiError } from './ozon-api.client';
+import { OzonApiClient, OzonApiError, type OzonImportInfoItem } from './ozon-api.client';
 import { buildOzonImportPayload } from './ozon-payload.builder';
 import { mapOzonProductToBook } from './ozon-import.mapper';
 import { BookStatus, OZON_ATTR_BRAND, OZON_ATTR_AUTHOR, OZON_ATTR_PUBLISHER, DEFAULT_PRICE } from '@bookscanner/shared';
 import type { ResolvedOzonData } from './ozon-payload.builder';
 
 const IMPORTABLE_STATUSES = ['importing'];
+// Ozon's product list lags behind the import task — a miss right after import is not proof of failure
+const FAILURE_GRACE_MS = 60 * 60 * 1000;
 const OZON_IMPORT_BOX_NUMBER = 'OZON_IMPORT';
 
 async function resolveBrand(
@@ -73,6 +75,7 @@ async function resolveAuthors(
 @Injectable()
 export class OzonService {
   private readonly logger = new Logger(OzonService.name);
+  private reconcileRunning = false;
 
   constructor(
     @InjectRepository(OzonProduct)
@@ -113,6 +116,34 @@ export class OzonService {
 
     if (!book.photos || book.photos.length < 2) {
       throw new BadRequestException('Необходимо минимум 2 фото для публикации на Ozon.');
+    }
+
+    let ozonProduct = await this.ozonProductRepository.findOne({
+      where: { bookId },
+    });
+
+    // Retrying a book that was sent before: it may already exist on Ozon despite the error
+    // status — then just mark it published instead of importing it again.
+    if (ozonProduct && ozonProduct.status !== 'published' && ozonProduct.status !== 'archived' && book.sku) {
+      try {
+        const allStores = await this.ozonApiClient.getAllStores();
+        const found = await this.findProductByOfferIdWithFallback(
+          book.sku,
+          storeId ?? ozonProduct.storeId ?? null,
+          allStores,
+        );
+        if (found) {
+          await this.markPublished(ozonProduct, found.product_id, found.storeId);
+          this.logger.log(`Book ${bookId}: already on Ozon (product_id=${found.product_id}), skipped re-import`);
+          return {
+            ozonProduct,
+            alreadyPublished: true,
+            message: 'Товар уже есть на Ozon — статус обновлён',
+          };
+        }
+      } catch (error) {
+        this.logger.warn(`Book ${bookId}: pre-publish lookup failed, publishing anyway — ${error}`);
+      }
     }
 
     // Check store limits before publishing
@@ -156,10 +187,6 @@ export class OzonService {
     });
 
     // Create or update OzonProduct entry
-    let ozonProduct = await this.ozonProductRepository.findOne({
-      where: { bookId },
-    });
-
     if (!ozonProduct) {
       ozonProduct = this.ozonProductRepository.create({ bookId });
     }
@@ -214,107 +241,17 @@ export class OzonService {
       throw new BadRequestException('Карточка не была отправлена на Ozon.');
     }
 
-    // Phase 1: Check import status
     if (ozonProduct.status === 'importing' && ozonProduct.taskId) {
       try {
-        const items = await this.ozonApiClient.getImportInfo(
+        const allStores = await this.ozonApiClient.getAllStores();
+        const { items, taskExpired } = await this.fetchImportTask(
           Number(ozonProduct.taskId),
+          ozonProduct.storeId ?? undefined,
         );
-
-        const item = items.find((i) => i.offer_id === ozonProduct.publishPayload?.items?.[0]?.offer_id);
-
-        if (!item) {
-          // Task returned but our offer_id not found — treat as expired/stuck
-          const offerId = ozonProduct.publishPayload?.items?.[0]?.offer_id as string | undefined;
-          if (offerId) {
-            try {
-              const found = await this.ozonApiClient.findProductByOfferId(offerId, ozonProduct.storeId ?? undefined);
-              if (found?.product_id) {
-                ozonProduct.ozonProductId = String(found.product_id);
-                ozonProduct.status = 'published';
-                await this.ozonProductRepository.save(ozonProduct);
-                await this.booksService.updateFromExtraction(bookId, {
-                  status: BookStatus.PUBLISHED,
-                  publishedToOzon: new Date(),
-                });
-                return { status: 'published', message: 'Загружено в Ozon' };
-              }
-            } catch { /* not found */ }
-          }
-          return { status: ozonProduct.status, message: 'Импорт в процессе' };
-        }
-
-        if (item.status === 'imported') {
-          ozonProduct.ozonProductId = String(item.product_id);
-          ozonProduct.status = 'published';
-          await this.ozonProductRepository.save(ozonProduct);
-
-          await this.booksService.updateFromExtraction(bookId, {
-            status: BookStatus.PUBLISHED,
-            publishedToOzon: new Date(),
-          });
-
-          this.logger.log(`Book ${bookId}: successfully imported to Ozon, product_id=${item.product_id}`);
-          return { status: 'published', message: 'Загружено в Ozon' };
-        } else if (item.status === 'failed') {
-          const errorMsg = item.errors?.map((e) => e.message).join('; ') || 'Import failed';
-          // Ozon sometimes reports 'failed' in the import task even when the product was created.
-          // Verify by searching on Ozon before marking as failed.
-          const offerId = ozonProduct.publishPayload?.items?.[0]?.offer_id as string | undefined;
-          if (offerId) {
-            try {
-              const found = await this.ozonApiClient.findProductByOfferId(offerId, ozonProduct.storeId ?? undefined);
-              if (found?.product_id) {
-                ozonProduct.ozonProductId = String(found.product_id);
-                ozonProduct.status = 'published';
-                await this.ozonProductRepository.save(ozonProduct);
-                await this.booksService.updateFromExtraction(bookId, { status: BookStatus.PUBLISHED, publishedToOzon: new Date() });
-                this.logger.log(`Book ${bookId}: task reported failed but product found on Ozon by offer_id=${offerId}, product_id=${found.product_id}`);
-                return { status: 'published', message: 'Загружено в Ozon' };
-              }
-            } catch { /* not found, fall through to mark as failed */ }
-          }
-          ozonProduct.status = 'failed';
-          ozonProduct.errorMessage = errorMsg;
-          await this.ozonProductRepository.save(ozonProduct);
-
-          await this.booksService.updateFromExtraction(bookId, {
-            status: BookStatus.PUBLICATION_FAILED,
-          });
-
-          this.logger.warn(`Book ${bookId}: import failed — ${errorMsg}`);
-          return { status: 'failed', message: errorMsg };
-        } else {
-          return { status: 'importing', message: 'Импорт в процессе' };
-        }
+        const offerId = ozonProduct.publishPayload?.items?.[0]?.offer_id as string | undefined;
+        const item = items.find((i) => i.offer_id === offerId);
+        return await this.resolveImport(ozonProduct, item, taskExpired, allStores);
       } catch (error) {
-        // Ozon хранит task только ~24ч. Если task не найден — ищем товар по offer_id
-        if (error instanceof OzonApiError && error.statusCode === 404) {
-          const offerId = ozonProduct.publishPayload?.items?.[0]?.offer_id as string | undefined;
-          if (offerId) {
-            try {
-              const found = await this.ozonApiClient.findProductByOfferId(offerId, ozonProduct.storeId ?? undefined);
-              if (found?.product_id) {
-                ozonProduct.ozonProductId = String(found.product_id);
-                ozonProduct.status = 'published';
-                await this.ozonProductRepository.save(ozonProduct);
-                await this.booksService.updateFromExtraction(bookId, {
-                  status: BookStatus.PUBLISHED,
-                  publishedToOzon: new Date(),
-                });
-                this.logger.log(`Book ${bookId}: task expired, product found by offer_id=${offerId}, product_id=${found.product_id}`);
-                return { status: 'published', message: 'Загружено в Ozon' };
-              }
-            } catch { /* not found */ }
-          }
-          ozonProduct.status = 'failed';
-          ozonProduct.errorMessage = `Task ${ozonProduct.taskId} expired: product not found on Ozon`;
-          await this.ozonProductRepository.save(ozonProduct);
-          await this.booksService.updateFromExtraction(bookId, { status: BookStatus.PUBLICATION_FAILED });
-          this.logger.warn(`Book ${bookId}: task ${ozonProduct.taskId} expired, product not found`);
-          return { status: 'failed', message: 'Задача импорта истекла — товар не найден на Ozon' };
-        }
-
         this.logger.error(`Error checking import for book ${bookId}`, error);
         return { status: ozonProduct.status, message: 'Ошибка проверки статуса импорта' };
       }
@@ -331,108 +268,197 @@ export class OzonService {
     if (pending.length === 0) return;
     this.logger.log(`Checking ${pending.length} pending Ozon products`);
 
-    // Group by taskId — one bulk task covers many books, fetch import info once per task
+    const allStores = await this.ozonApiClient.getAllStores();
+
+    // Group by store + taskId — one bulk task covers many books, fetch import info once per task.
+    // task_id is per seller account, so the store is part of the key.
     const byTask = new Map<string, typeof pending>();
     for (const product of pending) {
-      const key = product.taskId != null ? String(product.taskId) : `no-task-${product.bookId}`;
+      if (product.taskId == null) continue; // never reached Ozon — resetStuckPublications handles these
+      const key = `${product.storeId ?? ''}:${product.taskId}`;
       if (!byTask.has(key)) byTask.set(key, []);
       byTask.get(key)!.push(product);
     }
 
-    for (const [taskKey, group] of byTask) {
-      if (taskKey.startsWith('no-task-')) {
-        for (const product of group) {
-          try { await this.checkStatus(product.bookId); } catch (e) {
-            this.logger.error(`Error checking status for book ${product.bookId}`, e);
-          }
-        }
-        continue;
-      }
-
-      const taskId = Number(taskKey);
-      let items: Awaited<ReturnType<typeof this.ozonApiClient.getImportInfo>> | null = null;
-      let taskExpired = false;
-
+    for (const group of byTask.values()) {
+      const taskId = Number(group[0].taskId);
+      let task: { items: OzonImportInfoItem[]; taskExpired: boolean };
       try {
-        items = await this.ozonApiClient.getImportInfo(taskId);
+        task = await this.fetchImportTask(taskId, group[0].storeId ?? undefined);
       } catch (error) {
-        if (error instanceof OzonApiError && error.statusCode === 404) {
-          taskExpired = true;
-        } else {
-          this.logger.error(`Error fetching import info for task ${taskId}`, error);
-          continue;
-        }
+        this.logger.error(`Error fetching import info for task ${taskId}`, error);
+        continue;
       }
 
       for (const product of group) {
         try {
           const offerId = product.publishPayload?.items?.[0]?.offer_id as string | undefined;
-
-          if (taskExpired) {
-            if (offerId) {
-              const found = await this.ozonApiClient.findProductByOfferId(offerId, product.storeId ?? undefined);
-              if (found?.product_id) {
-                product.ozonProductId = String(found.product_id);
-                product.status = 'published';
-                await this.ozonProductRepository.save(product);
-                await this.booksService.updateFromExtraction(product.bookId, { status: BookStatus.PUBLISHED, publishedToOzon: new Date() });
-                this.logger.log(`Book ${product.bookId}: task expired, found on Ozon product_id=${found.product_id}`);
-                continue;
-              }
-            }
-            product.status = 'failed';
-            product.errorMessage = `Task ${taskId} expired: product not found on Ozon`;
-            await this.ozonProductRepository.save(product);
-            await this.booksService.updateFromExtraction(product.bookId, { status: BookStatus.PUBLICATION_FAILED });
-            this.logger.warn(`Book ${product.bookId}: task ${taskId} expired, product not found`);
-            continue;
-          }
-
-          const item = items!.find((i) => i.offer_id === offerId);
-
-          if (!item) {
-            if (offerId) {
-              const found = await this.ozonApiClient.findProductByOfferId(offerId, product.storeId ?? undefined);
-              if (found?.product_id) {
-                product.ozonProductId = String(found.product_id);
-                product.status = 'published';
-                await this.ozonProductRepository.save(product);
-                await this.booksService.updateFromExtraction(product.bookId, { status: BookStatus.PUBLISHED, publishedToOzon: new Date() });
-              }
-            }
-          } else if (item.status === 'imported') {
-            product.ozonProductId = String(item.product_id);
-            product.status = 'published';
-            await this.ozonProductRepository.save(product);
-            await this.booksService.updateFromExtraction(product.bookId, { status: BookStatus.PUBLISHED, publishedToOzon: new Date() });
-            this.logger.log(`Book ${product.bookId}: imported to Ozon, product_id=${item.product_id}`);
-          } else if (item.status === 'failed') {
-            const errorMsg = item.errors?.map((e) => e.message).join('; ') || 'Import failed';
-            // Ozon sometimes reports 'failed' in the import task even when the product was created.
-            // Verify by searching on Ozon before marking as failed.
-            if (offerId) {
-              try {
-                const found = await this.ozonApiClient.findProductByOfferId(offerId, product.storeId ?? undefined);
-                if (found?.product_id) {
-                  product.ozonProductId = String(found.product_id);
-                  product.status = 'published';
-                  await this.ozonProductRepository.save(product);
-                  await this.booksService.updateFromExtraction(product.bookId, { status: BookStatus.PUBLISHED, publishedToOzon: new Date() });
-                  this.logger.log(`Book ${product.bookId}: task reported failed but product found on Ozon by offer_id=${offerId}, product_id=${found.product_id}`);
-                  continue;
-                }
-              } catch { /* not found, fall through to mark as failed */ }
-            }
-            product.status = 'failed';
-            product.errorMessage = errorMsg;
-            await this.ozonProductRepository.save(product);
-            await this.booksService.updateFromExtraction(product.bookId, { status: BookStatus.PUBLICATION_FAILED });
-            this.logger.warn(`Book ${product.bookId}: import failed — ${errorMsg}`);
-          }
+          const item = task.items.find((i) => i.offer_id === offerId);
+          await this.resolveImport(product, item, task.taskExpired, allStores);
         } catch (error) {
           this.logger.error(`Error processing book ${product.bookId} in task ${taskId}`, error);
         }
       }
+    }
+  }
+
+  /** Ozon keeps import tasks for ~24h; a 404 means the task expired. */
+  private async fetchImportTask(
+    taskId: number,
+    storeId?: string,
+  ): Promise<{ items: OzonImportInfoItem[]; taskExpired: boolean }> {
+    try {
+      return { items: await this.ozonApiClient.getImportInfo(taskId, storeId), taskExpired: false };
+    } catch (error) {
+      if (error instanceof OzonApiError && error.statusCode === 404) {
+        return { items: [], taskExpired: true };
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * Decides the fate of one 'importing' product from its import-task item.
+   * The import task is not the source of truth: Ozon sometimes reports 'failed' for products
+   * it actually created, and its product list lags behind the task. So before marking a book
+   * failed we look the offer_id up in every store, and we never mark it failed on a lookup
+   * error or within FAILURE_GRACE_MS of the publish — the next cron run tries again.
+   */
+  private async resolveImport(
+    op: OzonProduct,
+    item: OzonImportInfoItem | undefined,
+    taskExpired: boolean,
+    allStores: Array<{ id: string }>,
+  ): Promise<{ status: string; message: string }> {
+    const importing = { status: 'importing', message: 'Импорт в процессе' };
+    const published = { status: 'published', message: 'Загружено в Ozon' };
+
+    // A non-zero product_id means Ozon created the product, even if the task says 'failed'
+    if (item && (item.status === 'imported' || (item.status === 'failed' && item.product_id > 0))) {
+      await this.markPublished(op, item.product_id);
+      this.logger.log(`Book ${op.bookId}: imported to Ozon (task status=${item.status}), product_id=${item.product_id}`);
+      return published;
+    }
+    if (item && item.status !== 'failed') return importing;
+
+    // Task says failed, doesn't list our item, or expired — ask Ozon whether the product exists
+    const offerId = op.publishPayload?.items?.[0]?.offer_id as string | undefined;
+    if (offerId) {
+      let found: { product_id: number; storeId?: string } | null;
+      try {
+        found = await this.findProductByOfferIdWithFallback(offerId, op.storeId ?? null, allStores);
+      } catch (error) {
+        this.logger.warn(`Book ${op.bookId}: lookup of offer_id=${offerId} failed, will retry — ${error}`);
+        return importing;
+      }
+      if (found) {
+        await this.markPublished(op, found.product_id, found.storeId);
+        this.logger.log(`Book ${op.bookId}: found on Ozon by offer_id=${offerId}, product_id=${found.product_id}`);
+        return published;
+      }
+    }
+
+    // Task still running and our item just isn't listed yet
+    if (!item && !taskExpired) return importing;
+    if (Date.now() - op.updatedAt.getTime() < FAILURE_GRACE_MS) return importing;
+
+    if (item) {
+      const errorMsg = item.errors?.map((e) => e.message).join('; ') || 'Import failed';
+      await this.markFailed(op, errorMsg);
+      this.logger.warn(`Book ${op.bookId}: import failed — ${errorMsg}`);
+      return { status: 'failed', message: errorMsg };
+    }
+    await this.markFailed(op, `Task ${op.taskId} expired: product not found on Ozon`);
+    this.logger.warn(`Book ${op.bookId}: task ${op.taskId} expired, product not found`);
+    return { status: 'failed', message: 'Задача импорта истекла — товар не найден на Ozon' };
+  }
+
+  private async markPublished(op: OzonProduct, productId: number | string, storeId?: string) {
+    op.ozonProductId = String(productId);
+    op.status = 'published';
+    op.errorMessage = null as any;
+    if (storeId) op.storeId = storeId;
+    await this.ozonProductRepository.save(op);
+    await this.booksService.updateFromExtraction(op.bookId, {
+      status: BookStatus.PUBLISHED,
+      publishedToOzon: new Date(),
+    });
+  }
+
+  private async markFailed(op: OzonProduct, errorMessage: string) {
+    op.status = 'failed';
+    op.errorMessage = errorMessage;
+    await this.ozonProductRepository.save(op);
+    await this.booksService.updateFromExtraction(op.bookId, { status: BookStatus.PUBLICATION_FAILED });
+  }
+
+  /**
+   * Batch-looks up SKUs (= offer_id) in every configured store.
+   * Returns sku → where it was found. A store that errors is skipped (logged), so a
+   * missing entry means "not found or unknown" — callers must not treat it as proof of absence.
+   */
+  private async findOnOzonBatch(
+    skus: string[],
+  ): Promise<Map<string, { productId: number; storeId?: string }>> {
+    const found = new Map<string, { productId: number; storeId?: string }>();
+    if (!skus.length) return found;
+
+    const stores = await this.ozonApiClient.getAllStores();
+    const storeIds: Array<string | undefined> = stores.length ? stores.map((s) => s.id) : [undefined];
+
+    for (const storeId of storeIds) {
+      const remaining = skus.filter((sku) => !found.has(sku));
+      if (!remaining.length) break;
+      try {
+        const items = await this.ozonApiClient.findProductsByOfferIds(remaining, storeId);
+        for (const item of items) {
+          if (item.product_id && !found.has(item.offer_id)) {
+            found.set(item.offer_id, { productId: item.product_id, storeId });
+          }
+        }
+      } catch (error) {
+        this.logger.error(`findOnOzonBatch: lookup failed for store ${storeId}`, error);
+      }
+    }
+    return found;
+  }
+
+  /**
+   * Re-checks every PUBLICATION_FAILED book against Ozon and flips the ones that actually
+   * exist there to PUBLISHED. Runs hourly from the cron and on demand from the Errors screen.
+   */
+  async reconcileFailedPublications(): Promise<{ checked: number; published: number }> {
+    if (this.reconcileRunning) return { checked: 0, published: 0 };
+    this.reconcileRunning = true;
+    try {
+      const books = await this.bookRepository
+        .createQueryBuilder('book')
+        .leftJoinAndSelect('book.ozonProduct', 'op')
+        .where('book.status = :status', { status: BookStatus.PUBLICATION_FAILED })
+        .andWhere('book.sku IS NOT NULL')
+        .getMany();
+      if (!books.length) return { checked: 0, published: 0 };
+
+      const found = await this.findOnOzonBatch(books.map((b) => b.sku));
+
+      let published = 0;
+      for (const book of books) {
+        const hit = found.get(book.sku);
+        if (!hit) continue;
+        try {
+          const op = book.ozonProduct ?? this.ozonProductRepository.create({ bookId: book.id });
+          await this.markPublished(op, hit.productId, hit.storeId);
+          published++;
+          this.logger.log(`reconcileFailedPublications: book ${book.id} sku=${book.sku} found on Ozon, product_id=${hit.productId}`);
+        } catch (error) {
+          this.logger.error(`reconcileFailedPublications: failed to update book ${book.id}`, error);
+        }
+      }
+
+      this.logger.log(`reconcileFailedPublications: checked=${books.length}, published=${published}`);
+      return { checked: books.length, published };
+    } finally {
+      this.reconcileRunning = false;
     }
   }
 
@@ -480,7 +506,31 @@ export class OzonService {
     }
 
     // 3. Fetch all books
-    const books = await Promise.all(bookIds.map((id) => this.booksService.findOne(id)));
+    let books = await Promise.all(bookIds.map((id) => this.booksService.findOne(id)));
+
+    // 3a. Books sent before may already exist on Ozon despite the error status —
+    // mark those published instead of importing them again.
+    const alreadyPublished: string[] = [];
+    const retried = books.filter(
+      (b) => b.ozonProduct && b.ozonProduct.status !== 'published' && b.ozonProduct.status !== 'archived' && b.sku,
+    );
+    if (retried.length) {
+      const found = await this.findOnOzonBatch(retried.map((b) => b.sku));
+      for (const book of retried) {
+        const hit = found.get(book.sku);
+        if (!hit) continue;
+        try {
+          await this.markPublished(book.ozonProduct, hit.productId, hit.storeId);
+          alreadyPublished.push(book.id);
+        } catch (error) {
+          this.logger.error(`publishBulk: failed to mark book ${book.id} as already published`, error);
+        }
+      }
+      if (alreadyPublished.length) {
+        this.logger.log(`publishBulk: ${alreadyPublished.length} books already on Ozon, skipped re-import`);
+        books = books.filter((b) => !alreadyPublished.includes(b.id));
+      }
+    }
 
     // 4. Dictionary lookups — brand and authors per book.
     // OzonApiClient caches results, so duplicate publisher/author lookups are free after the first.
@@ -587,9 +637,12 @@ export class OzonService {
     return {
       total: bookIds.length,
       succeeded: succeeded.length,
+      alreadyPublished: alreadyPublished.length,
       failed: failed.length,
       failedBooks: failed,
-      message: `Отправлено на модерацию: ${succeeded.length} из ${bookIds.length}`,
+      message: alreadyPublished.length
+        ? `Отправлено на модерацию: ${succeeded.length} из ${bookIds.length}, уже на Ozon: ${alreadyPublished.length}`
+        : `Отправлено на модерацию: ${succeeded.length} из ${bookIds.length}`,
     };
   }
 
@@ -955,58 +1008,6 @@ export class OzonService {
     return { checked: tracked.length, archived, restored };
   }
 
-  /**
-   * Проходит по всем ozon_products со статусом 'failed' и offer_id в publishPayload.
-   * Если товар найден на Ozon (по любому магазину) — помечает как published.
-   */
-  async repairFailedPublications(): Promise<{ checked: number; published: number; skipped: number }> {
-    this.logger.log('repairFailedPublications: started');
-    const failed = await this.ozonProductRepository
-      .createQueryBuilder('op')
-      .where('op.status = :status', { status: 'failed' })
-      .getMany();
-    this.logger.log(`repairFailedPublications: found ${failed.length} failed records`);
-
-    const withOfferId = failed.filter(
-      (op) => op.publishPayload?.items?.[0]?.offer_id,
-    );
-
-    if (!withOfferId.length) {
-      return { checked: 0, published: 0, skipped: 0 };
-    }
-
-    let published = 0;
-    let skipped = 0;
-
-    const allStores = await this.ozonApiClient.getAllStores();
-
-    for (const op of withOfferId) {
-      const offerId = (op.publishPayload as any).items[0].offer_id as string;
-      try {
-        const found = await this.findProductByOfferIdWithFallback(offerId, op.storeId, allStores);
-        if (found?.product_id) {
-          op.ozonProductId = String(found.product_id);
-          op.status = 'published';
-          if (found.storeId) op.storeId = found.storeId;
-          await this.ozonProductRepository.save(op);
-          await this.booksService.updateFromExtraction(op.bookId, {
-            status: BookStatus.PUBLISHED,
-            publishedToOzon: new Date(),
-          });
-          published++;
-          this.logger.log(`repairFailedPublications: book ${op.bookId} offer_id=${offerId} found on Ozon, product_id=${found.product_id}`);
-        } else {
-          skipped++;
-        }
-      } catch {
-        skipped++;
-      }
-    }
-
-    this.logger.log(`repairFailedPublications: checked=${withOfferId.length}, published=${published}, skipped=${skipped}`);
-    return { checked: withOfferId.length, published, skipped };
-  }
-
   async getSyncDiff(storeId?: string): Promise<{
     counts: { ozonActive: number; ozonArchived: number; systemPublished: number; systemArchived: number };
     onOzonNotInSystem: Array<{ productId: number; offerId: string; name: string; visibility: string; storeId: string | null }>;
@@ -1085,7 +1086,11 @@ export class OzonService {
     };
   }
 
-
+  /**
+   * Looks the offer_id up in the given store first, then in every other store.
+   * Returns null only when every lookup succeeded and none found the product; if some store
+   * errored (rate limit, timeout) and nothing was found, rethrows — absence is not proven.
+   */
   private async findProductByOfferIdWithFallback(
     offerId: string,
     storeId: string | null,
@@ -1095,20 +1100,22 @@ export class OzonService {
       ? [storeId, ...allStores.map((s) => s.id).filter((id) => id !== storeId)]
       : allStores.map((s) => s.id);
 
+    if (!storeIds.length) {
+      const found = await this.ozonApiClient.findProductByOfferId(offerId);
+      return found?.product_id ? { product_id: found.product_id } : null;
+    }
+
+    let lookupError: unknown = null;
     for (const id of storeIds) {
       try {
         const found = await this.ozonApiClient.findProductByOfferId(offerId, id);
         if (found?.product_id) return { product_id: found.product_id, storeId: id };
-      } catch { /* try next */ }
+      } catch (error) {
+        lookupError = error;
+      }
     }
 
-    if (!storeIds.length) {
-      try {
-        const found = await this.ozonApiClient.findProductByOfferId(offerId);
-        if (found?.product_id) return { product_id: found.product_id };
-      } catch { /* not found */ }
-    }
-
+    if (lookupError) throw lookupError;
     return null;
   }
 
@@ -1127,6 +1134,7 @@ export class OzonService {
    * дольше 24 часов. Для каждой пытается найти товар на Ozon по offer_id:
    *   - нашли → помечаем как published
    *   - не нашли → сбрасываем книгу в PUBLICATION_FAILED
+   *   - ошибка поиска → оставляем как есть, повторим в следующий раз
    */
   async resetStuckPublications(): Promise<{ checked: number; published: number; failed: number }> {
     const threshold = new Date(Date.now() - 24 * 60 * 60 * 1000);
@@ -1144,37 +1152,28 @@ export class OzonService {
 
     let published = 0;
     let failed = 0;
+    const allStores = await this.ozonApiClient.getAllStores();
 
     for (const op of stuck) {
       const offerId = op.publishPayload?.items?.[0]?.offer_id as string | undefined;
-      let resolved = false;
 
       if (offerId) {
+        let found: { product_id: number; storeId?: string } | null;
         try {
-          const found = await this.ozonApiClient.findProductByOfferId(offerId, op.storeId);
-          if (found?.product_id) {
-            op.ozonProductId = String(found.product_id);
-            op.status = 'published';
-            await this.ozonProductRepository.save(op);
-            await this.booksService.updateFromExtraction(op.bookId, {
-              status: BookStatus.PUBLISHED,
-              publishedToOzon: new Date(),
-            });
-            published++;
-            resolved = true;
-          }
-        } catch { /* не нашли */ }
+          found = await this.findProductByOfferIdWithFallback(offerId, op.storeId ?? null, allStores);
+        } catch (error) {
+          this.logger.warn(`resetStuckPublications: lookup failed for book ${op.bookId}, skipping — ${error}`);
+          continue;
+        }
+        if (found) {
+          await this.markPublished(op, found.product_id, found.storeId);
+          published++;
+          continue;
+        }
       }
 
-      if (!resolved) {
-        op.status = 'failed';
-        op.errorMessage = 'Publication task expired: product not found on Ozon. Please retry.';
-        await this.ozonProductRepository.save(op);
-        await this.booksService.updateFromExtraction(op.bookId, {
-          status: BookStatus.PUBLICATION_FAILED,
-        });
-        failed++;
-      }
+      await this.markFailed(op, 'Publication task expired: product not found on Ozon. Please retry.');
+      failed++;
     }
 
     this.logger.log(`resetStuckPublications: checked=${stuck.length}, published=${published}, failed=${failed}`);

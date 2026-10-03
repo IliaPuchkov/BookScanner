@@ -14,6 +14,13 @@ export class OzonStatusCron {
     await this.ozonService.checkAllPendingStatuses();
   }
 
+  // Books marked failed may still go live on Ozon later (moderation lag, transient errors)
+  @Cron(CronExpression.EVERY_HOUR)
+  async handleFailedReconcile() {
+    this.logger.debug('Running failed-publication reconcile cron');
+    await this.ozonService.reconcileFailedPublications();
+  }
+
   @Cron(CronExpression.EVERY_DAY_AT_2AM)
   async handleArchivedSync() {
     this.logger.debug('Running Ozon archived status sync cron');

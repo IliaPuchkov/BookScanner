@@ -61,14 +61,15 @@ export const booksService = {
     await api.patch(`/books/${id}`, { priceReviewed: true });
   },
 
-  async publishToOzon(bookId: string, storeId?: string): Promise<void> {
-    await api.post('/ozon/publish', { bookId, storeId });
+  async publishToOzon(bookId: string, storeId?: string): Promise<{ alreadyPublished?: boolean; message: string }> {
+    const { data } = await api.post('/ozon/publish', { bookId, storeId });
+    return data;
   },
 
   async publishBulkToOzon(
     bookIds: string[],
     storeId?: string,
-  ): Promise<{ total: number; succeeded: number; failed: number; failedBooks: { id: string; title?: string; error: string }[] }> {
+  ): Promise<{ total: number; succeeded: number; alreadyPublished?: number; failed: number; failedBooks: { id: string; title?: string; error: string }[] }> {
     const { data } = await api.post('/ozon/publish/bulk', { bookIds, storeId }, { timeout: 300_000 });
     return data;
   },

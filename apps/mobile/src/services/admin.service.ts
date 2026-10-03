@@ -243,8 +243,8 @@ export const adminService = {
     return data;
   },
 
-  async repairFailedPublications(): Promise<{ message: string }> {
-    const { data } = await api.post('/ozon/repair-failed-publications', {});
+  async repairFailedPublications(): Promise<{ checked: number; published: number }> {
+    const { data } = await api.post('/ozon/repair-failed-publications', {}, { timeout: 120_000 });
     return data;
   },
 

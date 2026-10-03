@@ -341,6 +341,8 @@ The admin has two dedicated screens for managing books that are potential or con
 - `ozon-payload.builder.ts` — builds Ozon product payload from book entity
 - `ozon-status.cron.ts` — periodic cron to check publication task statuses
 - Multiple Ozon stores configurable via `system_settings` (key pattern: `ozon_store_*`)
+- **Import task ≠ source of truth**: Ozon may report `failed` for products it created, and its product list lags behind the task. `resolveImport()` treats `product_id > 0` as published, looks the offer_id up in *all* stores before failing, never fails on a lookup error, and waits `FAILURE_GRACE_MS` (1h). `task_id` is per seller account — `getImportInfo` must use the publishing store's credentials.
+- `reconcileFailedPublications()` (hourly cron + ⋮ "Проверить статус на Ozon" on ErrorsScreen via `POST /ozon/repair-failed-publications`) batch-checks all `PUBLICATION_FAILED` SKUs on Ozon and flips found ones to `PUBLISHED`. Retry (`publish` / `publishBulk`) also checks Ozon first and returns `alreadyPublished` instead of re-importing.
 - Fixed category: Книги → Букинистические издания (1942–2010) → Печатная книга
 - Annotation prefix: "ВНИМАНИЕ! Книга не новая! Состояние - на фото."
 

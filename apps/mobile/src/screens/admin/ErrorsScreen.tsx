@@ -151,6 +151,7 @@ export function ErrorsScreen() {
   const [ozonSelectMode, setOzonSelectMode] = useState(false);
   const [ozonSelectedIds, setOzonSelectedIds] = useState<Set<string>>(new Set());
   const [retryingId, setRetryingId] = useState<string | null>(null);
+  const [reconciling, setReconciling] = useState(false);
 
   // Header menu
   const [menuVisible, setMenuVisible] = useState(false);
@@ -319,8 +320,8 @@ export function ErrorsScreen() {
     if (action.type === "single") {
       setRetryingId(action.book.id);
       try {
-        await booksService.publishToOzon(action.book.id, storeId);
-        Alert.alert("Готово", "Карточка отправлена на модерацию Ozon");
+        const res = await booksService.publishToOzon(action.book.id, storeId);
+        Alert.alert("Готово", res.alreadyPublished ? res.message : "Карточка отправлена на модерацию Ozon");
         setOzonBooks((prev) => prev.filter((b) => b.id !== action.book.id));
       } catch {
         Alert.alert("Ошибка", "Не удалось загрузить в Озон");
@@ -340,16 +341,36 @@ export function ErrorsScreen() {
           setOzonSelectedIds(new Set());
           setOzonSelectMode(false);
         }
+        const alreadyLine = result.alreadyPublished ? `\nУже были на Ozon: ${result.alreadyPublished}` : "";
         if (result.failed > 0) {
-          Alert.alert("Готово с ошибками", `Отправлено: ${result.succeeded}, не удалось: ${result.failed}`);
+          Alert.alert("Готово с ошибками", `Отправлено: ${result.succeeded}, не удалось: ${result.failed}${alreadyLine}`);
         } else {
-          Alert.alert("Готово", `${result.succeeded} книг отправлено на модерацию Ozon`);
+          Alert.alert("Готово", `${result.succeeded} книг отправлено на модерацию Ozon${alreadyLine}`);
         }
       } catch {
         Alert.alert("Ошибка", "Не удалось загрузить книги в Озон");
       } finally {
         setBulkPublishing(false);
       }
+    }
+  };
+
+  // Books marked failed may actually be live on Ozon — find them and mark as published
+  const handleReconcile = async () => {
+    setReconciling(true);
+    try {
+      const res = await adminService.repairFailedPublications();
+      await fetchOzonBooks();
+      Alert.alert(
+        "Готово",
+        res.published > 0
+          ? `Найдено на Ozon: ${res.published} из ${res.checked}. Они отмечены как опубликованные.`
+          : `Проверено: ${res.checked}. Опубликованных на Ozon среди них не найдено.`,
+      );
+    } catch {
+      Alert.alert("Ошибка", "Не удалось проверить статус на Ozon");
+    } finally {
+      setReconciling(false);
     }
   };
 
@@ -497,6 +518,18 @@ export function ErrorsScreen() {
                 >
                   <AppText style={styles.menuItemText}>Выбрать несколько</AppText>
                 </TouchableOpacity>
+                {activeTab === "ozon" && (
+                  <TouchableOpacity
+                    style={styles.menuItem}
+                    activeOpacity={0.7}
+                    onPress={() => {
+                      setMenuVisible(false);
+                      handleReconcile();
+                    }}
+                  >
+                    <AppText style={styles.menuItemText}>Проверить статус на Ozon</AppText>
+                  </TouchableOpacity>
+                )}
               </View>
             </TouchableWithoutFeedback>
           </View>
@@ -665,7 +698,7 @@ export function ErrorsScreen() {
 
       {/* Ozon tab */}
       {activeTab === "ozon" && (
-        loadingOzon ? (
+        loadingOzon || reconciling ? (
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color="#1976D2" />
           </View>

@@ -481,10 +481,10 @@ export function ProductDetailScreen() {
     if (!book) return;
     setPublishing(true);
     try {
-      await booksService.publishToOzon(book.id, storeId);
+      const res = await booksService.publishToOzon(book.id, storeId);
       const updated = await booksService.getBook(bookId);
       setBook(updated);
-      Alert.alert("Готово", "Карточка отправлена на модерацию Ozon");
+      Alert.alert("Готово", res.alreadyPublished ? res.message : "Карточка отправлена на модерацию Ozon");
     } catch {
       Alert.alert("Ошибка", "Не удалось загрузить в Озон");
     } finally {

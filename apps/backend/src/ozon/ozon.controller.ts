@@ -208,16 +208,8 @@ export class OzonController {
       "Найти на Ozon карточки, помеченные как ошибка, но реально опубликованные",
   })
   repairFailedPublications() {
-    // Fire-and-forget — may take minutes for large datasets
-    this.ozonService
-      .repairFailedPublications()
-      .catch((e) =>
-        this.ozonApiClient["logger"]?.error(
-          "repairFailedPublications background error",
-          e,
-        ),
-      );
-    return { message: "Запущено в фоне. Результат появится в логах сервера." };
+    // Batched lookup (1000 SKUs per Ozon call per store) — fast enough to await
+    return this.ozonService.reconcileFailedPublications();
   }
 
   // ─── Ozon Store Management ───────────────────────────────────────────────
