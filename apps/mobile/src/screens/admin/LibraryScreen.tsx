@@ -18,6 +18,7 @@ import type { AdminMainStackParamList } from "../../navigation/AdminNavigator";
 import { thumbUri } from "../../utils/photos";
 import { formatDate, libraryLabel } from "../../utils/format";
 import { useAuth } from "../../hooks/useAuth";
+import { useUndoable } from "../../context/UndoContext";
 
 type Nav = NativeStackNavigationProp<AdminMainStackParamList, "Library">;
 type Scope = "mine" | "all";
@@ -91,6 +92,7 @@ function LibraryBookItem({
 }
 
 export function LibraryScreen() {
+  const undoable = useUndoable();
   const navigation = useNavigation<Nav>();
   const { user } = useAuth();
   const [scope, setScope] = useState<Scope>("mine");
@@ -147,22 +149,26 @@ export function LibraryScreen() {
         { text: "Отмена", style: "cancel" },
         {
           text: "Вернуть",
-          onPress: async () => {
-            setRemovingId(book.id);
-            try {
-              await adminService.removeFromLibrary(book.id);
-              setBooks((prev) => prev.filter((b) => b.id !== book.id));
-              setTotal((t) => Math.max(0, t - 1));
-            } catch {
-              Alert.alert("Ошибка", "Не удалось вернуть книгу на проверку");
-            } finally {
-              setRemovingId(null);
-            }
-          },
+          onPress: () =>
+            undoable({
+              message: `«${book.title}» вернётся на проверку`,
+              action: async () => {
+                setRemovingId(book.id);
+                try {
+                  await adminService.removeFromLibrary(book.id);
+                  setBooks((prev) => prev.filter((b) => b.id !== book.id));
+                  setTotal((t) => Math.max(0, t - 1));
+                } catch {
+                  Alert.alert("Ошибка", "Не удалось вернуть книгу на проверку");
+                } finally {
+                  setRemovingId(null);
+                }
+              },
+            }),
         },
       ],
     );
-  }, []);
+  }, [undoable]);
 
   const handleLoadMore = () => {
     if (hasMore && !loadingMoreRef.current && !loading) {

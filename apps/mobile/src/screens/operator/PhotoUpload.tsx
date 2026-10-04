@@ -17,6 +17,7 @@ import { booksService } from "../../services/books.service";
 import { photosService } from "../../services/photos.service";
 import { adminService } from "../../services/admin.service";
 import type { OperatorStackParamList } from "../../navigation/OperatorNavigator";
+import { useUndoable } from "../../context/UndoContext";
 
 type Route = RouteProp<OperatorStackParamList, "PhotoUpload">;
 
@@ -38,6 +39,7 @@ const small = items.filter(
 }
 
 export function PhotoUploadScreen() {
+  const undoable = useUndoable();
   const route = useRoute<Route>();
   const { bookId } = route.params;
 
@@ -351,14 +353,18 @@ export function PhotoUploadScreen() {
       {
         text: "Удалить",
         style: "destructive",
-        onPress: async () => {
-          try {
-            await photosService.deletePhoto(bookId, photo.id!);
-            setPhotos((prev) => prev.filter((_, i) => i !== index));
-          } catch {
-            Alert.alert("Ошибка", "Не удалось удалить");
-          }
-        },
+        onPress: () =>
+          undoable({
+            message: "Фото будет удалено",
+            action: async () => {
+              try {
+                await photosService.deletePhoto(bookId, photo.id!);
+                setPhotos((prev) => prev.filter((p) => p.id !== photo.id));
+              } catch {
+                Alert.alert("Ошибка", "Не удалось удалить");
+              }
+            },
+          }),
       },
     ]);
   };

@@ -21,8 +21,10 @@ import { adminService } from '../../services/admin.service';
 import { useAuth } from '../../hooks/useAuth';
 import type { User } from '../../types';
 import { UserRole } from '../../types';
+import { useUndoable } from '../../context/UndoContext';
 
 export function UserManagementScreen() {
+  const undoable = useUndoable();
   const { user: currentUser } = useAuth();
   const [users, setUsers] = useState<User[]>([]);
   const [refreshing, setRefreshing] = useState(false);
@@ -73,16 +75,20 @@ export function UserManagementScreen() {
         { text: 'Отмена', style: 'cancel' },
         {
           text: 'Назначить',
-          onPress: async () => {
-            try {
-              await adminService.updateUser(user.id, { role: 'admin' });
-              setUsers((prev) =>
-                prev.map((u) => (u.id === user.id ? { ...u, role: UserRole.ADMIN } : u)),
-              );
-            } catch {
-              Alert.alert('Ошибка', 'Не удалось изменить роль');
-            }
-          },
+          onPress: () =>
+            undoable({
+              message: `${user.fullName} станет администратором`,
+              action: async () => {
+                try {
+                  await adminService.updateUser(user.id, { role: 'admin' });
+                  setUsers((prev) =>
+                    prev.map((u) => (u.id === user.id ? { ...u, role: UserRole.ADMIN } : u)),
+                  );
+                } catch {
+                  Alert.alert('Ошибка', 'Не удалось изменить роль');
+                }
+              },
+            }),
         },
       ],
     );
@@ -95,14 +101,18 @@ export function UserManagementScreen() {
       {
         text: 'Удалить',
         style: 'destructive',
-        onPress: async () => {
-          try {
-            await adminService.deleteUser(user.id);
-            setUsers((prev) => prev.filter((u) => u.id !== user.id));
-          } catch {
-            Alert.alert('Ошибка', 'Не удалось удалить');
-          }
-        },
+        onPress: () =>
+          undoable({
+            message: `Пользователь ${user.fullName} будет удалён`,
+            action: async () => {
+              try {
+                await adminService.deleteUser(user.id);
+                setUsers((prev) => prev.filter((u) => u.id !== user.id));
+              } catch {
+                Alert.alert('Ошибка', 'Не удалось удалить');
+              }
+            },
+          }),
       },
     ]);
   };

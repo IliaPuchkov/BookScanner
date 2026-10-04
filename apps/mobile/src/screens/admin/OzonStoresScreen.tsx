@@ -20,8 +20,10 @@ import {
   type OzonStore,
   type OzonStoreLimits,
 } from "../../services/admin.service";
+import { useUndoable } from "../../context/UndoContext";
 
 export function OzonStoresScreen() {
+  const undoable = useUndoable();
   const [ozonStores, setOzonStores] = useState<OzonStore[]>([]);
   const [storeLimits, setStoreLimits] = useState<
     Record<string, OzonStoreLimits | null>
@@ -97,14 +99,18 @@ export function OzonStoresScreen() {
       {
         text: "Удалить",
         style: "destructive",
-        onPress: async () => {
-          try {
-            await adminService.removeOzonStore(store.id);
-            setOzonStores((prev) => prev.filter((s) => s.id !== store.id));
-          } catch {
-            Alert.alert("Ошибка", "Не удалось удалить магазин");
-          }
-        },
+        onPress: () =>
+          undoable({
+            message: `Магазин «${store.name}» будет удалён`,
+            action: async () => {
+              try {
+                await adminService.removeOzonStore(store.id);
+                setOzonStores((prev) => prev.filter((s) => s.id !== store.id));
+              } catch {
+                Alert.alert("Ошибка", "Не удалось удалить магазин");
+              }
+            },
+          }),
       },
     ]);
   };

@@ -23,6 +23,7 @@ import { booksService } from "../../services/books.service";
 import { visionService } from "../../services/vision.service";
 import type { Book, UpdateBookDto } from "../../types";
 import type { OperatorStackParamList } from "../../navigation/OperatorNavigator";
+import { useUndoable } from "../../context/UndoContext";
 
 type Route = RouteProp<OperatorStackParamList, "CardDetail">;
 type Nav = NativeStackNavigationProp<OperatorStackParamList, "CardDetail">;
@@ -30,6 +31,7 @@ type Nav = NativeStackNavigationProp<OperatorStackParamList, "CardDetail">;
 const SCREEN_WIDTH = Dimensions.get("window").width;
 
 export function CardDetailScreen() {
+  const undoable = useUndoable();
   const route = useRoute<Route>();
   const navigation = useNavigation<Nav>();
   const { bookId } = route.params;
@@ -155,14 +157,19 @@ export function CardDetailScreen() {
       {
         text: "Удалить",
         style: "destructive",
-        onPress: async () => {
-          try {
-            await booksService.deleteBook(bookId);
-            navigation.goBack();
-          } catch {
-            Alert.alert("Ошибка", "Не удалось удалить");
-          }
-        },
+        onPress: () =>
+          undoable({
+            message: "Карточка будет удалена",
+            action: async () => {
+              try {
+                await booksService.deleteBook(bookId);
+                // The user may have left the card during the undo countdown
+                if (navigation.isFocused()) navigation.goBack();
+              } catch {
+                Alert.alert("Ошибка", "Не удалось удалить");
+              }
+            },
+          }),
       },
     ]);
   };

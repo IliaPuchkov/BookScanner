@@ -342,6 +342,12 @@ The admin has two dedicated screens for managing books that are potential or con
 
 **Key invariant**: `isCopy=true` books with `publishedToOzon IS NULL` are excluded from the pending-review queue and cannot be published to Ozon until `isCopy` is cleared.
 
+### Undo banner for critical actions (mobile, v1.12.0)
+
+- `UndoProvider` (`apps/mobile/src/context/UndoContext.tsx`, mounted in `App.tsx`) + `useUndoable()`: `undoable({ message, action })` shows a banner at the top of the screen ("Отменить действие?" + "Отменить") with a 6 s progress bar (`UNDO_DELAY_MS`); the action runs only when the bar runs out.
+- Used after the existing confirmation `Alert` for every critical action: card/photo/user/store/account deletion (single + bulk), Ozon publication, bulk re-extraction, library add/return, mark copies / not copies / return copies to review, promote to admin, end work session.
+- One banner at a time: a new critical action commits the pending one immediately; the app going to background commits too. The action may run after its screen unmounted — guard navigation (`if (navigation.isFocused()) navigation.goBack()`) and use ids, not list indexes.
+
 ### Ozon Integration
 
 - `ozon-api.client.ts` — raw Ozon API calls

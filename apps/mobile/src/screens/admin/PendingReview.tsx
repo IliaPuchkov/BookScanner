@@ -46,6 +46,7 @@ import type {
 import { formatDate } from "../../utils/format";
 import { bookEvents } from "../../utils/bookEvents";
 import { thumbUri } from "../../utils/photos";
+import { useUndoable } from "../../context/UndoContext";
 
 interface Filters {
   boxId?: string;
@@ -288,6 +289,7 @@ function ListCell({
 }
 
 export function PendingReviewScreen() {
+  const undoable = useUndoable();
   const navigation = useNavigation<Nav>();
   const [books, setBooks] = useState<Book[]>([]);
   const [loading, setLoading] = useState(true);
@@ -920,17 +922,21 @@ export function PendingReviewScreen() {
         { text: "Отмена", style: "cancel" },
         {
           text: "Добавить",
-          onPress: async () => {
-            try {
-              await adminService.addToLibrary(book.id);
-              setBooks((prev) => prev.filter((b) => b.id !== book.id));
-            } catch (e: any) {
-              Alert.alert(
-                "Ошибка",
-                e?.response?.data?.message ?? "Не удалось добавить книгу в библиотеку",
-              );
-            }
-          },
+          onPress: () =>
+            undoable({
+              message: `«${book.title}» будет добавлена в библиотеку`,
+              action: async () => {
+                try {
+                  await adminService.addToLibrary(book.id);
+                  setBooks((prev) => prev.filter((b) => b.id !== book.id));
+                } catch (e: any) {
+                  Alert.alert(
+                    "Ошибка",
+                    e?.response?.data?.message ?? "Не удалось добавить книгу в библиотеку",
+                  );
+                }
+              },
+            }),
         },
       ],
     );
@@ -1090,32 +1096,36 @@ export function PendingReviewScreen() {
         {
           text: "Удалить",
           style: "destructive",
-          onPress: async () => {
-            setBulkDeleting(true);
-            try {
-              const results = await Promise.allSettled(
-                ids.map((id) => booksService.deleteBook(id)),
-              );
-              const failed = results.filter(
-                (r) => r.status === "rejected",
-              ).length;
-              const succeeded = results.length - failed;
-              setBooks((prev) => prev.filter((b) => !ids.includes(b.id)));
-              exitSelectMode();
-              if (failed > 0) {
-                Alert.alert(
-                  "Готово с ошибками",
-                  `Удалено: ${succeeded}, не удалось: ${failed}`,
-                );
-              } else {
-                Alert.alert("Готово", `Удалено ${succeeded} карточек`);
-              }
-            } catch {
-              Alert.alert("Ошибка", "Не удалось выполнить удаление");
-            } finally {
-              setBulkDeleting(false);
-            }
-          },
+          onPress: () =>
+            undoable({
+              message: `Удаление карточек: ${n}`,
+              action: async () => {
+                setBulkDeleting(true);
+                try {
+                  const results = await Promise.allSettled(
+                    ids.map((id) => booksService.deleteBook(id)),
+                  );
+                  const failed = results.filter(
+                    (r) => r.status === "rejected",
+                  ).length;
+                  const succeeded = results.length - failed;
+                  setBooks((prev) => prev.filter((b) => !ids.includes(b.id)));
+                  exitSelectMode();
+                  if (failed > 0) {
+                    Alert.alert(
+                      "Готово с ошибками",
+                      `Удалено: ${succeeded}, не удалось: ${failed}`,
+                    );
+                  } else {
+                    Alert.alert("Готово", `Удалено ${succeeded} карточек`);
+                  }
+                } catch {
+                  Alert.alert("Ошибка", "Не удалось выполнить удаление");
+                } finally {
+                  setBulkDeleting(false);
+                }
+              },
+            }),
         },
       ],
     );
@@ -1132,17 +1142,21 @@ export function PendingReviewScreen() {
         { text: "Отмена", style: "cancel" },
         {
           text: "Распознать",
-          onPress: async () => {
-            setBulkReExtracting(true);
-            try {
-              await visionService.extractBulk(ids);
-              setPolling({ total: n, completed: 0, failed: 0, ids });
-            } catch {
-              Alert.alert("Ошибка", "Не удалось поставить книги в очередь");
-            } finally {
-              setBulkReExtracting(false);
-            }
-          },
+          onPress: () =>
+            undoable({
+              message: `Повторное распознавание карточек: ${n}`,
+              action: async () => {
+                setBulkReExtracting(true);
+                try {
+                  await visionService.extractBulk(ids);
+                  setPolling({ total: n, completed: 0, failed: 0, ids });
+                } catch {
+                  Alert.alert("Ошибка", "Не удалось поставить книги в очередь");
+                } finally {
+                  setBulkReExtracting(false);
+                }
+              },
+            }),
         },
       ],
     );
@@ -1453,7 +1467,11 @@ export function PendingReviewScreen() {
                               { text: "Отмена", style: "cancel" },
                               {
                                 text: "Загрузить",
-                                onPress: () => executePublish(action, store.id),
+                                onPress: () =>
+                                  undoable({
+                                    message: `Книг будет загружено в «${store.name}»: ${count}`,
+                                    action: () => executePublish(action, store.id),
+                                  }),
                               },
                             ],
                           );

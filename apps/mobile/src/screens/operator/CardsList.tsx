@@ -18,10 +18,12 @@ import { sessionStore } from "../../utils/sessionStore";
 import type { Book, WorkSession, PaginatedResponse } from "../../types";
 import type { OperatorStackParamList } from "../../navigation/OperatorNavigator";
 import { useAuth } from "../../hooks/useAuth";
+import { useUndoable } from "../../context/UndoContext";
 
 type Nav = NativeStackNavigationProp<OperatorStackParamList, "CardsList">;
 
 export function CardsListScreen() {
+  const undoable = useUndoable();
   const navigation = useNavigation<Nav>();
   const [session, setSession] = useState<WorkSession | null>(null);
   const [books, setBooks] = useState<Book[]>([]);
@@ -164,19 +166,23 @@ export function CardsListScreen() {
         {
           text: "Завершить",
           style: "destructive",
-          onPress: async () => {
-            try {
-              await sessionsService.endSession(session.id);
-              sessionStore.clear();
-              setSession(null);
-              setBooks([]);
-            } catch (err: any) {
-              Alert.alert(
-                "Ошибка",
-                err?.response?.data?.message || "Не удалось завершить сессию",
-              );
-            }
-          },
+          onPress: () =>
+            undoable({
+              message: "Рабочая сессия будет завершена",
+              action: async () => {
+                try {
+                  await sessionsService.endSession(session.id);
+                  sessionStore.clear();
+                  setSession(null);
+                  setBooks([]);
+                } catch (err: any) {
+                  Alert.alert(
+                    "Ошибка",
+                    err?.response?.data?.message || "Не удалось завершить сессию",
+                  );
+                }
+              },
+            }),
         },
       ],
     );

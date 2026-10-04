@@ -24,6 +24,7 @@ import type { AdminMainStackParamList } from "../../navigation/AdminNavigator";
 import { thumbUri } from "../../utils/photos";
 import { libraryLabel } from "../../utils/format";
 import { bookEvents, replaceBookInGroups } from "../../utils/bookEvents";
+import { useUndoable } from "../../context/UndoContext";
 
 type Nav = NativeStackNavigationProp<AdminMainStackParamList, "Copies">;
 type StatusFilter = "all" | "published" | "not_published" | "archived";
@@ -309,6 +310,7 @@ function CopyGroupCard({
 const PAGE_SIZE = 15;
 
 export function CopiesScreen() {
+  const undoable = useUndoable();
   const navigation = useNavigation<Nav>();
   const [groups, setGroups] = useState<CopyGroup[]>([]);
   const [loading, setLoading] = useState(true);
@@ -424,29 +426,33 @@ export function CopiesScreen() {
         {
           text: "Удалить",
           style: "destructive",
-          onPress: async () => {
-            setDeletingId(book.id);
-            try {
-              await booksService.deleteBook(book.id);
-              setGroups((prev) =>
-                prev
-                  .map((g) => ({
-                    ...g,
-                    books: g.books.filter((b) => b.id !== book.id),
-                  }))
-                  .filter((g) => g.books.length >= 2),
-              );
-              setTotal((t) => Math.max(0, t - 1));
-            } catch {
-              Alert.alert("Ошибка", "Не удалось удалить карточку");
-            } finally {
-              setDeletingId(null);
-            }
-          },
+          onPress: () =>
+            undoable({
+              message: `Карточка «${book.title}» будет удалена`,
+              action: async () => {
+                setDeletingId(book.id);
+                try {
+                  await booksService.deleteBook(book.id);
+                  setGroups((prev) =>
+                    prev
+                      .map((g) => ({
+                        ...g,
+                        books: g.books.filter((b) => b.id !== book.id),
+                      }))
+                      .filter((g) => g.books.length >= 2),
+                  );
+                  setTotal((t) => Math.max(0, t - 1));
+                } catch {
+                  Alert.alert("Ошибка", "Не удалось удалить карточку");
+                } finally {
+                  setDeletingId(null);
+                }
+              },
+            }),
         },
       ],
     );
-  }, []);
+  }, [undoable]);
 
   // The book stays in its copy group — only its status/caption changes to "В библиотеке"
   const handleAddToLibrary = useCallback((book: Book) => {
@@ -457,22 +463,26 @@ export function CopiesScreen() {
         { text: "Отмена", style: "cancel" },
         {
           text: "Добавить",
-          onPress: async () => {
-            setAddingToLibraryId(book.id);
-            try {
-              const updated = await adminService.addToLibrary(book.id);
-              setGroups((prev) => replaceBookInGroups(prev, updated));
-              bookEvents.emitBookUpdated(updated);
-            } catch {
-              Alert.alert("Ошибка", "Не удалось добавить книгу в библиотеку");
-            } finally {
-              setAddingToLibraryId(null);
-            }
-          },
+          onPress: () =>
+            undoable({
+              message: `«${book.title}» будет добавлена в библиотеку`,
+              action: async () => {
+                setAddingToLibraryId(book.id);
+                try {
+                  const updated = await adminService.addToLibrary(book.id);
+                  setGroups((prev) => replaceBookInGroups(prev, updated));
+                  bookEvents.emitBookUpdated(updated);
+                } catch {
+                  Alert.alert("Ошибка", "Не удалось добавить книгу в библиотеку");
+                } finally {
+                  setAddingToLibraryId(null);
+                }
+              },
+            }),
         },
       ],
     );
-  }, []);
+  }, [undoable]);
 
   const handleUnmarkGroup = useCallback((group: CopyGroup) => {
     Alert.alert(
@@ -482,23 +492,27 @@ export function CopiesScreen() {
         { text: "Отмена", style: "cancel" },
         {
           text: "Вернуть",
-          onPress: async () => {
-            const groupKey = group.id;
-            try {
-              const bookIds = group.books.map((b) => b.id);
-              await adminService.unmarkCopies(bookIds);
-              setGroups((prev) =>
-                prev.filter((g) => g.id !== groupKey),
-              );
-              setTotal((t) => Math.max(0, t - 1));
-            } catch {
-              Alert.alert("Ошибка", "Не удалось вернуть книги на проверку");
-            }
-          },
+          onPress: () =>
+            undoable({
+              message: "Книги группы вернутся на проверку",
+              action: async () => {
+                const groupKey = group.id;
+                try {
+                  const bookIds = group.books.map((b) => b.id);
+                  await adminService.unmarkCopies(bookIds);
+                  setGroups((prev) =>
+                    prev.filter((g) => g.id !== groupKey),
+                  );
+                  setTotal((t) => Math.max(0, t - 1));
+                } catch {
+                  Alert.alert("Ошибка", "Не удалось вернуть книги на проверку");
+                }
+              },
+            }),
         },
       ],
     );
-  }, []);
+  }, [undoable]);
 
   const handleLoadMore = useCallback(() => {
     if (loadingMore || !hasMore || loading) return;

@@ -33,6 +33,7 @@ import type { AdminMainStackParamList } from "../../navigation/AdminNavigator";
 import { thumbUri } from "../../utils/photos";
 import { libraryLabel } from "../../utils/format";
 import { bookEvents, replaceBookInGroups } from "../../utils/bookEvents";
+import { useUndoable } from "../../context/UndoContext";
 
 type Nav = NativeStackNavigationProp<AdminMainStackParamList, "Duplicates">;
 
@@ -456,6 +457,7 @@ type ServerFilters = {
 };
 
 export function DuplicatesScreen() {
+  const undoable = useUndoable();
   const navigation = useNavigation<Nav>();
   const [groups, setGroups] = useState<DuplicateGroup[]>([]);
   const [loading, setLoading] = useState(true);
@@ -647,28 +649,32 @@ export function DuplicatesScreen() {
         {
           text: "Удалить",
           style: "destructive",
-          onPress: async () => {
-            setDeletingId(book.id);
-            try {
-              await booksService.deleteBook(book.id);
-              setGroups((prev) =>
-                prev
-                  .map((g) => ({
-                    ...g,
-                    books: g.books.filter((b) => b.id !== book.id),
-                  }))
-                  .filter((g) => g.books.length >= 2),
-              );
-            } catch {
-              Alert.alert("Ошибка", "Не удалось удалить карточку");
-            } finally {
-              setDeletingId(null);
-            }
-          },
+          onPress: () =>
+            undoable({
+              message: `Карточка «${book.title}» будет удалена`,
+              action: async () => {
+                setDeletingId(book.id);
+                try {
+                  await booksService.deleteBook(book.id);
+                  setGroups((prev) =>
+                    prev
+                      .map((g) => ({
+                        ...g,
+                        books: g.books.filter((b) => b.id !== book.id),
+                      }))
+                      .filter((g) => g.books.length >= 2),
+                  );
+                } catch {
+                  Alert.alert("Ошибка", "Не удалось удалить карточку");
+                } finally {
+                  setDeletingId(null);
+                }
+              },
+            }),
         },
       ],
     );
-  }, []);
+  }, [undoable]);
 
   // The book stays in its group — only its status/caption changes to "В библиотеке"
   const handleAddToLibrary = useCallback((book: Book) => {
@@ -679,22 +685,26 @@ export function DuplicatesScreen() {
         { text: "Отмена", style: "cancel" },
         {
           text: "Добавить",
-          onPress: async () => {
-            setAddingToLibraryId(book.id);
-            try {
-              const updated = await adminService.addToLibrary(book.id);
-              setGroups((prev) => replaceBookInGroups(prev, updated));
-              bookEvents.emitBookUpdated(updated);
-            } catch {
-              Alert.alert("Ошибка", "Не удалось добавить книгу в библиотеку");
-            } finally {
-              setAddingToLibraryId(null);
-            }
-          },
+          onPress: () =>
+            undoable({
+              message: `«${book.title}» будет добавлена в библиотеку`,
+              action: async () => {
+                setAddingToLibraryId(book.id);
+                try {
+                  const updated = await adminService.addToLibrary(book.id);
+                  setGroups((prev) => replaceBookInGroups(prev, updated));
+                  bookEvents.emitBookUpdated(updated);
+                } catch {
+                  Alert.alert("Ошибка", "Не удалось добавить книгу в библиотеку");
+                } finally {
+                  setAddingToLibraryId(null);
+                }
+              },
+            }),
         },
       ],
     );
-  }, []);
+  }, [undoable]);
 
   const handleMarkBookNotDuplicate = useCallback(
     (bookId: string, group: DuplicateGroup) => {
@@ -706,35 +716,39 @@ export function DuplicatesScreen() {
           { text: "Отмена", style: "cancel" },
           {
             text: "Подтвердить",
-            onPress: async () => {
-              setMarkingNotDuplicateId(bookId);
-              try {
-                const others = group.books.filter((b) => b.id !== bookId);
-                await Promise.all(
-                  others.map((other) =>
-                    adminService.resolveDuplicate(bookId, other.id),
-                  ),
-                );
-                setGroups((prev) =>
-                  prev
-                    .map((g) =>
-                      groupId(g) === groupId(group)
-                        ? { ...g, books: g.books.filter((b) => b.id !== bookId) }
-                        : g,
-                    )
-                    .filter((g) => g.books.length >= 2),
-                );
-              } catch {
-                Alert.alert("Ошибка", "Не удалось пометить как не копию");
-              } finally {
-                setMarkingNotDuplicateId(null);
-              }
-            },
+            onPress: () =>
+              undoable({
+                message: `«${book?.title ?? "Книга"}» будет исключена из группы`,
+                action: async () => {
+                  setMarkingNotDuplicateId(bookId);
+                  try {
+                    const others = group.books.filter((b) => b.id !== bookId);
+                    await Promise.all(
+                      others.map((other) =>
+                        adminService.resolveDuplicate(bookId, other.id),
+                      ),
+                    );
+                    setGroups((prev) =>
+                      prev
+                        .map((g) =>
+                          groupId(g) === groupId(group)
+                            ? { ...g, books: g.books.filter((b) => b.id !== bookId) }
+                            : g,
+                        )
+                        .filter((g) => g.books.length >= 2),
+                    );
+                  } catch {
+                    Alert.alert("Ошибка", "Не удалось пометить как не копию");
+                  } finally {
+                    setMarkingNotDuplicateId(null);
+                  }
+                },
+              }),
           },
         ],
       );
     },
-    [],
+    [undoable],
   );
 
   const handleResolve = useCallback((group: DuplicateGroup) => {
@@ -746,60 +760,68 @@ export function DuplicatesScreen() {
         { text: "Отмена", style: "cancel" },
         {
           text: "Пропустить",
-          onPress: async () => {
-            setResolvingKey(groupId(group));
-            try {
-              const pairs: Array<[string, string]> = [];
-              for (let i = 0; i < group.books.length; i++) {
-                for (let j = i + 1; j < group.books.length; j++) {
-                  pairs.push([group.books[i].id, group.books[j].id]);
+          onPress: () =>
+            undoable({
+              message: "Группа будет отмечена как «не копии»",
+              action: async () => {
+                setResolvingKey(groupId(group));
+                try {
+                  const pairs: Array<[string, string]> = [];
+                  for (let i = 0; i < group.books.length; i++) {
+                    for (let j = i + 1; j < group.books.length; j++) {
+                      pairs.push([group.books[i].id, group.books[j].id]);
+                    }
+                  }
+                  await Promise.all(
+                    pairs.map(([id1, id2]) => adminService.resolveDuplicate(id1, id2)),
+                  );
+                  setGroups((prev) => prev.filter((g) => groupId(g) !== groupId(group)));
+                } catch {
+                  Alert.alert("Ошибка", "Не удалось отметить как не копию");
+                } finally {
+                  setResolvingKey(null);
                 }
-              }
-              await Promise.all(
-                pairs.map(([id1, id2]) => adminService.resolveDuplicate(id1, id2)),
-              );
-              setGroups((prev) => prev.filter((g) => groupId(g) !== groupId(group)));
-            } catch {
-              Alert.alert("Ошибка", "Не удалось отметить как не копию");
-            } finally {
-              setResolvingKey(null);
-            }
-          },
+              },
+            }),
         },
       ],
     );
-  }, []);
+  }, [undoable]);
 
   // bookIds: the copy set being marked — the whole group, or a subset split off from it
   const doMarkCopies = useCallback(
-    async (group: DuplicateGroup, bookIds: string[], masterBookId: string | null) => {
-      const gid = groupId(group);
-      setMarkingCopiesKey(gid);
-      try {
-        const restIds = group.books
-          .map((b) => b.id)
-          .filter((id) => !bookIds.includes(id));
-        await adminService.markCopies(
-          bookIds,
-          masterBookId ?? undefined,
-          restIds.length ? restIds : undefined,
-        );
-        setGroups((prev) =>
-          prev
-            .map((g) =>
-              groupId(g) === gid
-                ? { ...g, books: g.books.filter((b) => !bookIds.includes(b.id)) }
-                : g,
-            )
-            .filter((g) => g.books.length >= 2),
-        );
-      } catch {
-        Alert.alert("Ошибка", "Не удалось пометить как копии");
-      } finally {
-        setMarkingCopiesKey(null);
-      }
-    },
-    [],
+    (group: DuplicateGroup, bookIds: string[], masterBookId: string | null) =>
+      undoable({
+        message: `Книг будет помечено как копии: ${bookIds.length}`,
+        action: async () => {
+          const gid = groupId(group);
+          setMarkingCopiesKey(gid);
+          try {
+            const restIds = group.books
+              .map((b) => b.id)
+              .filter((id) => !bookIds.includes(id));
+            await adminService.markCopies(
+              bookIds,
+              masterBookId ?? undefined,
+              restIds.length ? restIds : undefined,
+            );
+            setGroups((prev) =>
+              prev
+                .map((g) =>
+                  groupId(g) === gid
+                    ? { ...g, books: g.books.filter((b) => !bookIds.includes(b.id)) }
+                    : g,
+                )
+                .filter((g) => g.books.length >= 2),
+            );
+          } catch {
+            Alert.alert("Ошибка", "Не удалось пометить как копии");
+          } finally {
+            setMarkingCopiesKey(null);
+          }
+        },
+      }),
+    [undoable],
   );
 
   const handleMarkCopies = useCallback(

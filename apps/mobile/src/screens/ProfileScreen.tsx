@@ -21,6 +21,7 @@ import {
   PUBLIC_OFFER_TITLE,
   PUBLIC_OFFER_TEXT,
 } from "../constants/legal";
+import { useUndoable } from "../context/UndoContext";
 
 const FONT_SIZE_LABELS: Record<FontSizeOption, string> = {
   small: 'А',
@@ -37,6 +38,7 @@ const FONT_SIZE_DISPLAY: Record<FontSizeOption, number> = {
 };
 
 export function ProfileScreen() {
+  const undoable = useUndoable();
   const { user, logout } = useAuth();
   const { fontSize, setFontSize } = useTheme();
   const isAdmin = user?.role === "admin";
@@ -60,7 +62,8 @@ export function ProfileScreen() {
         {
           text: "Удалить",
           style: "destructive",
-          onPress: confirmDeleteAccount,
+          onPress: () =>
+            undoable({ message: "Аккаунт будет удалён", action: confirmDeleteAccount }),
         },
       ],
     );

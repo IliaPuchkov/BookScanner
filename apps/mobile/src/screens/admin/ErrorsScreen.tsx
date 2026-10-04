@@ -20,6 +20,7 @@ import { visionService } from "../../services/vision.service";
 import type { Book } from "../../types";
 import type { AdminMainStackParamList } from "../../navigation/AdminNavigator";
 import { thumbUri } from "../../utils/photos";
+import { useUndoable } from "../../context/UndoContext";
 
 type Nav = NativeStackNavigationProp<AdminMainStackParamList, "Errors">;
 
@@ -134,6 +135,7 @@ const OzonFailedItem = React.memo(function OzonFailedItem({
 });
 
 export function ErrorsScreen() {
+  const undoable = useUndoable();
   const navigation = useNavigation<Nav>();
   const [activeTab, setActiveTab] = useState<"ocr" | "ozon">("ocr");
 
@@ -398,32 +400,36 @@ export function ErrorsScreen() {
         {
           text: "Удалить",
           style: "destructive",
-          onPress: async () => {
-            setBulkDeleting(true);
-            try {
-              const results = await Promise.allSettled(ids.map((id) => booksService.deleteBook(id)));
-              const succeeded = results.filter((r) => r.status === "fulfilled").length;
-              const failed = results.filter((r) => r.status === "rejected").length;
-              if (activeTab === "ocr") {
-                setOcrBooks((prev) => prev.filter((b) => !ids.includes(b.id)));
-                setOcrSelectedIds(new Set());
-                setOcrSelectMode(false);
-              } else {
-                setOzonBooks((prev) => prev.filter((b) => !ids.includes(b.id)));
-                setOzonSelectedIds(new Set());
-                setOzonSelectMode(false);
-              }
-              if (failed > 0) {
-                Alert.alert("Готово с ошибками", `Удалено: ${succeeded}, не удалось: ${failed}`);
-              } else {
-                Alert.alert("Готово", `Удалено ${succeeded} карточек`);
-              }
-            } catch {
-              Alert.alert("Ошибка", "Не удалось выполнить удаление");
-            } finally {
-              setBulkDeleting(false);
-            }
-          },
+          onPress: () =>
+            undoable({
+              message: `Удаление карточек: ${ids.length}`,
+              action: async () => {
+                setBulkDeleting(true);
+                try {
+                  const results = await Promise.allSettled(ids.map((id) => booksService.deleteBook(id)));
+                  const succeeded = results.filter((r) => r.status === "fulfilled").length;
+                  const failed = results.filter((r) => r.status === "rejected").length;
+                  if (activeTab === "ocr") {
+                    setOcrBooks((prev) => prev.filter((b) => !ids.includes(b.id)));
+                    setOcrSelectedIds(new Set());
+                    setOcrSelectMode(false);
+                  } else {
+                    setOzonBooks((prev) => prev.filter((b) => !ids.includes(b.id)));
+                    setOzonSelectedIds(new Set());
+                    setOzonSelectMode(false);
+                  }
+                  if (failed > 0) {
+                    Alert.alert("Готово с ошибками", `Удалено: ${succeeded}, не удалось: ${failed}`);
+                  } else {
+                    Alert.alert("Готово", `Удалено ${succeeded} карточек`);
+                  }
+                } catch {
+                  Alert.alert("Ошибка", "Не удалось выполнить удаление");
+                } finally {
+                  setBulkDeleting(false);
+                }
+              },
+            }),
         },
       ],
     );
@@ -441,25 +447,29 @@ export function ErrorsScreen() {
         { text: "Отмена", style: "cancel" },
         {
           text: "Распознать",
-          onPress: async () => {
-            setBulkReExtracting(true);
-            try {
-              await visionService.extractBulk(ids);
-              if (activeTab === "ocr") {
-                setOcrBooks((prev) => prev.filter((b) => !ids.includes(b.id)));
-                setOcrSelectedIds(new Set());
-                setOcrSelectMode(false);
-              } else {
-                setOzonSelectedIds(new Set());
-                setOzonSelectMode(false);
-              }
-              Alert.alert("Готово", "Книги поставлены в очередь на распознавание");
-            } catch {
-              Alert.alert("Ошибка", "Не удалось поставить книги в очередь");
-            } finally {
-              setBulkReExtracting(false);
-            }
-          },
+          onPress: () =>
+            undoable({
+              message: `Повторное распознавание карточек: ${n}`,
+              action: async () => {
+                setBulkReExtracting(true);
+                try {
+                  await visionService.extractBulk(ids);
+                  if (activeTab === "ocr") {
+                    setOcrBooks((prev) => prev.filter((b) => !ids.includes(b.id)));
+                    setOcrSelectedIds(new Set());
+                    setOcrSelectMode(false);
+                  } else {
+                    setOzonSelectedIds(new Set());
+                    setOzonSelectMode(false);
+                  }
+                  Alert.alert("Готово", "Книги поставлены в очередь на распознавание");
+                } catch {
+                  Alert.alert("Ошибка", "Не удалось поставить книги в очередь");
+                } finally {
+                  setBulkReExtracting(false);
+                }
+              },
+            }),
         },
       ],
     );
@@ -569,7 +579,14 @@ export function ErrorsScreen() {
                             `Загрузить ${count} ${count === 1 ? "книгу" : "книг"} в магазин "${store.name}"?`,
                             [
                               { text: "Отмена", style: "cancel" },
-                              { text: "Загрузить", onPress: () => executePublish(action, store.id) },
+                              {
+                                text: "Загрузить",
+                                onPress: () =>
+                                  undoable({
+                                    message: `Книг будет загружено в «${store.name}»: ${count}`,
+                                    action: () => executePublish(action, store.id),
+                                  }),
+                              },
                             ],
                           );
                         }

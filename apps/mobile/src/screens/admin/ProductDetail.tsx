@@ -33,6 +33,7 @@ import { BookStatus, PaperType, CoverType } from "../../types";
 import type { AdminCardCreationParamList } from "../../navigation/AdminNavigator";
 import { formatPrice, formatDate, formatPrintRun, libraryLabel } from "../../utils/format";
 import { bookEvents } from "../../utils/bookEvents";
+import { useUndoable } from "../../context/UndoContext";
 
 type Route = RouteProp<AdminCardCreationParamList, "ProductDetail">;
 type Nav = NativeStackNavigationProp<
@@ -269,6 +270,7 @@ const STATUS_CONFIG: Record<
 };
 
 export function ProductDetailScreen() {
+  const undoable = useUndoable();
   const insets = useSafeAreaInsets();
   const route = useRoute<Route>();
   const navigation = useNavigation<Nav>();
@@ -502,19 +504,23 @@ export function ProductDetailScreen() {
         { text: "Отмена", style: "cancel" },
         {
           text: "Добавить",
-          onPress: async () => {
-            setAddingToLibrary(true);
-            try {
-              await adminService.addToLibrary(book.id);
-              const updated = await booksService.getBook(bookId);
-              setBook(updated);
-              bookEvents.emitBookUpdated(updated);
-            } catch {
-              Alert.alert("Ошибка", "Не удалось добавить книгу в библиотеку");
-            } finally {
-              setAddingToLibrary(false);
-            }
-          },
+          onPress: () =>
+            undoable({
+              message: `«${book.title}» будет добавлена в библиотеку`,
+              action: async () => {
+                setAddingToLibrary(true);
+                try {
+                  await adminService.addToLibrary(book.id);
+                  const updated = await booksService.getBook(bookId);
+                  setBook(updated);
+                  bookEvents.emitBookUpdated(updated);
+                } catch {
+                  Alert.alert("Ошибка", "Не удалось добавить книгу в библиотеку");
+                } finally {
+                  setAddingToLibrary(false);
+                }
+              },
+            }),
         },
       ],
     );
@@ -529,19 +535,23 @@ export function ProductDetailScreen() {
         { text: "Отмена", style: "cancel" },
         {
           text: "Вернуть",
-          onPress: async () => {
-            setRemovingFromLibrary(true);
-            try {
-              await adminService.removeFromLibrary(book.id);
-              const updated = await booksService.getBook(bookId);
-              setBook(updated);
-              bookEvents.emitBookUpdated(updated);
-            } catch {
-              Alert.alert("Ошибка", "Не удалось вернуть книгу на проверку");
-            } finally {
-              setRemovingFromLibrary(false);
-            }
-          },
+          onPress: () =>
+            undoable({
+              message: "Книга вернётся на проверку",
+              action: async () => {
+                setRemovingFromLibrary(true);
+                try {
+                  await adminService.removeFromLibrary(book.id);
+                  const updated = await booksService.getBook(bookId);
+                  setBook(updated);
+                  bookEvents.emitBookUpdated(updated);
+                } catch {
+                  Alert.alert("Ошибка", "Не удалось вернуть книгу на проверку");
+                } finally {
+                  setRemovingFromLibrary(false);
+                }
+              },
+            }),
         },
       ],
     );
@@ -648,14 +658,19 @@ export function ProductDetailScreen() {
       {
         text: "Удалить",
         style: "destructive",
-        onPress: async () => {
-          try {
-            await booksService.deleteBook(bookId);
-            navigation.goBack();
-          } catch {
-            Alert.alert("Ошибка", "Не удалось удалить");
-          }
-        },
+        onPress: () =>
+          undoable({
+            message: "Карточка будет удалена",
+            action: async () => {
+              try {
+                await booksService.deleteBook(bookId);
+                // The user may have left the card during the undo countdown
+                if (navigation.isFocused()) navigation.goBack();
+              } catch {
+                Alert.alert("Ошибка", "Не удалось удалить");
+              }
+            },
+          }),
       },
     ]);
   };
@@ -780,7 +795,11 @@ export function ProductDetailScreen() {
                             { text: "Отмена", style: "cancel" },
                             {
                               text: "Загрузить",
-                              onPress: () => executePublish(store.id),
+                              onPress: () =>
+                                undoable({
+                                  message: `Книга будет загружена в «${store.name}»`,
+                                  action: () => executePublish(store.id),
+                                }),
                             },
                           ],
                         );
