@@ -429,21 +429,6 @@ export class BooksService {
       .where('book.isCopy = true')
       .orderBy('book.createdAt', 'DESC');
 
-    if (filters.status === 'published') {
-      qb.andWhere('book.status = :pub', { pub: BookStatus.PUBLISHED });
-    } else if (filters.status === 'archived') {
-      qb.andWhere('book.status = :arch', { arch: BookStatus.ARCHIVED });
-    } else if (filters.status === 'not_published') {
-      qb.andWhere('book.status NOT IN (:...excl)', { excl: [BookStatus.PUBLISHED, BookStatus.ARCHIVED] });
-    }
-
-    if (filters.search) {
-      qb.andWhere(
-        '(book.title ILIKE :s OR book.author ILIKE :s OR book.isbn ILIKE :s)',
-        { s: `%${filters.search}%` },
-      );
-    }
-
     const books = await qb.getMany();
 
     // Grouped by copy set (every copy has one since migration 1747800000000); `id` is the unique
@@ -458,6 +443,28 @@ export class BooksService {
           : { id: gk, type: 'title', key: book.title ?? '', books: [] });
       }
       groupMap.get(gk)!.books.push(book);
+    }
+
+    // Status/search pick whole groups: a group is listed when at least one of its books matches,
+    // and it keeps all its books with the matching ones first — so "На Ozon" shows each set with
+    // its published copies in front instead of a lone published book.
+    const search = filters.search?.trim().toLowerCase();
+    const matches = (b: Book) => {
+      if (filters.status === 'published' && b.status !== BookStatus.PUBLISHED) return false;
+      if (filters.status === 'archived' && b.status !== BookStatus.ARCHIVED) return false;
+      if (
+        filters.status === 'not_published' &&
+        (b.status === BookStatus.PUBLISHED || b.status === BookStatus.ARCHIVED)
+      ) return false;
+      if (search && ![b.title, b.author, b.isbn].some((f) => f?.toLowerCase().includes(search))) return false;
+      return true;
+    };
+    if (filters.status || search) {
+      for (const [gk, g] of groupMap) {
+        const hit = g.books.filter(matches);
+        if (!hit.length) groupMap.delete(gk);
+        else g.books = [...hit, ...g.books.filter((b) => !hit.includes(b))];
+      }
     }
 
     const allGroups = Array.from(groupMap.values());

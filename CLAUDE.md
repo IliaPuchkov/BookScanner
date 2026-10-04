@@ -333,6 +333,7 @@ The admin has two dedicated screens for managing books that are potential or con
 
 **Copies screen** (`GET /admin/books/copies/groups`) — "Копии":
 - Shows only books where `isCopy=true`, grouped by `copyGroupId` (set by mark-copies; several copy sets can share an ISBN/title). Every copy has one since the backfill migration `1747800000000` (built with `buildCopySets()`); a copy without a set would show alone. Each group has a unique `id`.
+- Status chips and search select **whole groups**: a set is listed when at least one of its books matches, and all its books are returned with the matching ones first (filter → sort), never a lone matching book
 - Each book card shows: cover photo, title, author, SKU, price, box number, publication status
 - Published books display store name (e.g. "Основной магазин") + "Опубликована на Ozon"
 - Archived books show "В архиве" badge (no delete); unpublished books have a delete button
