@@ -817,7 +817,9 @@ export function DuplicatesScreen() {
       Alert.alert(
         "Пометить как копии?",
         (allUnpublished
-          ? `Выберите основную книгу — она останется доступной для публикации на Ozon. Остальные ${isSubset ? "выбранные " : ""}будут помечены как копии.`
+          ? books.some((b) => b.isCopyMaster)
+            ? "Новые книги будут добавлены к уже подтверждённым копиям. Можно оставить текущую основную книгу или выбрать другую."
+            : `Выберите основную книгу — она останется доступной для публикации на Ozon. Остальные ${isSubset ? "выбранные " : ""}будут помечены как копии.`
           : `${isSubset ? "Выбранные" : "Все"} ${books.length} книги будут помечены как копии и скрыты из очереди публикации.`) +
           restNote,
         [
@@ -836,6 +838,15 @@ export function DuplicatesScreen() {
       );
     },
     [doMarkCopies],
+  );
+
+  // Books offered in the main-copy picker; the set's current main copy (if any) goes first
+  const pickerBooks = useMemo(
+    () =>
+      (markCopiesPicker?.group.books ?? [])
+        .filter((b) => markCopiesPicker!.bookIds.includes(b.id))
+        .sort((a, b) => Number(!!b.isCopyMaster) - Number(!!a.isCopyMaster)),
+    [markCopiesPicker],
   );
 
   const handleLoadMore = useCallback(() => {
@@ -1194,12 +1205,24 @@ export function DuplicatesScreen() {
                   Она останется доступной для публикации на Ozon. Остальные
                   будут помечены как копии.
                 </AppText>
+                {pickerBooks.some((b) => b.isCopyMaster) && (
+                  <TouchableOpacity
+                    style={styles.keepMasterBtn}
+                    activeOpacity={0.7}
+                    onPress={() => {
+                      const { group, bookIds } = markCopiesPicker!;
+                      setMarkCopiesPicker(null);
+                      // no master id → the server keeps the set's current main copy
+                      doMarkCopies(group, bookIds, null);
+                    }}
+                  >
+                    <AppText style={styles.keepMasterBtnText}>
+                      Оставить текущую основную
+                    </AppText>
+                  </TouchableOpacity>
+                )}
                 <FlatList
-                  data={
-                    markCopiesPicker?.group.books.filter((b) =>
-                      markCopiesPicker.bookIds.includes(b.id),
-                    ) ?? []
-                  }
+                  data={pickerBooks}
                   keyExtractor={(item) => item.id}
                   style={styles.pickerList}
                   renderItem={({ item }) => {
@@ -1249,6 +1272,13 @@ export function DuplicatesScreen() {
                           <AppText style={styles.masterPickerSku}>
                             {item.sku}
                           </AppText>
+                          {item.isCopyMaster ? (
+                            <View style={styles.currentMasterBadge}>
+                              <AppText style={styles.currentMasterBadgeText}>
+                                Основная сейчас
+                              </AppText>
+                            </View>
+                          ) : null}
                         </View>
                         <AppText style={styles.masterPickerArrow}>›</AppText>
                       </TouchableOpacity>
@@ -1693,6 +1723,34 @@ const styles = StyleSheet.create({
   markCopiesBtnText: {
     fontSize: 13,
     color: "#fff",
+    fontWeight: "600",
+  },
+  keepMasterBtn: {
+    marginHorizontal: 16,
+    marginTop: 10,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: "#1976D2",
+    borderRadius: 8,
+    paddingVertical: 10,
+    alignItems: "center",
+  },
+  keepMasterBtnText: {
+    fontSize: 14,
+    color: "#1976D2",
+    fontWeight: "600",
+  },
+  currentMasterBadge: {
+    alignSelf: "flex-start",
+    marginTop: 4,
+    backgroundColor: "#E8F5E9",
+    borderRadius: 4,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  currentMasterBadgeText: {
+    fontSize: 11,
+    color: "#2E7D32",
     fontWeight: "600",
   },
   splitBtn: {

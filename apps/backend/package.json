@@ -1,6 +1,6 @@
 {
   "name": "@bookscanner/backend",
-  "version": "1.11.0",
+  "version": "1.11.1",
   "private": true,
   "scripts": {
     "build": "nest build",
@@ -87,7 +87,7 @@
     "coverageDirectory": "../coverage",
     "testEnvironment": "node",
     "moduleNameMapper": {
-      "^@bookscanner/shared(.*)$": "<rootDir>/../../packages/shared/src$1"
+      "^@bookscanner/shared(.*)$": "<rootDir>/../../../packages/shared/src$1"
     }
   }
 }

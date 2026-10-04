@@ -10,6 +10,13 @@ import { In, Repository } from 'typeorm';
 import { randomUUID } from 'crypto';
 import { nanoid } from 'nanoid';
 import { Book } from './entities/book.entity';
+import {
+  authorsCompatible,
+  authorTokens,
+  buildDuplicateGroups,
+  canonicalIsbn,
+  normalizeTitle,
+} from './duplicate-matching';
 import { CreateBookDto } from './dto/create-book.dto';
 import { UpdateBookDto } from './dto/update-book.dto';
 import { PaginationDto } from '../common/dto/pagination.dto';
@@ -17,7 +24,7 @@ import { BoxesService } from '../boxes/boxes.service';
 import { StatsService } from '../stats/stats.service';
 import { PhotosService } from '../photos/photos.service';
 import { SettingsService } from '../settings/settings.service';
-import { UserRole, BookStatus, isValidIsbn } from '@bookscanner/shared';
+import { UserRole, BookStatus } from '@bookscanner/shared';
 import {
   DEFAULT_HEIGHT_MM,
   DEFAULT_WEIGHT_G,
@@ -29,27 +36,6 @@ import {
 } from '@bookscanner/shared';
 
 type DuplicateGroupRaw = { type: 'isbn' | 'title'; key: string; authorKey?: string; ids: string[] };
-
-// Duplicate-matching normalization: lowercase + ё→е + Latin/Cyrillic homoglyphs + whitespace collapse.
-// Intentionally does NOT strip punctuation from titles to avoid false-positive title collisions.
-const HOMOGLYPHS: Record<string, string> = { a: 'а', c: 'с', e: 'е', o: 'о', p: 'р', x: 'х', y: 'у' };
-const normalizeTitle = (s?: string | null) =>
-  (s ?? '')
-    .toLowerCase()
-    .replace(/ё/g, 'е')
-    .replace(/[acoepxy]/g, (ch) => HOMOGLYPHS[ch] ?? ch)
-    .replace(/\s+/g, ' ')
-    .trim();
-// Authors are compared as a sorted bag of name parts, so word order doesn't matter:
-// "Пушкин Александр Сергеевич" = "Александр Сергеевич Пушкин", "Пушкин А.С." = "А. С. Пушкин".
-const normalizeAuthor = (s?: string | null) =>
-  normalizeTitle(s).split(/[\s,.]+/).filter(Boolean).sort().join(' ');
-// Returns the ISBN digits only when the checksum is valid. Placeholders like
-// "978-5-0000-0000-0" and OCR junk like "501(13)-86" are treated as "no ISBN".
-const canonicalIsbn = (s?: string | null): string | null => {
-  const cleaned = (s ?? '').replace(/[-\s]/g, '').toUpperCase();
-  return cleaned && isValidIsbn(cleaned) ? cleaned : null;
-};
 
 @Injectable()
 export class BooksService {
@@ -398,7 +384,7 @@ export class BooksService {
     // Join an existing copy set if any of these books already belongs to one; books of other
     // existing sets touched here are merged into it.
     const existing = await this.booksRepository.find({
-      select: ['id', 'copyGroupId'],
+      select: ['id', 'copyGroupId', 'isCopy'],
       where: { id: In(bookIds) },
     });
     const oldGroupIds = [...new Set(existing.map((b) => b.copyGroupId).filter((g): g is string => !!g))];
@@ -406,12 +392,15 @@ export class BooksService {
     if (oldGroupIds.length > 1) {
       await this.booksRepository.update({ copyGroupId: In(oldGroupIds.slice(1)) }, { copyGroupId });
     }
-    await this.booksRepository.update(
-      { id: In(bookIds) },
-      { isCopy: true, isCopyMaster: false, copyGroupId },
-    );
+    await this.booksRepository.update({ id: In(bookIds) }, { isCopy: true, copyGroupId });
     if (masterBookId) {
+      // An explicit choice replaces whatever main copy the set had
+      await this.booksRepository.update({ copyGroupId }, { isCopyMaster: false });
       await this.booksRepository.update({ id: masterBookId }, { isCopyMaster: true });
+    } else {
+      // New arrivals join as plain copies; books already in the set keep their role
+      const newIds = existing.filter((b) => !b.isCopy).map((b) => b.id);
+      if (newIds.length) await this.booksRepository.update({ id: In(newIds) }, { isCopyMaster: false });
     }
     this._groupsCache = null;
   }
@@ -457,16 +446,12 @@ export class BooksService {
 
     const books = await qb.getMany();
 
-    // `id` is the unique group key; `type`/`key` are only for display. Books with a copyGroupId
-    // are grouped by it (several sets can share an ISBN/title); legacy copies by ISBN or title.
+    // Grouped by copy set (every copy has one since migration 1747800000000); `id` is the unique
+    // group key, `type`/`key` are only for display. A copy without a set shows on its own.
     const groupMap = new Map<string, { id: string; type: 'isbn' | 'title'; key: string; books: Book[] }>();
     for (const book of books) {
       const isbn = book.isbn?.trim();
-      const gk = book.copyGroupId
-        ? `set:${book.copyGroupId}`
-        : isbn
-          ? `isbn:${book.isbn}`
-          : `title:${book.title?.toLowerCase().trim() ?? ''}`;
+      const gk = `set:${book.copyGroupId ?? book.id}`;
       if (!groupMap.has(gk)) {
         groupMap.set(gk, isbn
           ? { id: gk, type: 'isbn', key: book.isbn, books: [] }
@@ -638,39 +623,24 @@ export class BooksService {
   async remove(id: string, userId: string, role: UserRole): Promise<void> {
     const book = await this.findOne(id);
     this.checkOwnership(book, userId, role);
-    const { boxId, isCopy, isbn, title, copyGroupId } = book;
+    const { boxId, isCopy, copyGroupId } = book;
     await this.photosService.deleteAllForBook(id);
     await this.booksRepository.remove(book);
     if (boxId) {
       await this.boxesService.deleteIfEmpty(boxId);
     }
     if (isCopy) {
-      await this.unmarkSingletonCopy(isbn, title, copyGroupId);
+      await this.unmarkSingletonCopy(copyGroupId);
     }
   }
 
-  private async unmarkSingletonCopy(
-    isbn: string | null,
-    title: string,
-    copyGroupId: string | null,
-  ): Promise<void> {
-    const qb = this.booksRepository
-      .createQueryBuilder('book')
-      .where('book.isCopy = true');
-
-    if (copyGroupId) {
-      qb.andWhere('book.copyGroupId = :copyGroupId', { copyGroupId });
-    } else {
-      // Legacy copies (no copy set) are grouped by ISBN/title, same as getCopyGroups
-      qb.andWhere('book.copyGroupId IS NULL');
-      if (isbn?.trim()) {
-        qb.andWhere('book.isbn = :isbn', { isbn });
-      } else {
-        qb.andWhere("LOWER(TRIM(book.title)) = LOWER(TRIM(:title))", { title });
-      }
-    }
-
-    const remaining = await qb.getMany();
+  // A copy set left with one book is no longer a set: that book becomes an ordinary book again
+  private async unmarkSingletonCopy(copyGroupId: string | null): Promise<void> {
+    if (!copyGroupId) return;
+    const remaining = await this.booksRepository.find({
+      select: ['id'],
+      where: { isCopy: true, copyGroupId },
+    });
     if (remaining.length === 1) {
       await this.booksRepository.update(remaining[0].id, {
         isCopy: false,
@@ -945,9 +915,9 @@ export class BooksService {
           if (ia && ib && ia !== ib) continue;
           const isbnMatch = !!(ia && ia === ib);
           const na = normalizeTitle(a?.title); const nb = normalizeTitle(b?.title);
-          const aa = normalizeAuthor(a?.author); const ab = normalizeAuthor(b?.author);
           const titleMatch  = !!(na && nb && na === nb);
-          const authorMatch = !!(aa && ab && aa === ab);
+          // Same fuzzy author rule as the grouping: "И. И. Лажечников" = "Лажечников Иван Иванович"
+          const authorMatch = authorsCompatible(authorTokens(a?.author), authorTokens(b?.author));
           const fields: string[] = [];
           if (isbnMatch)   fields.push('ISBN');
           if (titleMatch)  fields.push('Название');
@@ -991,7 +961,9 @@ export class BooksService {
       const components = splitByResolutions(groupBooks);
       for (const books of components) {
         if (books.length < 2) continue;
-        if (books.some((b) => b.isCopy)) continue;
+        // Hide only fully confirmed sets. A component with a confirmed copy plus a book that
+        // isn't one yet is a new arrival of that set and must stay visible for the admin.
+        if (books.every((b) => b.isCopy)) continue;
         const { probability, matchedFields } = calcGroupProbability(books, group.type);
         if (probability < 60) continue; // skip Low-probability groups (only 1 field matched)
 
@@ -1015,7 +987,7 @@ export class BooksService {
   /**
    * Candidate duplicate groups among books outside active work sessions.
    * Grouping happens in JS (not SQL GROUP BY) so it can use ISBN checksum validation and
-   * word-order-insensitive author matching, and stays identical to calcGroupProbability's checks.
+   * fuzzy author matching — see buildDuplicateGroups in duplicate-matching.ts.
    * Cached for 2 minutes; concurrent callers share one in-flight query.
    */
   private async getDuplicateGroups(): Promise<DuplicateGroupRaw[]> {
@@ -1032,38 +1004,7 @@ export class BooksService {
           WHERE book.work_session_id IS NULL OR ws.status = 'completed'
         `)
         .then((rows) => {
-          const byIsbn = new Map<string, string[]>();
-          const byTitle = new Map<string, { title: string; author: string; ids: string[]; withoutIsbn: number }>();
-          for (const r of rows) {
-            const isbn = canonicalIsbn(r.isbn);
-            if (isbn) {
-              const ids = byIsbn.get(isbn);
-              if (ids) ids.push(r.id); else byIsbn.set(isbn, [r.id]);
-            }
-            // Group by (title + author) so each group already has both fields matched (prob=60).
-            // This avoids noise from generic titles like "Избранное" with many different authors.
-            const title = normalizeTitle(r.title);
-            const author = normalizeAuthor(r.author);
-            if (!title || !author || title === 'новая книга') continue;
-            const key = `${title}\n${author}`;
-            let g = byTitle.get(key);
-            if (!g) byTitle.set(key, (g = { title, author, ids: [], withoutIsbn: 0 }));
-            g.ids.push(r.id);
-            if (!isbn) g.withoutIsbn++;
-          }
-
-          const groups: DuplicateGroupRaw[] = [];
-          for (const [isbn, ids] of byIsbn) {
-            if (ids.length >= 2) groups.push({ type: 'isbn', key: isbn, ids });
-          }
-          // Title groups need at least one book without a valid ISBN: pairs where both books have
-          // valid ISBNs are either already an ISBN group (same ISBN) or different editions.
-          for (const g of byTitle.values()) {
-            if (g.ids.length >= 2 && g.withoutIsbn >= 1) {
-              groups.push({ type: 'title', key: g.title, authorKey: g.author, ids: g.ids });
-            }
-          }
-
+          const groups: DuplicateGroupRaw[] = buildDuplicateGroups(rows);
           this._groupsCache = { groups, cachedAt: Date.now() };
           this.logger.debug(`[duplicates] cache miss: books=${rows.length} groups=${groups.length}`);
           return groups;

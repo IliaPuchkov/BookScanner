@@ -155,6 +155,7 @@ Located in `apps/backend/src/database/migrations/`:
 - `1747300000000-AddUserLoginLockout.ts` — adds `"failedLoginAttempts"` (int, default 0) and `"lockedUntil"` (timestamp, nullable) to `users` for brute-force lockout
 - `1747600000000-AddBookLibrary.ts` — adds `'in_library'` to `books_status_enum`, plus `"libraryOwnerId"` (uuid FK users, ON DELETE SET NULL) and `"addedToLibraryAt"` to `books`
 - `1747700000000-AddBookCopyGroupId.ts` — adds `"copyGroupId"` (uuid, nullable, partial index) to `books`: id of the copy set a book was marked into
+- `1747800000000-BackfillCopyGroupIds.ts` — data migration: assigns a `copyGroupId` to every legacy copy using `buildCopySets()` (same matching as duplicates + same raw ISBN text with the same 20-char title start); existing set ids are kept; `down()` is a no-op
 
 ---
 
@@ -319,8 +320,10 @@ The admin has two dedicated screens for managing books that are potential or con
 
 **Duplicates screen** (`GET /admin/books/duplicates`) — "На проверке: Копии":
 - Shows groups of books suspected to be duplicates (same ISBN, or same normalized title+author), from books outside active work sessions
-- Grouping is done in JS by `getDuplicateGroups()` (2-min cache), not SQL GROUP BY. ISBNs count only if the checksum is valid (`isValidIsbn`): placeholders like `978-5-0000-0000-0` (~8k imported books) and OCR junk like `501(13)-86` are treated as "no ISBN". Author matching ignores word order and `.`/`,` ("Пушкин Александр Сергеевич" = "Александр Сергеевич Пушкин"). A title+author group needs at least one book without a valid ISBN; a pair with two *different* valid ISBNs is treated as different editions and never matches.
-- Each group has a probability level (High/Medium/Low based on matched fields): High=ISBN+title+author, Medium=any 2, Low=1 (filtered out, never shown)
+- Grouping is done in JS by `getDuplicateGroups()` (2-min cache) → `buildDuplicateGroups()` in `books/duplicate-matching.ts` (unit-tested in `duplicate-matching.spec.ts`). ISBNs count only if the checksum is valid (`canonicalIsbn`): placeholders like `978-5-0000-0000-0` (~8k imported books) and OCR junk like `501(13)-86` are treated as "no ISBN".
+- Title groups: books are bucketed by normalized title, then linked when `authorsCompatible()` — every name part of the shorter author maps to a distinct part of the other (identical, or a ≤3-letter initial/abbreviation prefix), with at least one identical part of ≥3 letters (the surname). So "И. И. Лажечников" = "Лажечников Иван Иванович", but "Борис Слуцкий" ≠ "Житков Борис Степанович" and "Андрей Платонов" ≠ "Богданов Андрей Платонович". Components merge only if every author of one fits every author of the other (complete linkage), so a vague "Лев Толстой" can't chain Лев Николаевич and Лев Львович. A pair where both books have valid ISBNs is never linked by title (same ISBN → ISBN group; different → other edition).
+- A component is hidden only when **every** book is already `isCopy` (fully confirmed set). A new book that matches a confirmed set shows next to it with the "Копия уже в системе" / "Новая копия" badges; "Это копии" adds it to the set (`markAsCopies` keeps the existing `isCopyMaster` unless a new master is picked). The master picker lists the current main copy first with "Основная сейчас" and offers "Оставить текущую основную" (sends no `masterBookId`).
+- Each group has a probability level (High/Medium/Low based on matched fields, author via `authorsCompatible`): High=ISBN+title+author, Medium=any 2, Low=1 (filtered out, never shown)
 - `calcGroupProbability` in `books.service.ts` re-checks actual `isbn` values from the fetched Book entities — it does NOT trust the cached group `type` field. This prevents stale 'isbn' groups (2-min cache TTL) from showing `isbn=null` books as ISBN matches.
 - Title normalization (`normalizeTitle`, shared by grouping and `calcGroupProbability`): lowercase + ё→е + Latin/Cyrillic homoglyph substitution + whitespace collapse. Intentionally does NOT strip punctuation (stripping caused false-positive title collisions).
 - Admin can: mark all as copies (`POST /books/mark-copies`), mark as not copies (adds to `duplicate_resolutions`), or delete individual unpublished books
@@ -329,11 +332,11 @@ The admin has two dedicated screens for managing books that are potential or con
 - `duplicate_resolutions` table suppresses resolved (book1Id, book2Id) pairs
 
 **Copies screen** (`GET /admin/books/copies/groups`) — "Копии":
-- Shows only books where `isCopy=true`, grouped by `copyGroupId` (set by mark-copies; several copy sets can share an ISBN/title), falling back to ISBN or LOWER(TRIM(title)) for legacy copies with `copyGroupId IS NULL`. Each group has a unique `id`.
+- Shows only books where `isCopy=true`, grouped by `copyGroupId` (set by mark-copies; several copy sets can share an ISBN/title). Every copy has one since the backfill migration `1747800000000` (built with `buildCopySets()`); a copy without a set would show alone. Each group has a unique `id`.
 - Each book card shows: cover photo, title, author, SKU, price, box number, publication status
 - Published books display store name (e.g. "Основной магазин") + "Опубликована на Ozon"
 - Archived books show "В архиве" badge (no delete); unpublished books have a delete button
-- When deleting a book leaves only 1 book in its group, that remaining book's `isCopy` is automatically reset to `false`
+- When deleting a book leaves only 1 book in its copy set (`copyGroupId`), that remaining book's `isCopy`/`isCopyMaster`/`copyGroupId` are reset
 - Books with `isCopy=true` that are not yet published are blocked from Ozon publication
 
 **Key invariant**: `isCopy=true` books with `publishedToOzon IS NULL` are excluded from the pending-review queue and cannot be published to Ozon until `isCopy` is cleared.
