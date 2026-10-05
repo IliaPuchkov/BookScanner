@@ -60,6 +60,8 @@ export function authorsCompatible(a: string[], b: string[]): boolean {
 
 export type MatchRow = { id: string; isbn: string | null; title: string | null; author: string | null };
 
+export type DuplicateGroup = { type: 'isbn' | 'title'; key: string; authorKey?: string; ids: string[] };
+
 /**
  * Candidate duplicate groups: one group per valid ISBN shared by ≥ 2 books, plus title groups —
  * books with the same normalized title whose authors are compatible. A title pair where both
@@ -85,7 +87,7 @@ export function buildDuplicateGroups(rows: MatchRow[]) {
     if (bucket) bucket.push(p); else byTitle.set(title, [p]);
   }
 
-  const groups: Array<{ type: 'isbn' | 'title'; key: string; authorKey?: string; ids: string[] }> = [];
+  const groups: DuplicateGroup[] = [];
   for (const [isbn, ids] of byIsbn) {
     if (ids.length >= 2) groups.push({ type: 'isbn', key: isbn, ids });
   }
@@ -117,6 +119,132 @@ export function buildDuplicateGroups(rows: MatchRow[]) {
     }
   }
   return groups;
+}
+
+export const pairKey = (a: string, b: string) => (a < b ? `${a}:${b}` : `${b}:${a}`);
+
+/**
+ * Best match level between any two books of a card: 100 = ISBN + title + author, 60 = any two,
+ * 30 = one. Re-checks the books' actual ISBNs (two different valid ISBNs = other edition, skipped)
+ * rather than trusting the group type.
+ */
+export function groupProbability(books: MatchRow[], groupType: 'isbn' | 'title') {
+  let probability = 0;
+  let matchedFields: string[] = [];
+  for (let i = 0; i < books.length; i++) {
+    for (let j = i + 1; j < books.length; j++) {
+      const a = books[i];
+      const b = books[j];
+      const ia = canonicalIsbn(a.isbn);
+      const ib = canonicalIsbn(b.isbn);
+      if (ia && ib && ia !== ib) continue;
+      const na = normalizeTitle(a.title);
+      const fields: string[] = [];
+      if (ia && ia === ib) fields.push('ISBN');
+      if (na && na === normalizeTitle(b.title)) fields.push('Название');
+      if (authorsCompatible(authorTokens(a.author), authorTokens(b.author))) fields.push('Автор');
+      const prob = fields.length >= 3 ? 100 : fields.length === 2 ? 60 : 30;
+      if (prob > probability) { probability = prob; matchedFields = fields; }
+    }
+  }
+  if (matchedFields.length === 0) return { probability: 30, matchedFields: [groupType === 'isbn' ? 'ISBN' : 'Название'] };
+  return { probability, matchedFields };
+}
+
+export type DuplicateCard = DuplicateGroup & { componentKey?: string; probability: number; matchedFields: string[] };
+type CardRow = MatchRow & { isCopy: boolean };
+
+/**
+ * The cards the Duplicates screen shows, built before paging so totals and the dashboard count
+ * match the list. Each group is split into connected components of still-unresolved pairs (a
+ * book marked "not a copy" of all others drops out; a subset split off as its own copy set
+ * becomes a separate card). Fully confirmed sets (every book isCopy) and Low-probability cards
+ * are dropped; a confirmed set plus a new book stays visible as a new arrival of that set.
+ * Finally visible cards sharing a book are merged (see mergeOverlapping).
+ */
+export function buildDuplicateCards(
+  groups: DuplicateGroup[],
+  rowsById: Map<string, CardRow>,
+  resolved: Set<string>,
+): DuplicateCard[] {
+  const cards: DuplicateCard[] = [];
+  for (const group of groups) {
+    const books = group.ids.map((id) => rowsById.get(id)).filter((b): b is CardRow => !!b);
+    const parent = books.map((_, i) => i);
+    const find = (i: number): number => (parent[i] === i ? i : (parent[i] = find(parent[i])));
+    for (let i = 0; i < books.length; i++) {
+      for (let j = i + 1; j < books.length; j++) {
+        if (!resolved.has(pairKey(books[i].id, books[j].id))) parent[find(i)] = find(j);
+      }
+    }
+    const components = new Map<number, CardRow[]>();
+    books.forEach((b, i) => {
+      const c = components.get(find(i));
+      if (c) c.push(b); else components.set(find(i), [b]);
+    });
+    for (const comp of components.values()) {
+      if (comp.length < 2 || comp.every((b) => b.isCopy)) continue;
+      const { probability, matchedFields } = groupProbability(comp, group.type);
+      if (probability < 60) continue;
+      // Several components of one group share type/key/authorKey; componentKey keeps them apart.
+      const componentKey = components.size > 1 ? comp[0].id : undefined;
+      cards.push({ ...group, componentKey, ids: comp.map((b) => b.id), probability, matchedFields });
+    }
+  }
+  return mergeOverlapping(cards, rowsById);
+}
+
+/**
+ * A book with a valid ISBN sits in its ISBN group and in its title group, so without this the
+ * same books show up on two or three cards. Cards sharing a book become one — but only when
+ * every author across them is compatible (books without an author or with a placeholder like "Не указан" don't block), so an OCR'd
+ * wrong ISBN can't glue "Старик Хоттабыч" to "Самое главное". Merging happens after the split
+ * by resolutions, so sets the admin already separated or confirmed don't come back. A card that
+ * overlaps nothing is returned unchanged; a merged one takes the key of its largest ISBN card
+ * (it shows "ISBN: …") and the smallest id as componentKey to stay unique.
+ */
+// "Не указан", "Автор не указан", "Неизвестен" are OCR/operator placeholders, not names.
+const isKnownAuthor = (tokens: string[]) =>
+  tokens.length > 0 && !/^(автор )?не указан[ао]?$|^неизвест/.test(tokens.join(' '));
+
+function mergeOverlapping(cards: DuplicateCard[], rowsById: Map<string, CardRow>): DuplicateCard[] {
+  const parent = cards.map((_, i) => i);
+  const find = (i: number): number => (parent[i] === i ? i : (parent[i] = find(parent[i])));
+  const authorsOf = new Map(
+    cards.map((c, i) => [i, c.ids.map((id) => authorTokens(rowsById.get(id)?.author)).filter(isKnownAuthor)]),
+  );
+  const cardsOf = new Map<string, number[]>();
+  cards.forEach((c, i) => {
+    for (const id of c.ids) {
+      for (const other of cardsOf.get(id) ?? []) {
+        const ri = find(i);
+        const ro = find(other);
+        if (ri === ro) continue;
+        const ai = authorsOf.get(ri)!;
+        const ao = authorsOf.get(ro)!;
+        if (!ai.every((x) => ao.every((y) => authorsCompatible(x, y)))) continue;
+        parent[ri] = ro;
+        authorsOf.set(ro, [...ao, ...ai]);
+      }
+      const seen = cardsOf.get(id);
+      if (seen) seen.push(i); else cardsOf.set(id, [i]);
+    }
+  });
+  const members = new Map<number, DuplicateCard[]>();
+  cards.forEach((c, i) => {
+    const m = members.get(find(i));
+    if (m) m.push(c); else members.set(find(i), [c]);
+  });
+  return [...members.values()].map((cs) => {
+    if (cs.length === 1) return cs[0];
+    const ids = [...new Set(cs.flatMap((c) => c.ids))];
+    const isbnCards = cs.filter((c) => c.type === 'isbn');
+    const main = isbnCards.length
+      ? isbnCards.reduce((a, b) => (b.ids.length > a.ids.length || (b.ids.length === a.ids.length && b.key < a.key) ? b : a))
+      : cs[0];
+    const books = ids.map((id) => rowsById.get(id)!);
+    return { type: main.type, key: main.key, authorKey: main.authorKey, componentKey: [...ids].sort()[0], ids, ...groupProbability(books, main.type) };
+  });
 }
 
 /**

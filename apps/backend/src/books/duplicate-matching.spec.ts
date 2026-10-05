@@ -1,4 +1,11 @@
-import { authorsCompatible, authorTokens, buildCopySets, buildDuplicateGroups } from './duplicate-matching';
+import {
+  authorsCompatible,
+  authorTokens,
+  buildCopySets,
+  buildDuplicateCards,
+  buildDuplicateGroups,
+  pairKey,
+} from './duplicate-matching';
 
 const same = (a: string, b: string) => authorsCompatible(authorTokens(a), authorTokens(b));
 
@@ -108,5 +115,110 @@ describe('buildCopySets', () => {
       copy('2', 'Другое название', 'Кто-то', null, 'set-x'),
       copy('3', 'Книга', 'Автор А.', '5-256-00092-6'),
     ]))).toEqual([['1', '2'], ['3']]);
+  });
+});
+
+describe('buildDuplicateCards', () => {
+  const book = (id: string, title: string, author: string, isbn: string | null = null, isCopy = false) =>
+    ({ id, title, author, isbn, isCopy });
+  const cards = (books: ReturnType<typeof book>[], resolved: Array<[string, string]> = []) =>
+    buildDuplicateCards(
+      buildDuplicateGroups(books),
+      new Map(books.map((b) => [b.id, b])),
+      new Set(resolved.map(([a, b]) => pairKey(a, b))),
+    );
+  const sorted = (cs: { ids: string[] }[]) => cs.map((c) => [...c.ids].sort());
+
+  it('drops fully resolved groups and fully confirmed copy sets', () => {
+    expect(cards([book('a', 'Повести', 'Гоголь Н. В.'), book('b', 'Повести', 'Николай Гоголь')], [['a', 'b']])).toEqual([]);
+    expect(cards([book('a', 'Повести', 'Гоголь Н. В.', null, true), book('b', 'Повести', 'Николай Гоголь', null, true)])).toEqual([]);
+  });
+
+  it('keeps a new book next to its confirmed copy set', () => {
+    const result = cards([
+      book('a', 'Повести', 'Гоголь Н. В.', null, true),
+      book('b', 'Повести', 'Николай Гоголь', null, true),
+      book('c', 'Повести', 'Гоголь Николай Васильевич'),
+    ]);
+    expect(result).toEqual([expect.objectContaining({ ids: ['a', 'b', 'c'], probability: 60 })]);
+  });
+
+  it('splits a group into cards of unresolved pairs with distinct componentKeys', () => {
+    const result = cards(
+      [book('a', 'Повести', 'Гоголь Н. В.'), book('b', 'Повести', 'Гоголь Н.'), book('c', 'Повести', 'Николай Гоголь'), book('d', 'Повести', 'Н. Гоголь')],
+      [['a', 'c'], ['a', 'd'], ['b', 'c'], ['b', 'd']],
+    );
+    expect(result.map((c) => c.ids)).toEqual([['a', 'b'], ['c', 'd']]);
+    expect(new Set(result.map((c) => c.componentKey)).size).toBe(2);
+  });
+
+  it('shows a book on one card when it is in both an ISBN and a title group', () => {
+    const result = cards([
+      book('a', 'Повести', 'Гоголь Н. В.', '5-08-002638-3'),
+      book('b', 'Повести', 'Николай Гоголь', '5-08-002638-3'),
+      book('c', 'Повести', 'Гоголь Николай Васильевич', '978-5-0000-0000-0'),
+      book('d', 'Повести', 'Н. В. Гоголь'),
+    ]);
+    expect(result).toEqual([expect.objectContaining({ type: 'isbn', key: '5080026383', componentKey: 'a', probability: 100 })]);
+    expect(sorted(result)).toEqual([['a', 'b', 'c', 'd']]);
+  });
+
+  it('joins title variants through a shared ISBN', () => {
+    const result = cards([
+      book('a', 'Одиссея капитана Блада. Хроника', 'Сабатини Рафаэль', '5858440096'),
+      book('b', 'Одиссея капитана Блада. Хроника', 'Рафаэль Сабатини'),
+      book('c', 'Одиссея капитана Блада; Хроника', 'Рафаэль Сабатини', '5-85844-009-6'),
+      book('d', 'Одиссея капитана Блада; Хроника', 'Сабатини Р.'),
+    ]);
+    expect(sorted(result)).toEqual([['a', 'b', 'c', 'd']]);
+  });
+
+  it('does not merge through an ISBN shared by different authors (OCR error)', () => {
+    const result = cards([
+      book('a', 'Самое главное', 'Михаил Зощенко', '5-7633-0150-1'),
+      book('b', 'Самое главное', 'Зощенко Михаил'),
+      book('c', 'Старик Хоттабыч', 'Лагин Л. И.', '5-7633-0150-1'),
+      book('d', 'Старик Хоттабыч', 'Л. Лагин'),
+    ]);
+    expect(sorted(result)).toEqual(expect.arrayContaining([['a', 'b'], ['c', 'd']]));
+    expect(sorted(result)).not.toContainEqual(['a', 'b', 'c', 'd']);
+  });
+
+  it('does not bring back copy sets the admin already separated', () => {
+    // Title group split by the admin into set {a,b} and set {c,d}; {a,c} also share an ISBN
+    // with a confirmed copy e — merging must not glue the two sets back together.
+    const result = cards(
+      [
+        book('a', 'Повести', 'Гоголь Н. В.', '5-08-002638-3', true),
+        book('b', 'Повести', 'Николай Гоголь', null, true),
+        book('c', 'Повести', 'Н. В. Гоголь', null, true),
+        book('d', 'Повести', 'Гоголь Николай', null, true),
+        book('e', 'Повести', 'Гоголь Н.', '5-08-002638-3', true),
+      ],
+      [['a', 'c'], ['a', 'd'], ['b', 'c'], ['b', 'd'], ['e', 'c'], ['e', 'd']],
+    );
+    expect(result).toEqual([]);
+  });
+
+  it('treats a "Не указан" author as unknown when merging', () => {
+    const result = cards([
+      book('a', 'Краткий политический словарь', 'Абаренков Валерий Павлович', '5-250-00047-9'),
+      book('b', 'Краткий политический словарь', 'Не указан', '5-250-00047-9'),
+      book('c', 'Краткий политический словарь', 'Не указан'),
+    ]);
+    expect(sorted(result)).toEqual([['a', 'b', 'c']]);
+  });
+
+  it('leaves cards that share no book unchanged', () => {
+    const result = cards([
+      book('a', 'Рассказы', 'Чехов А. П.', '5-09-003220-3'),
+      book('b', 'Рассказы', 'Антон Чехов', '5-09-003220-3'),
+      book('c', 'Повести', 'Гоголь Н. В.'),
+      book('d', 'Повести', 'Николай Гоголь'),
+    ]);
+    expect(result.map(({ type, key, authorKey, componentKey, ids }) => ({ type, key, authorKey, componentKey, ids }))).toEqual([
+      { type: 'isbn', key: '5090032203', authorKey: undefined, componentKey: undefined, ids: ['a', 'b'] },
+      { type: 'title', key: 'повести', authorKey: 'c', componentKey: undefined, ids: ['c', 'd'] },
+    ]);
   });
 });

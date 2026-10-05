@@ -78,7 +78,9 @@ export class AdminService {
       this.booksService.countPendingReview(),
       this.usersService.countByRole(UserRole.ADMIN),
       this.usersService.countByRole(UserRole.OPERATOR),
-      this.booksService.countDuplicates(),
+      this.dupResRepository
+        .find({ select: ['book1Id', 'book2Id'] })
+        .then((pairs) => this.booksService.countDuplicates(pairs)),
       this.booksService.countOcrFailed(),
       this.booksService.countOzonFailed(),
       this.booksService.countUnderpriced(),
