@@ -4,7 +4,7 @@ import { AppText } from './AppText';
 import { BookStatus, UserRole } from "../types";
 import type { Book } from "../types";
 import { thumbUri } from "../utils/photos";
-import { libraryLabel } from "../utils/format";
+import { isParkedCopy, libraryLabel, PARKED_COPY_LABEL } from "../utils/format";
 
 function formatDate(iso: string): string {
   const d = new Date(iso);
@@ -22,8 +22,9 @@ interface Props {
   storeName?: string;
 }
 
-function getStatusConfig(status: BookStatus): { color: string; label: string } {
-  switch (status) {
+function getStatusConfig(book: Book): { color: string; label: string } {
+  if (isParkedCopy(book)) return { color: "#757575", label: PARKED_COPY_LABEL };
+  switch (book.status) {
     case BookStatus.PUBLISHED:
       return { color: "#43A047", label: "Загружено в Ozon" };
     case BookStatus.PENDING_PUBLICATION:
@@ -42,7 +43,7 @@ function getStatusConfig(status: BookStatus): { color: string; label: string } {
 
 export function BookCard({ book, onPress, userRole, storeName }: Props) {
   const coverPhoto = book.photos?.find((p) => p.sortOrder === 0);
-  const statusConfig = getStatusConfig(book.status);
+  const statusConfig = getStatusConfig(book);
 
   return (
     <TouchableOpacity style={styles.card} onPress={onPress} activeOpacity={0.7}>

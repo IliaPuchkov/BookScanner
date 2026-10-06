@@ -31,7 +31,7 @@ import type { OzonStore, OzonStoreLimits } from "../../services/admin.service";
 import type { Book, UpdateBookDto } from "../../types";
 import { BookStatus, PaperType, CoverType } from "../../types";
 import type { AdminCardCreationParamList } from "../../navigation/AdminNavigator";
-import { formatPrice, formatDate, formatPrintRun, libraryLabel } from "../../utils/format";
+import { formatPrice, formatDate, formatPrintRun, libraryLabel, isParkedCopy, PARKED_COPY_LABEL } from "../../utils/format";
 import { bookEvents } from "../../utils/bookEvents";
 import { useUndoable } from "../../context/UndoContext";
 
@@ -267,6 +267,12 @@ const STATUS_CONFIG: Record<
     color: "#6A1B9A",
     bg: "#F3E5F5",
   },
+};
+
+const PARKED_COPY_STATUS = {
+  label: PARKED_COPY_LABEL,
+  color: "#616161",
+  bg: "#EEEEEE",
 };
 
 export function ProductDetailScreen() {
@@ -722,8 +728,9 @@ export function ProductDetailScreen() {
   const sortedPhotos = [...(book.photos ?? [])].sort(
     (a, b) => a.sortOrder - b.sortOrder,
   );
-  const baseStatusCfg =
-    STATUS_CONFIG[book.status] || STATUS_CONFIG[BookStatus.PENDING_REVIEW];
+  const baseStatusCfg = isParkedCopy(book)
+    ? PARKED_COPY_STATUS
+    : STATUS_CONFIG[book.status] || STATUS_CONFIG[BookStatus.PENDING_REVIEW];
   const statusCfg = {
     ...baseStatusCfg,
     label: libraryLabel(book) ?? baseStatusCfg.label,
