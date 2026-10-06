@@ -36,7 +36,7 @@ import {
   DEFAULT_PRICE,
 } from '@bookscanner/shared';
 
-type DuplicateRow = MatchRow & { isCopy: boolean; status: BookStatus };
+type DuplicateRow = MatchRow & { isCopy: boolean };
 type DuplicateCandidates = { groups: DuplicateGroup[]; rowsById: Map<string, DuplicateRow> };
 
 @Injectable()
@@ -903,16 +903,9 @@ export class BooksService {
     return { isbnDuplicates, possibleDuplicates, total, page, totalPages };
   }
 
-  /**
-   * Dashboard count — the cards still needing review: the Duplicates screen with the
-   * "not published" filter (the tile opens it that way), i.e. at least one book that is
-   * neither published nor archived.
-   */
+  /** Dashboard count — the same cards the Duplicates screen lists without filters. */
   async countDuplicates(resolvedPairs: Array<{ book1Id: string; book2Id: string }>): Promise<number> {
-    const cards = await this.getDuplicateCards(resolvedPairs);
-    const { rowsById } = await this.getDuplicateGroups();
-    const done = [BookStatus.PUBLISHED, BookStatus.ARCHIVED];
-    return cards.filter((c) => c.ids.some((id) => !done.includes(rowsById.get(id)!.status))).length;
+    return (await this.getDuplicateCards(resolvedPairs)).length;
   }
 
   // Building cards takes ~200 ms, so reuse them until the candidate groups are rebuilt or a
@@ -943,7 +936,7 @@ export class BooksService {
     if (!this._groupsCachePending) {
       this._groupsCachePending = this.booksRepository.manager
         .query<DuplicateRow[]>(`
-          SELECT book.id::text AS id, book.isbn, book.title, book.author, book."isCopy", book.status
+          SELECT book.id::text AS id, book.isbn, book.title, book.author, book."isCopy"
           FROM books book
           LEFT JOIN work_sessions ws ON ws.id = book.work_session_id
           WHERE book.work_session_id IS NULL OR ws.status = 'completed'

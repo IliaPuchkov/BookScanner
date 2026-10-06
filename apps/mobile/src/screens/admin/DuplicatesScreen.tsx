@@ -466,6 +466,10 @@ export function DuplicatesScreen() {
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
+  // Server total for the current filters and how many groups were loaded so far; groups
+  // removed on screen (copies, not copies, delete) are subtracted from the total.
+  const [serverTotal, setServerTotal] = useState(0);
+  const [loadedCount, setLoadedCount] = useState(0);
 
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [resolvingKey, setResolvingKey] = useState<string | null>(null);
@@ -520,6 +524,8 @@ export function DuplicatesScreen() {
 
         const newGroups = [...res.isbnDuplicates, ...res.possibleDuplicates];
         setGroups(isFirstPage ? newGroups : (prev) => [...prev, ...newGroups]);
+        setServerTotal(res.total);
+        setLoadedCount((prev) => (isFirstPage ? 0 : prev) + newGroups.length);
         setPage(pageNum);
         setHasMore(pageNum < res.totalPages);
       } catch {
@@ -914,7 +920,7 @@ export function DuplicatesScreen() {
             </AppText>
           </TouchableOpacity>
           <AppText style={styles.filterCount}>
-            {displayGroups.length} из {groups.length}
+            {displayGroups.length} из {serverTotal - (loadedCount - groups.length)}
           </AppText>
         </View>
 
