@@ -122,6 +122,7 @@ export interface CopyGroup {
 export interface CopyGroupsResponse {
   groups: CopyGroup[];
   total: number;
+  totalBooks: number;
   page: number;
   totalPages: number;
 }
@@ -174,6 +175,7 @@ export interface DuplicatesResponse {
   isbnDuplicates: DuplicateGroup[];
   possibleDuplicates: DuplicateGroup[];
   total: number;
+  totalBooks: number;
   page: number;
   totalPages: number;
 }

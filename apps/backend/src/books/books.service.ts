@@ -472,9 +472,10 @@ export class BooksService {
 
     const allGroups = Array.from(groupMap.values());
     const total = allGroups.length;
+    const totalBooks = allGroups.reduce((n, g) => n + g.books.length, 0);
     const pageGroups = allGroups.slice((page - 1) * limit, page * limit);
 
-    return { groups: pageGroups, total, page, totalPages: Math.ceil(total / limit) };
+    return { groups: pageGroups, total, totalBooks, page, totalPages: Math.ceil(total / limit) };
   }
 
   async countCopies(): Promise<number> {
@@ -864,6 +865,8 @@ export class BooksService {
     });
 
     const total = filteredGroups.length;
+    // A book on two cards (merge blocked by an OCR'd author) is counted once
+    const totalBooks = new Set(filteredGroups.flatMap((g) => g.ids)).size;
     const totalPages = Math.ceil(total / limit);
     const pageGroups = filteredGroups.slice((page - 1) * limit, page * limit);
 
@@ -900,7 +903,7 @@ export class BooksService {
       (card.type === 'isbn' ? isbnDuplicates : possibleDuplicates).push({ ...rest, books });
     }
 
-    return { isbnDuplicates, possibleDuplicates, total, page, totalPages };
+    return { isbnDuplicates, possibleDuplicates, total, totalBooks, page, totalPages };
   }
 
   /** Dashboard count — the same cards the Duplicates screen lists without filters. */

@@ -22,7 +22,7 @@ import { BookStatus } from "../../types";
 import type { Book, CopyGroup } from "../../types";
 import type { AdminMainStackParamList } from "../../navigation/AdminNavigator";
 import { thumbUri } from "../../utils/photos";
-import { libraryLabel } from "../../utils/format";
+import { libraryLabel, pluralRu } from "../../utils/format";
 import { bookEvents, replaceBookInGroups } from "../../utils/bookEvents";
 import { useUndoable } from "../../context/UndoContext";
 
@@ -318,7 +318,10 @@ export function CopiesScreen() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(false);
-  const [total, setTotal] = useState(0);
+  // Server totals for the current filters and how much was loaded so far; groups/books
+  // removed on screen (delete, return to review) are subtracted from the totals.
+  const [serverTotal, setServerTotal] = useState({ groups: 0, books: 0 });
+  const [loaded, setLoaded] = useState({ groups: 0, books: 0 });
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [addingToLibraryId, setAddingToLibraryId] = useState<string | null>(
     null,
@@ -361,7 +364,13 @@ export function CopiesScreen() {
             : (prev) => [...prev, ...res.groups],
         );
         setPage(pageNum);
-        setTotal(res.total);
+        setServerTotal({ groups: res.total, books: res.totalBooks });
+        const newBooks = res.groups.reduce((n, g) => n + g.books.length, 0);
+        setLoaded((prev) =>
+          isRefresh || pageNum === 1
+            ? { groups: res.groups.length, books: newBooks }
+            : { groups: prev.groups + res.groups.length, books: prev.books + newBooks },
+        );
         setHasMore(pageNum < res.totalPages);
       } catch {
         // silent
@@ -441,7 +450,6 @@ export function CopiesScreen() {
                       }))
                       .filter((g) => g.books.length >= 2),
                   );
-                  setTotal((t) => Math.max(0, t - 1));
                 } catch {
                   Alert.alert("Ошибка", "Не удалось удалить карточку");
                 } finally {
@@ -503,7 +511,6 @@ export function CopiesScreen() {
                   setGroups((prev) =>
                     prev.filter((g) => g.id !== groupKey),
                   );
-                  setTotal((t) => Math.max(0, t - 1));
                 } catch {
                   Alert.alert("Ошибка", "Не удалось вернуть книги на проверку");
                 }
@@ -513,6 +520,10 @@ export function CopiesScreen() {
       ],
     );
   }, [undoable]);
+
+  const totalGroups = serverTotal.groups - (loaded.groups - groups.length);
+  const totalBooks =
+    serverTotal.books - (loaded.books - groups.reduce((n, g) => n + g.books.length, 0));
 
   const handleLoadMore = useCallback(() => {
     if (loadingMore || !hasMore || loading) return;
@@ -553,7 +564,10 @@ export function CopiesScreen() {
               />
             ))}
           </ScrollView>
-          <AppText style={styles.totalLabel}>{total} групп</AppText>
+          <AppText style={styles.totalLabel}>
+            {groups.length} из {totalGroups} · {totalBooks}{" "}
+            {pluralRu(totalBooks, "книга", "книги", "книг")}
+          </AppText>
         </View>
       </View>
 
