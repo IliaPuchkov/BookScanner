@@ -564,11 +564,11 @@ export function CopiesScreen() {
               />
             ))}
           </ScrollView>
-          <AppText style={styles.totalLabel}>
-            {groups.length} из {totalGroups} · {totalBooks}{" "}
-            {pluralRu(totalBooks, "книга", "книги", "книг")}
-          </AppText>
         </View>
+        <AppText style={styles.totalLabel}>
+          {groups.length} из {totalGroups} · {totalBooks}{" "}
+          {pluralRu(totalBooks, "книга", "книги", "книг")}
+        </AppText>
       </View>
 
       {loading ? (
@@ -672,7 +672,7 @@ const styles = StyleSheet.create({
   chipActive: { backgroundColor: "#546E7A", borderColor: "#546E7A" },
   chipText: { fontSize: 13, fontWeight: "600", color: "#666" },
   chipTextActive: { color: "#fff" },
-  totalLabel: { fontSize: 12, color: "#aaa", marginLeft: "auto" },
+  totalLabel: { fontSize: 12, color: "#aaa", textAlign: "right", marginTop: 6 },
 
   loader: { flex: 1, justifyContent: "center", alignItems: "center" },
   list: { padding: 12, gap: 12 },

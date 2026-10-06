@@ -478,8 +478,14 @@ export class BooksService {
     return { groups: pageGroups, total, totalBooks, page, totalPages: Math.ceil(total / limit) };
   }
 
+  /** Dashboard count — copy groups, the same grouping as getCopyGroups (a copy without a set is its own group). */
   async countCopies(): Promise<number> {
-    return this.booksRepository.count({ where: { isCopy: true } });
+    const row = await this.booksRepository
+      .createQueryBuilder('book')
+      .select('COUNT(DISTINCT COALESCE(book.copyGroupId, book.id))', 'count')
+      .where('book.isCopy = true')
+      .getRawOne<{ count: string }>();
+    return parseInt(row?.count ?? '0', 10);
   }
 
   // "Домашняя книга": an admin takes a pending-review book into their own collection.
