@@ -64,6 +64,19 @@ describe('buildDuplicateGroups', () => {
     expect(groups[0].ids).toHaveLength(2);
   });
 
+  it('gives the same groups whatever order the rows come in', () => {
+    // "Вольф А." fits both, but they don't fit each other — only one can join it
+    const rows = [
+      row('1', 'Дремучие Бескиды', 'Вольф Абрам Яковлевич'),
+      row('2', 'Дремучие Бескиды', 'Вольф А.'),
+      row('3', 'Дремучие Бескиды', 'Вольф Александр Яковлевич'),
+    ];
+    const expected = buildDuplicateGroups(rows);
+    expect(expected).toHaveLength(1);
+    expect(buildDuplicateGroups([rows[2], rows[1], rows[0]])).toEqual(expected);
+    expect(buildDuplicateGroups([rows[1], rows[2], rows[0]])).toEqual(expected);
+  });
+
   it('never links two books with valid ISBNs by title', () => {
     const groups = buildDuplicateGroups([
       row('1', 'Ледяной дом', 'И. И. Лажечников', '5-09-003220-3'),

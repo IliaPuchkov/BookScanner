@@ -73,7 +73,11 @@ export function buildDuplicateGroups(rows: MatchRow[]) {
   type Prepared = { id: string; isbn: string | null; tokens: string[] };
   const byIsbn = new Map<string, string[]>();
   const byTitle = new Map<string, Prepared[]>();
-  for (const r of rows) {
+  // Complete linkage is order-dependent (a vague author fits two that don't fit each other, and
+  // whoever joins first wins), and the SQL returns rows in on-disk order, which background updates
+  // and autovacuum reshuffle — so fix the order, or the card count drifts with nobody working.
+  const sorted = [...rows].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+  for (const r of sorted) {
     const isbn = canonicalIsbn(r.isbn);
     if (isbn) {
       const ids = byIsbn.get(isbn);
