@@ -566,7 +566,8 @@ export function CopiesScreen() {
           </ScrollView>
         </View>
         <AppText style={styles.totalLabel}>
-          {groups.length} из {totalGroups} · {totalBooks}{" "}
+          {groups.length} {pluralRu(groups.length, "группа", "группы", "групп")} из{" "}
+          {totalGroups} · {totalBooks}{" "}
           {pluralRu(totalBooks, "книга", "книги", "книг")}
         </AppText>
       </View>

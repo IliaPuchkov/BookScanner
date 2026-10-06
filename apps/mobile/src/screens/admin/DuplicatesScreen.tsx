@@ -929,7 +929,8 @@ export function DuplicatesScreen() {
             </AppText>
           </TouchableOpacity>
           <AppText style={styles.filterCount}>
-            {displayGroups.length} из {totalGroups} · {totalBooks}{" "}
+            {displayGroups.length} {pluralRu(displayGroups.length, "группа", "группы", "групп")} из{" "}
+            {totalGroups} · {totalBooks}{" "}
             {pluralRu(totalBooks, "книга", "книги", "книг")}
           </AppText>
         </View>
