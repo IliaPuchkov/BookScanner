@@ -9,7 +9,7 @@ import * as bcrypt from 'bcryptjs';
 import { UsersService } from '../users/users.service';
 import { RegisterDto } from './dto/register.dto';
 import { User } from '../users/entities/user.entity';
-import { BCRYPT_ROUNDS } from '@bookscanner/shared';
+import { BCRYPT_ROUNDS, ITokenPayload } from '@bookscanner/shared';
 
 /**
  * A valid bcrypt hash of a random string, generated once at startup. Used to
@@ -123,16 +123,49 @@ export class AuthService {
     await this.usersService.updateRefreshToken(userId, null);
   }
 
+  /**
+   * Checks a refresh token's signature and type; returns its payload.
+   * Throws for anything else, including access tokens.
+   */
+  verifyRefreshToken(token: string): ITokenPayload {
+    try {
+      const payload = this.jwtService.verify<ITokenPayload>(token, {
+        secret: this.configService.getOrThrow<string>('JWT_REFRESH_SECRET'),
+      });
+      if (payload.typ === 'refresh') return payload;
+    } catch {
+      // fall through to the legacy format
+    }
+
+    // TODO(after 2026-10-26): remove. Tokens issued before the split were
+    // signed with JWT_SECRET and had no `typ`, so one is indistinguishable
+    // from an old access token — refreshTokens() still requires it to match
+    // the hash stored for the user, and the first refresh replaces it.
+    try {
+      const payload = this.jwtService.verify<ITokenPayload>(token);
+      if (payload.typ === undefined) return payload;
+    } catch {
+      // invalid or expired
+    }
+
+    throw new UnauthorizedException('Недействительный или просроченный refresh token');
+  }
+
   private async generateTokens(user: User) {
     const payload = { sub: user.id, role: user.role };
 
     const [accessToken, refreshToken] = await Promise.all([
-      this.jwtService.signAsync(payload, {
-        expiresIn: this.configService.get<string>('JWT_ACCESS_EXPIRATION', '15m'),
-      }),
-      this.jwtService.signAsync(payload, {
-        expiresIn: this.configService.get<string>('JWT_REFRESH_EXPIRATION', '7d'),
-      }),
+      this.jwtService.signAsync(
+        { ...payload, typ: 'access' },
+        { expiresIn: this.configService.get<string>('JWT_ACCESS_EXPIRATION', '15m') },
+      ),
+      this.jwtService.signAsync(
+        { ...payload, typ: 'refresh' },
+        {
+          secret: this.configService.getOrThrow<string>('JWT_REFRESH_SECRET'),
+          expiresIn: this.configService.get<string>('JWT_REFRESH_EXPIRATION', '7d'),
+        },
+      ),
     ]);
 
     return { accessToken, refreshToken };

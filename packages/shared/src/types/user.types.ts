@@ -26,9 +26,13 @@ export interface ILoginRequest {
   password: string;
 }
 
+export type TokenType = 'access' | 'refresh';
+
 export interface ITokenPayload {
   sub: string;
   role: UserRole;
+  /** Missing on tokens issued before access/refresh were split. */
+  typ?: TokenType;
 }
 
 export interface IAuthTokens {

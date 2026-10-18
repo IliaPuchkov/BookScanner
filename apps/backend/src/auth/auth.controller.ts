@@ -5,11 +5,9 @@ import {
   UseGuards,
   HttpCode,
   HttpStatus,
-  UnauthorizedException,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
-import { JwtService } from '@nestjs/jwt';
 import { AuthService } from './auth.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
@@ -23,10 +21,7 @@ import { User } from '../users/entities/user.entity';
 @Controller('auth')
 @UseGuards(ThrottlerGuard)
 export class AuthController {
-  constructor(
-    private readonly authService: AuthService,
-    private readonly jwtService: JwtService,
-  ) {}
+  constructor(private readonly authService: AuthService) {}
 
   @Post('register')
   @Throttle({ default: { ttl: 60_000, limit: 5 } })
@@ -48,12 +43,7 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Обновление токенов' })
   refresh(@Body() dto: RefreshTokenDto) {
-    let payload: { sub: string };
-    try {
-      payload = this.jwtService.verify(dto.refreshToken);
-    } catch {
-      throw new UnauthorizedException('Недействительный или просроченный refresh token');
-    }
+    const payload = this.authService.verifyRefreshToken(dto.refreshToken);
     return this.authService.refreshTokens(payload.sub, dto.refreshToken);
   }
 

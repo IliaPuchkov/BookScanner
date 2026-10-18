@@ -368,6 +368,7 @@ The admin has two dedicated screens for managing books that are potential or con
 ### Authentication Flow
 
 - JWT access token (short-lived) + refresh token (stored in DB on user)
+- Tokens carry `typ: 'access' | 'refresh'`; refresh tokens are signed with `JWT_REFRESH_SECRET`. `JwtStrategy` rejects anything but `typ: 'access'` (a 7-day refresh token must not work as a bearer token); `AuthService.verifyRefreshToken` accepts only refresh tokens, plus legacy untyped ones until 2026-10-26 (they still have to match the stored hash)
 - `JwtAuthGuard` + `RolesGuard` on protected routes
 - `@Roles('admin')` decorator for admin-only endpoints
 - `@CurrentUser()` decorator extracts user from JWT payload
@@ -422,6 +423,7 @@ REDIS_PORT=6379
 
 # JWT
 JWT_SECRET=your-secret-key
+JWT_REFRESH_SECRET=another-secret  # signs refresh tokens only; required
 JWT_EXPIRATION=900        # 15 minutes
 JWT_REFRESH_EXPIRATION=604800  # 7 days
 
