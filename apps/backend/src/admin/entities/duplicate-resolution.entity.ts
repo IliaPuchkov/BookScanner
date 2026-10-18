@@ -5,11 +5,14 @@ import {
   CreateDateColumn,
   ManyToOne,
   JoinColumn,
+  Index,
 } from 'typeorm';
 import { Book } from '../../books/entities/book.entity';
 import { User } from '../../users/entities/user.entity';
 
+// One row per pair, stored with book1Id < book2Id (unique index + check, migration 1747900000000)
 @Entity('duplicate_resolutions')
+@Index('uq_dup_res_pair', ['book1Id', 'book2Id'], { unique: true })
 export class DuplicateResolution {
   @PrimaryGeneratedColumn('uuid')
   id: string;

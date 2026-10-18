@@ -156,6 +156,7 @@ Located in `apps/backend/src/database/migrations/`:
 - `1747600000000-AddBookLibrary.ts` — adds `'in_library'` to `books_status_enum`, plus `"libraryOwnerId"` (uuid FK users, ON DELETE SET NULL) and `"addedToLibraryAt"` to `books`
 - `1747700000000-AddBookCopyGroupId.ts` — adds `"copyGroupId"` (uuid, nullable, partial index) to `books`: id of the copy set a book was marked into
 - `1747800000000-BackfillCopyGroupIds.ts` — data migration: assigns a `copyGroupId` to every legacy copy using `buildCopySets()` (same matching as duplicates + same raw ISBN text with the same 20-char title start); existing set ids are kept; `down()` is a no-op
+- `1747900000000-DedupeDuplicateResolutions.ts` — prod `duplicate_resolutions` had no unique index / order check (table predates 1711200000000), so `orIgnore()` never skipped repeats (8 397 extra rows on 2026-10-18). Keeps the earliest row per pair, sorts pairs, adds `uq_dup_res_pair` + `chk_dup_res_order`; aborts if the set of pairs would change
 
 ---
 
@@ -262,7 +263,7 @@ All routes prefixed with `/api`.
 - `GET /books/duplicates` — Groups of possible duplicates with their review state. `criterion` (isbn/exact/fuzzy, default exact), `respectIsbn`, `includeUnknownAuthor`, `showResolved`; filters: `search`, `status`, `count`, `operatorId`, `storeId`, `boxId`
 - `POST /books/duplicates/resolve` — Mark a (book1Id, book2Id) pair as not duplicates; `/resolve-many` takes `pairs`
 - `POST /books/duplicates/unresolve` — Take back "not duplicates" for `pairs`
-- `POST /books/duplicates/unresolve-last` — `{ bookId, otherIds }`: take back the book's latest decision in the group; returns `pairs`. Note: prod `duplicate_resolutions` has no unique index (≈4.9k repeated rows), so it deletes every row of the picked pairs
+- `POST /books/duplicates/unresolve-last` — `{ bookId, otherIds }`: take back the book's latest decision in the group; returns `pairs`.
 - `POST /books/mark-copies` — Mark bookIds one copy set (`masterBookId`, `restBookIds`, `overrideResolutions`); returns `copyGroupId`
 - `POST /books/unmark-copies` — Clear the copy flags; returns `unmarkedIds` (incl. a book left alone in its set)
 - `GET /books/copies/groups` — Books with `isCopy=true`, grouped by ISBN or normalized title. Filters: `search`, `status` (published/not_published/archived)
