@@ -41,6 +41,10 @@ ssh "$SSH_USER@$SERVER_IP" bash << EOF
   docker network connect docker_internal bookscanner-backend 2>/dev/null || true
   docker exec bookscanner-nginx nginx -s reload
 
+  # fail2ban expands its logpath glob only on (re)load; recreated containers get
+  # new log files under a new id, so the login jail would watch deleted files
+  fail2ban-client reload bookscanner-login >/dev/null 2>&1 || true
+
   # Run migrations inside the running container (correct network, DB reachable)
   echo "==> Running migrations..."
   sleep 3
