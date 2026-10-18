@@ -58,197 +58,419 @@ export function authorsCompatible(a: string[], b: string[]): boolean {
   return fitsInto(a, b) || fitsInto(b, a);
 }
 
+// "Не указан", "Автор не указан", "Неизвестен", "Коллектив авторов" are OCR/operator
+// placeholders, not names.
+export const isKnownAuthor = (tokens: string[]) =>
+  tokens.length > 0 && !/^(автор )?не указан[ао]?$|^неизвест|^коллектив авторов$/.test(tokens.join(' '));
+
+// Books without an author (empty or a placeholder) all get this one "author" when they are
+// grouped: they match each other by title, never a book with a known author.
+const UNKNOWN_AUTHOR = ['автор', 'неизвестен'];
+
 export type MatchRow = { id: string; isbn: string | null; title: string | null; author: string | null };
 
-export type DuplicateGroup = { type: 'isbn' | 'title'; key: string; authorKey?: string; ids: string[] };
+/**
+ * How the Duplicates screen looks for copies: the same valid ISBN, the same normalized title
+ * with compatible authors, or a similar title (see titleCore) with compatible authors.
+ */
+export type Criterion = 'isbn' | 'exact' | 'fuzzy';
 
 /**
- * Candidate duplicate groups: one group per valid ISBN shared by ≥ 2 books, plus title groups —
- * books with the same normalized title whose authors are compatible. A title pair where both
- * books have valid ISBNs is never linked (same ISBN → already an ISBN group; different → other
- * edition). Components merge only when every author of one fits every author of the other
- * (complete linkage), so a vague "Лев Толстой" can't chain Лев Николаевич and Лев Львович.
+ * A candidate group — books the criterion considers the same. Every criterion partitions the
+ * books, so `id` (the smallest book id) is unique within one criterion. Admin decisions never
+ * cut a group; they only resolve its pairs (see groupState).
  */
-export function buildDuplicateGroups(rows: MatchRow[]) {
-  type Prepared = { id: string; isbn: string | null; tokens: string[] };
-  const byIsbn = new Map<string, string[]>();
-  const byTitle = new Map<string, Prepared[]>();
-  // Complete linkage is order-dependent (a vague author fits two that don't fit each other, and
-  // whoever joins first wins), and the SQL returns rows in on-disk order, which background updates
-  // and autovacuum reshuffle — so fix the order, or the card count drifts with nobody working.
-  const sorted = [...rows].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
-  for (const r of sorted) {
-    const isbn = canonicalIsbn(r.isbn);
-    if (isbn) {
+export type DuplicateGroup = { criterion: Criterion; id: string; key: string; ids: string[] };
+
+// Prepositions and conjunctions carry no meaning in a title core
+const TITLE_STOPWORDS = new Set(['в', 'во', 'и', 'на', 'с', 'со', 'о', 'об', 'обо', 'из', 'к', 'ко', 'по', 'у', 'а', 'за', 'для', 'от', 'до']);
+const VOLUME_WORD = /^(книг(а|и|е|у|ах|ами)?|кн|том(а|е|у|ов|ах|ам|ами)?|т|част(ь|и|ях|ей|ям)|ч|выпуск(а|и|е|ов|ах)?|вып)$/;
+const VOLUME_ABBR: Array<[RegExp, string]> = [
+  [/^(книг|кн)/, 'Кн.'],
+  [/^(том|т$)/, 'Т.'],
+  [/^(част|ч$)/, 'Ч.'],
+  [/^(выпуск|вып)/, 'Вып.'],
+];
+const ORDINALS: Array<[RegExp, number]> = [
+  [/^(перв|од(ин|на|ну|ной|ном))/, 1],
+  [/^(втор|дв(а|е|ух|ум))/, 2],
+  [/^(трет|тр(и|ех|ем)$)/, 3],
+  [/^(четв[её]рт|четыр)/, 4],
+  [/^пят/, 5],
+  [/^шест/, 6],
+  [/^(седьм|сем(ь|и)$)/, 7],
+  [/^(восьм|восем)/, 8],
+  [/^девят/, 9],
+  [/^десят/, 10],
+];
+// Latin x is already Cyrillic х after normalizeTitle
+const ROMAN = /^[ivxх]+$/;
+
+function romanToInt(s: string): number | null {
+  const v: Record<string, number> = { i: 1, v: 5, x: 10, х: 10 };
+  let total = 0;
+  for (let i = 0; i < s.length; i++) {
+    const cur = v[s[i]];
+    const next = v[s[i + 1]] ?? 0;
+    total += cur < next ? -cur : cur;
+  }
+  return total > 0 ? total : null;
+}
+
+/** Volume number of a token next to a volume word: "2", "ii", "вторая" → 2. */
+function numberValue(t: string | undefined): number | null {
+  if (!t) return null;
+  if (/^\d{1,3}$/.test(t)) return parseInt(t, 10);
+  if (ROMAN.test(t) && t !== 'х') return romanToInt(t);
+  for (const [re, n] of ORDINALS) if (re.test(t)) return n;
+  return null;
+}
+
+const titleWords = (s?: string | null) => normalizeTitle(s).split(/[^\p{L}\p{N}]+/u).filter(Boolean);
+
+// A volume word counts only next to a number ("книга 2", "том первый") or as "в двух книгах",
+// so "Книга джунглей" keeps its "книга". The number goes with it.
+function volumeMarks(words: string[]): boolean[] {
+  const drop = words.map(() => false);
+  words.forEach((w, i) => {
+    if (!VOLUME_WORD.test(w)) return;
+    const prev = numberValue(words[i - 1]) !== null;
+    const next = numberValue(words[i + 1]) !== null;
+    if (!prev && !next && !/ах$/.test(w)) return;
+    drop[i] = true;
+    if (prev) drop[i - 1] = true;
+    if (next) drop[i + 1] = true;
+  });
+  return drop;
+}
+
+/**
+ * The words that name the work, in order: punctuation, prepositions and volume markers are
+ * dropped. "Бухара (Воспоминания): В двух книгах. Книга 1" → ["бухара", "воспоминания"].
+ */
+export function titleCore(title?: string | null): string[] {
+  const words = titleWords(title);
+  const drop = volumeMarks(words);
+  return words.filter((w, i) => !drop[i] && !TITLE_STOPWORDS.has(w));
+}
+
+/** "Кн. 1" for "… Книга 1", "Т. 2" for "Том второй"; null when the title names no volume. */
+export function volumeLabel(title?: string | null): string | null {
+  const words = titleWords(title);
+  for (let i = 0; i < words.length; i++) {
+    const w = words[i];
+    // "в двух книгах" is a count of volumes, not a volume number
+    if (!VOLUME_WORD.test(w) || /ах$/.test(w)) continue;
+    const n = numberValue(words[i + 1]) ?? numberValue(words[i - 1]);
+    if (n === null) continue;
+    const abbr = VOLUME_ABBR.find(([re]) => re.test(w))?.[1] ?? '';
+    return `${abbr} ${n}`;
+  }
+  return null;
+}
+
+// Edit distance ≤ 1 (one substitution, insertion or deletion)
+function withinOneEdit(a: string, b: string): boolean {
+  if (Math.abs(a.length - b.length) > 1) return false;
+  let i = 0;
+  let j = 0;
+  let edits = 0;
+  while (i < a.length && j < b.length) {
+    if (a[i] === b[j]) {
+      i++;
+      j++;
+      continue;
+    }
+    if (++edits > 1) return false;
+    if (a.length > b.length) i++;
+    else if (b.length > a.length) j++;
+    else {
+      i++;
+      j++;
+    }
+  }
+  return edits + (a.length - i) + (b.length - j) <= 1;
+}
+
+// Words of 6+ letters tolerate one OCR typo ("воспомипания"); shorter ones must be identical
+const MIN_TYPO_WORD = 6;
+const wordsMatch = (a: string, b: string) =>
+  a === b || (Math.min(a.length, b.length) >= MIN_TYPO_WORD && withinOneEdit(a, b));
+
+/** The shorter core is the start of the longer one: ["бухара"] fits ["бухара", "воспоминания"]. */
+export function coresMatch(a: string[], b: string[]): boolean {
+  const [short, long] = a.length <= b.length ? [a, b] : [b, a];
+  return short.length > 0 && short.every((w, i) => wordsMatch(w, long[i]));
+}
+
+// Deletion keys of a word that tolerates a typo: the word itself and the word with each letter
+// deleted — two words one edit apart always share one of these.
+function deletionKeys(w: string): string[] {
+  const keys = new Set([w]);
+  for (let i = 0; i < w.length; i++) keys.add(w.slice(0, i) + w.slice(i + 1));
+  return [...keys];
+}
+
+/** Pairs of distinct words of the list that match up to a typo (see wordsMatch). */
+function typoNeighbours(words: string[]): Array<[string, string]> {
+  const byKey = new Map<string, string[]>();
+  for (const w of words) {
+    if (w.length < MIN_TYPO_WORD) continue;
+    for (const k of deletionKeys(w)) {
+      const ws = byKey.get(k);
+      if (ws) ws.push(w); else byKey.set(k, [w]);
+    }
+  }
+  const seen = new Set<string>();
+  const pairs: Array<[string, string]> = [];
+  for (const ws of byKey.values()) {
+    for (let x = 0; x < ws.length; x++) {
+      for (let y = x + 1; y < ws.length; y++) {
+        const k = ws[x] < ws[y] ? `${ws[x]}\n${ws[y]}` : `${ws[y]}\n${ws[x]}`;
+        if (seen.has(k) || !wordsMatch(ws[x], ws[y])) continue;
+        seen.add(k);
+        pairs.push([ws[x], ws[y]]);
+      }
+    }
+  }
+  return pairs;
+}
+
+type Prepared = { id: string; isbn: string | null; tokens: string[]; key: string };
+
+/**
+ * Union of linked pairs with complete linkage: two components merge only when every author of
+ * one fits every author of the other (a vague "Лев Толстой" can't chain Лев Николаевич and
+ * Лев Львович) and, with respectIsbn, when together they hold at most one valid ISBN.
+ * Items must be sorted by id and pairs in index order — complete linkage is order-dependent.
+ */
+function cluster(items: Prepared[], pairs: Array<[number, number]>, respectIsbn: boolean): number[][] {
+  const parent = items.map((_, i) => i);
+  const members = items.map((_, i) => [i]);
+  const isbns = items.map((it) => new Set(it.isbn ? [it.isbn] : []));
+  const find = (i: number): number => (parent[i] === i ? i : (parent[i] = find(parent[i])));
+  for (const [i, j] of pairs) {
+    const ri = find(i);
+    const rj = find(j);
+    if (ri === rj) continue;
+    if (respectIsbn && new Set([...isbns[ri], ...isbns[rj]]).size > 1) continue;
+    const mi = members[ri];
+    const mj = members[rj];
+    if (!mi.every((x) => mj.every((y) => authorsCompatible(items[x].tokens, items[y].tokens)))) continue;
+    parent[ri] = rj;
+    members[rj] = [...mj, ...mi];
+    for (const isbn of isbns[ri]) isbns[rj].add(isbn);
+  }
+  return items
+    .map((_, i) => i)
+    .filter((i) => find(i) === i && members[i].length >= 2)
+    .map((i) => members[i].sort((a, b) => a - b));
+}
+
+const byId = <T extends { id: string }>(rows: T[]) =>
+  [...rows].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+
+const toGroup = (criterion: Criterion, items: Prepared[], idx: number[]): DuplicateGroup => {
+  const ids = idx.map((i) => items[i].id);
+  return { criterion, id: ids[0], key: items[idx[0]].key, ids };
+};
+
+/**
+ * Candidate groups for one criterion. Rows are sorted by id first: complete linkage is
+ * order-dependent and the SQL returns rows in on-disk order, which background updates and
+ * autovacuum reshuffle — so the groups (and the card count) don't drift with nobody working.
+ * - isbn: one group per valid ISBN shared by ≥ 2 books; title and author are not checked.
+ * - exact: the same normalized title, compatible authors.
+ * - fuzzy: one title core is the start of the other (typos allowed), compatible authors.
+ * respectIsbn (title criteria only): books with two different valid ISBNs are not linked —
+ * another edition or volume.
+ * includeUnknownAuthor (title criteria only): books without an author (empty or "Не указан")
+ * are grouped with each other by title; off (default) — they are left out.
+ */
+export function buildDuplicateGroups(
+  rows: MatchRow[],
+  criterion: Criterion,
+  respectIsbn = true,
+  includeUnknownAuthor = false,
+): DuplicateGroup[] {
+  const sorted = byId(rows);
+
+  if (criterion === 'isbn') {
+    const byIsbn = new Map<string, string[]>();
+    for (const r of sorted) {
+      const isbn = canonicalIsbn(r.isbn);
+      if (!isbn) continue;
       const ids = byIsbn.get(isbn);
       if (ids) ids.push(r.id); else byIsbn.set(isbn, [r.id]);
     }
-    const title = normalizeTitle(r.title);
-    const tokens = authorTokens(r.author);
-    if (!title || !tokens.length || title === 'новая книга') continue;
-    const bucket = byTitle.get(title);
-    const p = { id: r.id, isbn, tokens };
-    if (bucket) bucket.push(p); else byTitle.set(title, [p]);
+    return [...byIsbn]
+      .filter(([, ids]) => ids.length >= 2)
+      .map(([isbn, ids]) => ({ criterion, id: ids[0], key: isbn, ids }));
   }
 
-  const groups: DuplicateGroup[] = [];
-  for (const [isbn, ids] of byIsbn) {
-    if (ids.length >= 2) groups.push({ type: 'isbn', key: isbn, ids });
+  const items: Prepared[] = [];
+  const cores: string[][] = [];
+  for (const r of sorted) {
+    const title = normalizeTitle(r.title);
+    if (!title || title === 'новая книга') continue;
+    let tokens = authorTokens(r.author);
+    if (!isKnownAuthor(tokens)) {
+      if (!includeUnknownAuthor) continue;
+      tokens = UNKNOWN_AUTHOR;
+    }
+    const core = criterion === 'fuzzy' ? titleCore(r.title) : [];
+    if (criterion === 'fuzzy' && !core.length) continue;
+    items.push({ id: r.id, isbn: canonicalIsbn(r.isbn), tokens, key: criterion === 'fuzzy' ? core.join(' ') : title });
+    cores.push(core);
   }
-  for (const [title, bs] of byTitle) {
-    if (bs.length < 2) continue;
-    const parent = bs.map((_, i) => i);
-    const find = (i: number): number => (parent[i] === i ? i : (parent[i] = find(parent[i])));
-    for (let i = 0; i < bs.length; i++) {
-      for (let j = i + 1; j < bs.length; j++) {
-        if (bs[i].isbn && bs[j].isbn) continue;
-        if (!authorsCompatible(bs[i].tokens, bs[j].tokens)) continue;
-        const ri = find(i);
-        const rj = find(j);
-        if (ri === rj) continue;
-        const pi = bs.filter((_, k) => find(k) === ri);
-        const pj = bs.filter((_, k) => find(k) === rj);
-        if (pi.every((x) => pj.every((y) => authorsCompatible(x.tokens, y.tokens)))) parent[ri] = rj;
+
+  // Candidate pairs come from buckets: the whole title (exact) or the core's first word (fuzzy —
+  // a core that starts another shares its first word, up to a typo: such words' buckets are
+  // compared with each other too).
+  const buckets = new Map<string, number[]>();
+  items.forEach((it, i) => {
+    const k = criterion === 'fuzzy' ? cores[i][0] : it.key;
+    const b = buckets.get(k);
+    if (b) b.push(i); else buckets.set(k, [i]);
+  });
+  const pairs: Array<[number, number]> = [];
+  const seen = new Set<number>();
+  const consider = (i: number, j: number) => {
+    const code = i < j ? i * items.length + j : j * items.length + i;
+    if (i === j || seen.has(code)) return;
+    seen.add(code);
+    if (respectIsbn && items[i].isbn && items[j].isbn && items[i].isbn !== items[j].isbn) return;
+    if (criterion === 'fuzzy' && !coresMatch(cores[i], cores[j])) return;
+    if (!authorsCompatible(items[i].tokens, items[j].tokens)) return;
+    pairs.push(i < j ? [i, j] : [j, i]);
+  };
+  // Compatible authors always share a name part of 3+ letters (the surname), so inside a bucket
+  // only books sharing one are compared — a big "Избранное" bucket is not checked pair by pair.
+  const bySurname = (idx: number[]) => {
+    const m = new Map<string, number[]>();
+    for (const i of idx) {
+      for (const t of new Set(items[i].tokens)) {
+        if (t.length < 3) continue;
+        const l = m.get(t);
+        if (l) l.push(i); else m.set(t, [i]);
       }
     }
-    const comps = new Map<number, string[]>();
-    bs.forEach((b, i) => {
-      const r = find(i);
-      const c = comps.get(r);
-      if (c) c.push(b.id); else comps.set(r, [b.id]);
-    });
-    for (const ids of comps.values()) {
-      // authorKey only needs to tell apart components of one title; the smallest id is stable
-      if (ids.length >= 2) groups.push({ type: 'title', key: title, authorKey: [...ids].sort()[0], ids });
+    return m;
+  };
+  for (const b of buckets.values()) {
+    if (b.length < 2) continue;
+    for (const l of bySurname(b).values()) {
+      for (let x = 0; x < l.length; x++) for (let y = x + 1; y < l.length; y++) consider(l[x], l[y]);
     }
   }
-  return groups;
+  if (criterion === 'fuzzy') {
+    for (const [w1, w2] of typoNeighbours([...buckets.keys()])) {
+      const other = bySurname(buckets.get(w2)!);
+      for (const i of buckets.get(w1)!) {
+        for (const t of new Set(items[i].tokens)) for (const j of other.get(t) ?? []) consider(i, j);
+      }
+    }
+  }
+  pairs.sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+
+  return cluster(items, pairs, respectIsbn).map((idx) => {
+    const group = toGroup(criterion, items, idx);
+    // The shortest core names a fuzzy group best ("бухара", not "бухара воспоминания")
+    if (criterion === 'fuzzy') group.key = idx.map((i) => items[i].key).sort((a, b) => a.length - b.length)[0];
+    return group;
+  });
 }
 
 export const pairKey = (a: string, b: string) => (a < b ? `${a}:${b}` : `${b}:${a}`);
 
-/**
- * Best match level between any two books of a card: 100 = ISBN + title + author, 60 = any two,
- * 30 = one. Re-checks the books' actual ISBNs (two different valid ISBNs = other edition, skipped)
- * rather than trusting the group type.
- */
-export function groupProbability(books: MatchRow[], groupType: 'isbn' | 'title') {
-  let probability = 0;
-  let matchedFields: string[] = [];
-  for (let i = 0; i < books.length; i++) {
-    for (let j = i + 1; j < books.length; j++) {
-      const a = books[i];
-      const b = books[j];
-      const ia = canonicalIsbn(a.isbn);
-      const ib = canonicalIsbn(b.isbn);
-      if (ia && ib && ia !== ib) continue;
-      const na = normalizeTitle(a.title);
-      const fields: string[] = [];
-      if (ia && ia === ib) fields.push('ISBN');
-      if (na && na === normalizeTitle(b.title)) fields.push('Название');
-      if (authorsCompatible(authorTokens(a.author), authorTokens(b.author))) fields.push('Автор');
-      const prob = fields.length >= 3 ? 100 : fields.length === 2 ? 60 : 30;
-      if (prob > probability) { probability = prob; matchedFields = fields; }
-    }
-  }
-  if (matchedFields.length === 0) return { probability: 30, matchedFields: [groupType === 'isbn' ? 'ISBN' : 'Название'] };
-  return { probability, matchedFields };
-}
-
-export type DuplicateCard = DuplicateGroup & { componentKey?: string; probability: number; matchedFields: string[] };
-type CardRow = MatchRow & { isCopy: boolean };
+export type StateRow = MatchRow & { copyGroupId: string | null };
 
 /**
- * The cards the Duplicates screen shows, built before paging so totals and the dashboard count
- * match the list. Each group is split into connected components of still-unresolved pairs (a
- * book marked "not a copy" of all others drops out; a subset split off as its own copy set
- * becomes a separate card). Fully confirmed sets (every book isCopy) and Low-probability cards
- * are dropped; a confirmed set plus a new book stays visible as a new arrival of that set.
- * Finally visible cards sharing a book are merged (see mergeOverlapping).
+ * Where a group's review stands. A pair is decided when both books are in one copy set
+ * (copies), in two different sets (not copies — follows from the sets), or resolved "not
+ * copies" in duplicate_resolutions. Two different ISBNs do not decide a pair — that is the
+ * admin's call. The group leaves the queue once every pair is decided.
+ * - sets: confirmed copy sets inside the group
+ * - looseIds: books in no set that still have an undecided pair
+ * - excludedIds: books in no set whose every pair is resolved "not copies" (shown folded)
+ * - conflictPairs: resolved "not copies" but in one set — old data; the set wins
  */
-export function buildDuplicateCards(
-  groups: DuplicateGroup[],
-  rowsById: Map<string, CardRow>,
-  resolved: Set<string>,
-): DuplicateCard[] {
-  const cards: DuplicateCard[] = [];
-  for (const group of groups) {
-    const books = group.ids.map((id) => rowsById.get(id)).filter((b): b is CardRow => !!b);
-    const parent = books.map((_, i) => i);
-    const find = (i: number): number => (parent[i] === i ? i : (parent[i] = find(parent[i])));
-    for (let i = 0; i < books.length; i++) {
-      for (let j = i + 1; j < books.length; j++) {
-        if (!resolved.has(pairKey(books[i].id, books[j].id))) parent[find(i)] = find(j);
+export function groupState(ids: string[], rowsById: Map<string, StateRow>, resolved: Set<string>) {
+  const rows = ids.map((id) => rowsById.get(id)).filter((r): r is StateRow => !!r);
+  const resolvedPairs: Array<[string, string]> = [];
+  const conflictPairs: Array<[string, string]> = [];
+  const undecided = new Set<string>();
+  let unresolvedCount = 0;
+  for (let i = 0; i < rows.length; i++) {
+    for (let j = i + 1; j < rows.length; j++) {
+      const a = rows[i];
+      const b = rows[j];
+      const isResolved = resolved.has(pairKey(a.id, b.id));
+      if (a.copyGroupId && a.copyGroupId === b.copyGroupId) {
+        if (isResolved) conflictPairs.push([a.id, b.id]);
+      } else if (isResolved) {
+        resolvedPairs.push([a.id, b.id]);
+      } else if (!a.copyGroupId || !b.copyGroupId) {
+        unresolvedCount++;
+        undecided.add(a.id);
+        undecided.add(b.id);
       }
     }
-    const components = new Map<number, CardRow[]>();
-    books.forEach((b, i) => {
-      const c = components.get(find(i));
-      if (c) c.push(b); else components.set(find(i), [b]);
-    });
-    for (const comp of components.values()) {
-      if (comp.length < 2 || comp.every((b) => b.isCopy)) continue;
-      const { probability, matchedFields } = groupProbability(comp, group.type);
-      if (probability < 60) continue;
-      // Several components of one group share type/key/authorKey; componentKey keeps them apart.
-      const componentKey = components.size > 1 ? comp[0].id : undefined;
-      cards.push({ ...group, componentKey, ids: comp.map((b) => b.id), probability, matchedFields });
-    }
   }
-  return mergeOverlapping(cards, rowsById);
+  const sets = new Map<string, string[]>();
+  const looseIds: string[] = [];
+  const excludedIds: string[] = [];
+  for (const r of rows) {
+    if (r.copyGroupId) {
+      const s = sets.get(r.copyGroupId);
+      if (s) s.push(r.id); else sets.set(r.copyGroupId, [r.id]);
+    } else (undecided.has(r.id) ? looseIds : excludedIds).push(r.id);
+  }
+  return {
+    sets: [...sets].map(([copyGroupId, setIds]) => ({ copyGroupId, ids: setIds })),
+    looseIds,
+    excludedIds,
+    resolvedPairs,
+    conflictPairs,
+    unresolvedCount,
+  };
 }
 
-/**
- * A book with a valid ISBN sits in its ISBN group and in its title group, so without this the
- * same books show up on two or three cards. Cards sharing a book become one — but only when
- * every author across them is compatible (books without an author or with a placeholder like "Не указан" don't block), so an OCR'd
- * wrong ISBN can't glue "Старик Хоттабыч" to "Самое главное". Merging happens after the split
- * by resolutions, so sets the admin already separated or confirmed don't come back. A card that
- * overlaps nothing is returned unchanged; a merged one takes the key of its largest ISBN card
- * (it shows "ISBN: …") and the smallest id as componentKey to stay unique.
- */
-// "Не указан", "Автор не указан", "Неизвестен" are OCR/operator placeholders, not names.
-const isKnownAuthor = (tokens: string[]) =>
-  tokens.length > 0 && !/^(автор )?не указан[ао]?$|^неизвест/.test(tokens.join(' '));
 
-function mergeOverlapping(cards: DuplicateCard[], rowsById: Map<string, CardRow>): DuplicateCard[] {
-  const parent = cards.map((_, i) => i);
-  const find = (i: number): number => (parent[i] === i ? i : (parent[i] = find(parent[i])));
-  const authorsOf = new Map(
-    cards.map((c, i) => [i, c.ids.map((id) => authorTokens(rowsById.get(id)?.author)).filter(isKnownAuthor)]),
-  );
-  const cardsOf = new Map<string, number[]>();
-  cards.forEach((c, i) => {
-    for (const id of c.ids) {
-      for (const other of cardsOf.get(id) ?? []) {
-        const ri = find(i);
-        const ro = find(other);
-        if (ri === ro) continue;
-        const ai = authorsOf.get(ri)!;
-        const ao = authorsOf.get(ro)!;
-        if (!ai.every((x) => ao.every((y) => authorsCompatible(x, y)))) continue;
-        parent[ri] = ro;
-        authorsOf.set(ro, [...ao, ...ai]);
-      }
-      const seen = cardsOf.get(id);
-      if (seen) seen.push(i); else cardsOf.set(id, [i]);
-    }
-  });
-  const members = new Map<number, DuplicateCard[]>();
-  cards.forEach((c, i) => {
-    const m = members.get(find(i));
-    if (m) m.push(c); else members.set(find(i), [c]);
-  });
-  return [...members.values()].map((cs) => {
-    if (cs.length === 1) return cs[0];
-    const ids = [...new Set(cs.flatMap((c) => c.ids))];
-    const isbnCards = cs.filter((c) => c.type === 'isbn');
-    const main = isbnCards.length
-      ? isbnCards.reduce((a, b) => (b.ids.length > a.ids.length || (b.ids.length === a.ids.length && b.key < a.key) ? b : a))
-      : cs[0];
-    const books = ids.map((id) => rowsById.get(id)!);
-    return { type: main.type, key: main.key, authorKey: main.authorKey, componentKey: [...ids].sort()[0], ids, ...groupProbability(books, main.type) };
-  });
+/**
+ * What a group's books share and where they differ, as chips: ISBN when all valid ISBNs are
+ * one, title when all normalized titles are equal ("Похожее название" for a fuzzy group),
+ * author when every known author fits every other. isbnDiffers lists books whose valid ISBN
+ * is not the group's most common one.
+ */
+export function groupMatch(rows: MatchRow[], criterion: Criterion) {
+  const matchedFields: string[] = [];
+  const differingFields: string[] = [];
+
+  const isbnCount = new Map<string, number>();
+  for (const r of rows) {
+    const isbn = canonicalIsbn(r.isbn);
+    if (isbn) isbnCount.set(isbn, (isbnCount.get(isbn) ?? 0) + 1);
+  }
+  const [mainIsbn] = [...isbnCount].sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : 1))[0] ?? [];
+  if (isbnCount.size > 1) differingFields.push('ISBN');
+  else if (mainIsbn && isbnCount.get(mainIsbn)! >= 2) matchedFields.push('ISBN');
+  const isbnDiffers = isbnCount.size > 1
+    ? rows.filter((r) => { const i = canonicalIsbn(r.isbn); return i && i !== mainIsbn; }).map((r) => r.id)
+    : [];
+
+  const titles = new Set(rows.map((r) => normalizeTitle(r.title)));
+  if (titles.size === 1) matchedFields.push('Название');
+  else if (criterion === 'fuzzy') matchedFields.push('Похожее название');
+  else differingFields.push('Название');
+
+  const authors = rows.map((r) => authorTokens(r.author)).filter(isKnownAuthor);
+  if (authors.length >= 2) {
+    const fit = authors.every((a, i) => authors.slice(i + 1).every((b) => authorsCompatible(a, b)));
+    (fit ? matchedFields : differingFields).push('Автор');
+  }
+
+  return { matchedFields, differingFields, isbnDiffers };
 }
 
 /**

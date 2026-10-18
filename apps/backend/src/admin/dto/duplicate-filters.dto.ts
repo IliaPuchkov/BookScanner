@@ -1,9 +1,40 @@
-import { IsOptional, IsIn, IsInt, Min, Max, IsUUID } from 'class-validator';
-import { Type } from 'class-transformer';
+import { IsOptional, IsIn, IsInt, Min, Max, IsUUID, IsBoolean } from 'class-validator';
+import { Transform, Type } from 'class-transformer';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { PaginationDto } from '../../common/dto/pagination.dto';
 
+// Query strings arrive as 'true'/'false'
+const toBool = ({ value }: { value: unknown }) => (value === undefined ? undefined : value === true || value === 'true');
+
 export class DuplicateFiltersDto extends PaginationDto {
+  @ApiPropertyOptional({
+    enum: ['isbn', 'exact', 'fuzzy'],
+    description: 'isbn — одинаковый ISBN; exact — автор + название точно; fuzzy — автор + похожее название',
+  })
+  @IsOptional()
+  @IsIn(['isbn', 'exact', 'fuzzy'])
+  criterion?: 'isbn' | 'exact' | 'fuzzy';
+
+  @ApiPropertyOptional({ description: 'Не сводить книги с разными валидными ISBN (по умолчанию true; не для isbn)' })
+  @IsOptional()
+  @Transform(toBool)
+  @IsBoolean()
+  respectIsbn?: boolean;
+
+  @ApiPropertyOptional({
+    description: 'Группировать книги без автора (пусто, «Не указан») между собой (по умолчанию false; не для isbn)',
+  })
+  @IsOptional()
+  @Transform(toBool)
+  @IsBoolean()
+  includeUnknownAuthor?: boolean;
+
+  @ApiPropertyOptional({ description: 'Показывать и полностью разобранные группы' })
+  @IsOptional()
+  @Transform(toBool)
+  @IsBoolean()
+  showResolved?: boolean;
+
   /** Hard-cap limit at 50 — loading 700 groups with full relations causes OOM */
   @ApiPropertyOptional({ maximum: 50 })
   @IsOptional()

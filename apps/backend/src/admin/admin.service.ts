@@ -168,46 +168,77 @@ export class AdminService {
   }
 
   async resolveDuplicate(book1Id: string, book2Id: string, adminId: string) {
-    const [id1, id2] = [book1Id, book2Id].sort();
+    await this.resolveDuplicates([{ book1Id, book2Id }], adminId);
+  }
+
+  /** Resolves pairs as "not copies"; the pairs stay in their groups, only their state changes. */
+  async resolveDuplicates(pairs: Array<{ book1Id: string; book2Id: string }>, adminId: string) {
+    const values = pairs
+      .filter((p) => p.book1Id !== p.book2Id)
+      .map((p) => {
+        const [book1Id, book2Id] = [p.book1Id, p.book2Id].sort();
+        return { book1Id, book2Id, resolvedById: adminId };
+      });
+    if (!values.length) return;
     await this.dupResRepository
       .createQueryBuilder()
       .insert()
       .into(DuplicateResolution)
-      .values({ book1Id: id1, book2Id: id2, resolvedById: adminId })
+      .values(values)
       .orIgnore()
       .execute();
+    this.booksService.dropDuplicateStates();
+  }
+
+  /** Takes back "not copies" for these pairs — they are undecided again. */
+  async unresolveDuplicates(pairs: Array<{ book1Id: string; book2Id: string }>) {
+    const sorted = pairs.map((p) => [p.book1Id, p.book2Id].sort());
+    if (!sorted.length) return;
+    await this.dupResRepository.manager.query(
+      `DELETE FROM duplicate_resolutions r
+       USING unnest($1::uuid[], $2::uuid[]) AS p(b1, b2)
+       WHERE r.book1_id = p.b1 AND r.book2_id = p.b2`,
+      [sorted.map((p) => p[0]), sorted.map((p) => p[1])],
+    );
+    this.booksService.dropDuplicateStates();
   }
 
   /**
    * Marks `bookIds` as one copy set. `restBookIds` are the other books of the suspected group
-   * when the admin splits it: each selected book is resolved as "not a duplicate" of them,
-   * so the rest stays in the duplicates queue as its own group.
+   * when the admin splits it: each selected book is resolved as "not a duplicate" of them.
+   * With `overrideResolutions`, earlier "not copies" between the selected books are removed —
+   * the admin confirmed they are copies after all.
    */
-  async markCopies(bookIds: string[], masterBookId: string | undefined, restBookIds: string[], adminId: string) {
+  async markCopies(
+    bookIds: string[],
+    masterBookId: string | undefined,
+    restBookIds: string[],
+    adminId: string,
+    overrideResolutions = false,
+  ) {
     if (!bookIds.length) return;
     const selected = new Set(bookIds);
     const rest = [...new Set(restBookIds)].filter((id) => !selected.has(id));
     if (rest.length) {
-      const values = bookIds.flatMap((a) =>
-        rest.map((b) => {
-          const [book1Id, book2Id] = [a, b].sort();
-          return { book1Id, book2Id, resolvedById: adminId };
-        }),
+      await this.resolveDuplicates(
+        bookIds.flatMap((a) => rest.map((b) => ({ book1Id: a, book2Id: b }))),
+        adminId,
       );
-      await this.dupResRepository
-        .createQueryBuilder()
-        .insert()
-        .into(DuplicateResolution)
-        .values(values)
-        .orIgnore()
-        .execute();
     }
-    await this.booksService.markAsCopies(bookIds, masterBookId);
+    if (overrideResolutions) {
+      await this.dupResRepository.manager.query(
+        `DELETE FROM duplicate_resolutions WHERE book1_id = ANY($1::uuid[]) AND book2_id = ANY($1::uuid[])`,
+        [bookIds],
+      );
+      this.booksService.dropDuplicateStates();
+    }
+    const copyGroupId = await this.booksService.markAsCopies(bookIds, masterBookId);
+    return { copyGroupId };
   }
 
   async unmarkCopies(bookIds: string[]) {
-    if (!bookIds.length) return;
-    await this.booksService.unmarkCopies(bookIds);
+    if (!bookIds.length) return { unmarkedIds: [] };
+    return { unmarkedIds: await this.booksService.unmarkCopies(bookIds) };
   }
 
   async addToLibrary(bookId: string, adminId: string) {

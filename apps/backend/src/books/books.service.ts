@@ -11,12 +11,14 @@ import { randomUUID } from 'crypto';
 import { nanoid } from 'nanoid';
 import { Book } from './entities/book.entity';
 import {
-  buildDuplicateCards,
   buildDuplicateGroups,
-  DuplicateCard,
+  Criterion,
   DuplicateGroup,
-  MatchRow,
+  groupMatch,
+  groupState,
   pairKey,
+  StateRow,
+  volumeLabel,
 } from './duplicate-matching';
 import { CreateBookDto } from './dto/create-book.dto';
 import { UpdateBookDto } from './dto/update-book.dto';
@@ -36,15 +38,29 @@ import {
   DEFAULT_PRICE,
 } from '@bookscanner/shared';
 
-type DuplicateRow = MatchRow & { isCopy: boolean };
-type DuplicateCandidates = { groups: DuplicateGroup[]; rowsById: Map<string, DuplicateRow> };
+type DuplicateRow = StateRow;
+type DuplicateRows = { list: DuplicateRow[]; byId: Map<string, DuplicateRow> };
+type GroupsEntry = { rows: DuplicateRows; groups: DuplicateGroup[] };
+/** Which groups the Duplicates screen shows — see buildDuplicateGroups. */
+export type DuplicateQuery = {
+  criterion?: Criterion;
+  respectIsbn?: boolean;
+  includeUnknownAuthor?: boolean;
+  showResolved?: boolean;
+};
+/** A candidate group with its review state (groupState) and match chips (groupMatch). */
+export type DuplicateCard = DuplicateGroup &
+  ReturnType<typeof groupState> &
+  ReturnType<typeof groupMatch> & { volumes: Record<string, string> };
 
 @Injectable()
 export class BooksService {
   private readonly logger = new Logger(BooksService.name);
-  private _groupsCache: { candidates: DuplicateCandidates; cachedAt: number } | null = null;
-  private _groupsCachePending: Promise<DuplicateCandidates> | null = null;
-  private _cardsCache: { candidates: DuplicateCandidates; resolvedCount: number; cards: DuplicateCard[] } | null = null;
+  private _rowsCache: { rows: DuplicateRows; cachedAt: number } | null = null;
+  private _rowsCachePending: Promise<DuplicateRows> | null = null;
+  // Keyed by view: criterion + respectIsbn
+  private _groupsCache = new Map<string, GroupsEntry>();
+  private _cardsCache = new Map<string, { groups: GroupsEntry; cards: DuplicateCard[] }>();
 
   private _filterCache: {
     key: string;
@@ -383,7 +399,7 @@ export class BooksService {
     return books.map((b) => b.id);
   }
 
-  async markAsCopies(bookIds: string[], masterBookId?: string): Promise<void> {
+  async markAsCopies(bookIds: string[], masterBookId?: string): Promise<string> {
     // Join an existing copy set if any of these books already belongs to one; books of other
     // existing sets touched here are merged into it.
     const existing = await this.booksRepository.find({
@@ -405,16 +421,26 @@ export class BooksService {
       const newIds = existing.filter((b) => !b.isCopy).map((b) => b.id);
       if (newIds.length) await this.booksRepository.update({ id: In(newIds) }, { isCopyMaster: false });
     }
-    this._groupsCache = null;
+    this.dropDuplicateCache();
+    return copyGroupId;
   }
 
-  async unmarkCopies(bookIds: string[]): Promise<void> {
-    if (!bookIds.length) return;
+  /** Returns every book that stopped being a copy — the given ones plus sets left with one book. */
+  async unmarkCopies(bookIds: string[]): Promise<string[]> {
+    if (!bookIds.length) return [];
+    const sets = await this.booksRepository.find({ select: ['copyGroupId'], where: { id: In(bookIds) } });
     await this.booksRepository.update(
       { id: In(bookIds) },
       { isCopy: false, isCopyMaster: false, copyGroupId: null },
     );
-    this._groupsCache = null;
+    // A set left with one book is no longer a set
+    const unmarked = [...bookIds];
+    for (const g of new Set(sets.map((b) => b.copyGroupId))) {
+      const single = await this.unmarkSingletonCopy(g);
+      if (single) unmarked.push(single);
+    }
+    this.dropDuplicateCache();
+    return unmarked;
   }
 
   async getCopyGroups(
@@ -652,8 +678,8 @@ export class BooksService {
   }
 
   // A copy set left with one book is no longer a set: that book becomes an ordinary book again
-  private async unmarkSingletonCopy(copyGroupId: string | null): Promise<void> {
-    if (!copyGroupId) return;
+  private async unmarkSingletonCopy(copyGroupId: string | null): Promise<string | null> {
+    if (!copyGroupId) return null;
     const remaining = await this.booksRepository.find({
       select: ['id'],
       where: { isCopy: true, copyGroupId },
@@ -664,8 +690,10 @@ export class BooksService {
         isCopyMaster: false,
         copyGroupId: null,
       });
-      this._groupsCache = null;
+      this.dropDuplicateCache();
+      return remaining[0].id;
     }
+    return null;
   }
 
   async getOcrFailedBooks(pagination: PaginationDto) {
@@ -772,14 +800,16 @@ export class BooksService {
 
   async getDuplicatePairs(
     resolvedPairs: Array<{ book1Id: string; book2Id: string }>,
-    filters: { search?: string; status?: string; count?: number; operatorId?: string; storeId?: string; boxId?: string } = {},
+    filters: DuplicateQuery & { search?: string; status?: string; count?: number; operatorId?: string; storeId?: string; boxId?: string } = {},
     page = 1,
     limit = 20,
   ) {
-    // Step 1-2: the cards the screen shows (split by resolutions, confirmed sets and Low
-    // probability dropped) — built before paging so total/totalPages count real cards.
+    // Step 1-2: the groups of the chosen criterion with their review state — built before paging
+    // so total/totalPages count real groups. Fully decided groups only with showResolved.
     const now = Date.now();
-    const allGroups = await this.getDuplicateCards(resolvedPairs);
+    const allGroups = (await this.getDuplicateCards(resolvedPairs, filters)).filter(
+      (g) => filters.showResolved || g.unresolvedCount > 0,
+    );
 
     // Step 2.5: Server-side filtering
     // Build a set of book IDs matching all book-level filter criteria, then keep only groups
@@ -871,23 +901,19 @@ export class BooksService {
     });
 
     const total = filteredGroups.length;
-    // A book on two cards (merge blocked by an OCR'd author) is counted once
     const totalBooks = new Set(filteredGroups.flatMap((g) => g.ids)).size;
     const totalPages = Math.ceil(total / limit);
     const pageGroups = filteredGroups.slice((page - 1) * limit, page * limit);
 
     // Step 3: Bulk-fetch books only for this page (no ocrResult — saves ~500KB/page)
     // Cap books per group to prevent OOM when large groups pass a store/operator filter.
-    // When a book-level filter is active, matching books are prioritised so they're always visible.
+    // Books matching a book-level filter come first, then the undecided ones, sets, folded.
     const MAX_BOOKS_PER_GROUP = 25;
     const shownIds = (g: DuplicateCard) => {
       if (g.ids.length <= MAX_BOOKS_PER_GROUP) return g.ids;
-      if (matchingBookIds) {
-        const matching = g.ids.filter((id) => matchingBookIds!.has(id));
-        const others = g.ids.filter((id) => !matchingBookIds!.has(id));
-        return [...matching, ...others].slice(0, MAX_BOOKS_PER_GROUP);
-      }
-      return g.ids.slice(0, MAX_BOOKS_PER_GROUP);
+      const ordered = [...g.looseIds, ...g.sets.flatMap((s) => s.ids), ...g.excludedIds];
+      const first = matchingBookIds ? ordered.filter((id) => matchingBookIds!.has(id)) : [];
+      return [...new Set([...first, ...ordered])].slice(0, MAX_BOOKS_PER_GROUP);
     };
     const pageIds = [...new Set(pageGroups.flatMap(shownIds))];
     const bookMap = new Map<string, Book>();
@@ -899,68 +925,119 @@ export class BooksService {
       books.forEach((b) => bookMap.set(b.id, b));
     }
 
-    type GroupResult = { type: 'isbn' | 'title'; key: string; authorKey?: string; componentKey?: string; books: Book[]; probability: number; matchedFields: string[] };
-    const isbnDuplicates: GroupResult[] = [];
-    const possibleDuplicates: GroupResult[] = [];
+    const groups: Array<Omit<DuplicateCard, 'ids'> & { books: Book[] }> = [];
     for (const card of pageGroups) {
       const books = shownIds(card).map((id) => bookMap.get(id)).filter(Boolean) as Book[];
       if (books.length < 2) continue; // deleted since the 2-min cache was built
       const { ids: _ids, ...rest } = card;
-      (card.type === 'isbn' ? isbnDuplicates : possibleDuplicates).push({ ...rest, books });
+      groups.push({ ...rest, books });
     }
 
-    return { isbnDuplicates, possibleDuplicates, total, totalBooks, page, totalPages };
+    // App versions before the criterion picker (≤ 1.12.2) read isbnDuplicates/possibleDuplicates
+    // and key cards by type:key:authorKey:componentKey — keep that shape until they are gone.
+    const legacy = groups.map((g) => ({
+      type: g.criterion === 'isbn' ? ('isbn' as const) : ('title' as const),
+      key: g.key,
+      componentKey: g.id,
+      books: g.books,
+      probability: g.matchedFields.length >= 3 ? 100 : 60,
+      matchedFields: g.matchedFields,
+    }));
+    return {
+      groups,
+      total,
+      totalBooks,
+      page,
+      totalPages,
+      isbnDuplicates: legacy.filter((g) => g.type === 'isbn'),
+      possibleDuplicates: legacy.filter((g) => g.type === 'title'),
+    };
   }
 
-  /** Dashboard count — the same cards the Duplicates screen lists without filters. */
+  /** Dashboard count — undecided groups of the default view (exact title, ISBN respected). */
   async countDuplicates(resolvedPairs: Array<{ book1Id: string; book2Id: string }>): Promise<number> {
-    return (await this.getDuplicateCards(resolvedPairs)).length;
+    return (await this.getDuplicateCards(resolvedPairs, {})).filter((g) => g.unresolvedCount > 0).length;
   }
 
-  // Building cards takes ~200 ms, so reuse them until the candidate groups are rebuilt or a
-  // resolution is added (resolutions are only ever inserted; deletes cascade from a book
-  // delete, which drops the groups cache anyway).
-  private async getDuplicateCards(resolvedPairs: Array<{ book1Id: string; book2Id: string }>) {
-    const candidates = await this.getDuplicateGroups();
-    const c = this._cardsCache;
-    if (c && c.candidates === candidates && c.resolvedCount === resolvedPairs.length) return c.cards;
+  /** Resolutions were added or removed — rebuild the group states on the next request. */
+  dropDuplicateStates() {
+    this._cardsCache.clear();
+  }
+
+  /** Book rows changed (copy sets, deletes) — rebuild everything on the next request. */
+  private dropDuplicateCache() {
+    this._rowsCache = null;
+    this._groupsCache.clear();
+    this._cardsCache.clear();
+  }
+
+  // Grouping and pair states take a few hundred ms, so both are cached per view
+  // (criterion + switches): groups until the rows are reloaded, states until then or until
+  // a resolution changes (dropDuplicateStates).
+  private async getDuplicateCards(
+    resolvedPairs: Array<{ book1Id: string; book2Id: string }>,
+    query: DuplicateQuery,
+  ): Promise<DuplicateCard[]> {
+    const criterion = query.criterion ?? 'exact';
+    const respectIsbn = criterion === 'isbn' || query.respectIsbn !== false;
+    const includeUnknownAuthor = criterion === 'isbn' || query.includeUnknownAuthor === true;
+    const viewKey = `${criterion}:${respectIsbn}:${includeUnknownAuthor}`;
+    const rows = await this.getDuplicateRows();
+
+    let groups = this._groupsCache.get(viewKey);
+    if (!groups || groups.rows !== rows) {
+      groups = { rows, groups: buildDuplicateGroups(rows.list, criterion, respectIsbn, includeUnknownAuthor) };
+      this._groupsCache.set(viewKey, groups);
+      this.logger.debug(`[duplicates] ${viewKey}: books=${rows.list.length} groups=${groups.groups.length}`);
+    }
+
+    const cached = this._cardsCache.get(viewKey);
+    if (cached && cached.groups === groups) return cached.cards;
     const resolved = new Set(resolvedPairs.map((p) => pairKey(p.book1Id, p.book2Id)));
-    const cards = buildDuplicateCards(candidates.groups, candidates.rowsById, resolved);
-    this._cardsCache = { candidates, resolvedCount: resolvedPairs.length, cards };
+    const cards = groups.groups.map((g): DuplicateCard => {
+      const books = g.ids.map((id) => rows.byId.get(id)!);
+      const match = groupMatch(books, g.criterion);
+      const volumes: Record<string, string> = {};
+      for (const b of books) {
+        const v = volumeLabel(b.title);
+        if (v) volumes[b.id] = v;
+      }
+      return { ...g, ...groupState(g.ids, rows.byId, resolved), ...match, volumes };
+    });
+    this._cardsCache.set(viewKey, { groups, cards });
     return cards;
   }
 
   /**
-   * Candidate duplicate groups among books outside active work sessions.
+   * Books that take part in duplicate search: everything outside active work sessions.
    * Grouping happens in JS (not SQL GROUP BY) so it can use ISBN checksum validation and
-   * fuzzy author matching — see buildDuplicateGroups in duplicate-matching.ts.
+   * fuzzy title/author matching — see buildDuplicateGroups in duplicate-matching.ts.
    * Cached for 2 minutes (dropped on mark/unmark copies and delete); concurrent callers share
    * one in-flight query.
    */
-  private async getDuplicateGroups(): Promise<DuplicateCandidates> {
+  private async getDuplicateRows(): Promise<DuplicateRows> {
     const CACHE_TTL = 2 * 60 * 1000;
-    if (this._groupsCache && Date.now() - this._groupsCache.cachedAt < CACHE_TTL) {
-      return this._groupsCache.candidates;
+    if (this._rowsCache && Date.now() - this._rowsCache.cachedAt < CACHE_TTL) {
+      return this._rowsCache.rows;
     }
-    if (!this._groupsCachePending) {
-      this._groupsCachePending = this.booksRepository.manager
+    if (!this._rowsCachePending) {
+      this._rowsCachePending = this.booksRepository.manager
         .query<DuplicateRow[]>(`
-          SELECT book.id::text AS id, book.isbn, book.title, book.author, book."isCopy"
+          SELECT book.id::text AS id, book.isbn, book.title, book.author, book."copyGroupId"::text AS "copyGroupId"
           FROM books book
           LEFT JOIN work_sessions ws ON ws.id = book.work_session_id
           WHERE book.work_session_id IS NULL OR ws.status = 'completed'
         `)
-        .then((rows) => {
-          const candidates = { groups: buildDuplicateGroups(rows), rowsById: new Map(rows.map((r) => [r.id, r])) };
-          this._groupsCache = { candidates, cachedAt: Date.now() };
-          this.logger.debug(`[duplicates] cache miss: books=${rows.length} groups=${candidates.groups.length}`);
-          return candidates;
+        .then((list) => {
+          const rows = { list, byId: new Map(list.map((r) => [r.id, r])) };
+          this._rowsCache = { rows, cachedAt: Date.now() };
+          return rows;
         })
         .finally(() => {
-          this._groupsCachePending = null;
+          this._rowsCachePending = null;
         });
     }
-    return this._groupsCachePending;
+    return this._rowsCachePending;
   }
 
   private generateSku(boxNumber: string): string {

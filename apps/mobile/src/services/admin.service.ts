@@ -1,5 +1,5 @@
 import api from './api';
-import type { User, PaginatedResponse, StatsSummary, Book, DuplicatesResponse, CopyGroupsResponse } from '../types';
+import type { User, PaginatedResponse, StatsSummary, Book, DuplicatesResponse, DuplicateCriterion, CopyGroupsResponse } from '../types';
 
 export interface SystemSetting {
   id: string;
@@ -277,6 +277,13 @@ export const adminService = {
       operatorId?: string;
       storeId?: string;
       boxId?: string;
+      criterion?: DuplicateCriterion;
+      /** Title criteria: don't group books with two different valid ISBNs (server default true) */
+      respectIsbn?: boolean;
+      /** Title criteria: group books without an author ("Не указан") with each other (server default false) */
+      includeUnknownAuthor?: boolean;
+      /** Also list groups whose every pair is decided */
+      showResolved?: boolean;
     },
   ): Promise<DuplicatesResponse> {
     const { data } = await api.get<DuplicatesResponse>('/admin/books/duplicates', {
@@ -289,13 +296,46 @@ export const adminService = {
     await api.post('/admin/books/duplicates/resolve', { book1Id, book2Id });
   },
 
-  /** `restBookIds`: the other books of the duplicate group when only a subset is marked */
-  async markCopies(bookIds: string[], masterBookId?: string, restBookIds?: string[]): Promise<void> {
-    await api.post('/admin/books/mark-copies', { bookIds, masterBookId, restBookIds });
+  /** Marks pairs "not copies" in one request */
+  async resolveDuplicates(pairs: Array<[string, string]>): Promise<void> {
+    if (!pairs.length) return;
+    await api.post('/admin/books/duplicates/resolve-many', {
+      pairs: pairs.map(([book1Id, book2Id]) => ({ book1Id, book2Id })),
+    });
   },
 
-  async unmarkCopies(bookIds: string[]): Promise<void> {
-    await api.post('/admin/books/unmark-copies', { bookIds });
+  /** Takes back "not copies" for these pairs */
+  async unresolveDuplicates(pairs: Array<[string, string]>): Promise<void> {
+    if (!pairs.length) return;
+    await api.post('/admin/books/duplicates/unresolve', {
+      pairs: pairs.map(([book1Id, book2Id]) => ({ book1Id, book2Id })),
+    });
+  },
+
+  /**
+   * `restBookIds`: the other books of the duplicate group when only a subset is marked.
+   * `overrideResolutions`: drop earlier "not copies" between the marked books.
+   * Returns the id of the copy set the books are now in.
+   */
+  async markCopies(
+    bookIds: string[],
+    masterBookId?: string,
+    restBookIds?: string[],
+    overrideResolutions?: boolean,
+  ): Promise<{ copyGroupId: string }> {
+    const { data } = await api.post<{ copyGroupId: string }>('/admin/books/mark-copies', {
+      bookIds,
+      masterBookId,
+      restBookIds,
+      overrideResolutions,
+    });
+    return data;
+  },
+
+  /** Returns every book that stopped being a copy — these plus sets left with one book */
+  async unmarkCopies(bookIds: string[]): Promise<{ unmarkedIds: string[] }> {
+    const { data } = await api.post<{ unmarkedIds: string[] }>('/admin/books/unmark-copies', { bookIds });
+    return data;
   },
 
   async getCopyGroups(

@@ -109,7 +109,8 @@ export function DashboardScreen() {
         >
           <AppText style={styles.gridCardTitle}>На проверке: Копии</AppText>
           <AppText style={[styles.gridCardCount, { color: "#00838F" }]}>
-            {duplicatesCount}
+            {/* exact title + author view only; other criteria on the screen differ */}
+            {duplicatesCount > 0 ? `~${duplicatesCount}` : 0}
           </AppText>
         </TouchableOpacity>
 

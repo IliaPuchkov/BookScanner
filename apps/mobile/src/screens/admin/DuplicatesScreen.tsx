@@ -20,6 +20,7 @@ import {
   KeyboardAvoidingView,
   TouchableWithoutFeedback,
   Platform,
+  Switch,
 } from "react-native";
 import { AppText } from "../../components/AppText";
 import { useNavigation } from "@react-navigation/native";
@@ -28,49 +29,85 @@ import { adminService, type OzonStore } from "../../services/admin.service";
 import { booksService } from "../../services/books.service";
 import { boxesService } from "../../services/boxes.service";
 import { BookStatus } from "../../types";
-import type { DuplicateGroup, Book } from "../../types";
+import type { DuplicateGroup, DuplicateCriterion, Book } from "../../types";
 import type { AdminMainStackParamList } from "../../navigation/AdminNavigator";
 import { thumbUri } from "../../utils/photos";
 import { libraryLabel, pluralRu } from "../../utils/format";
 import { bookEvents, replaceBookInGroups } from "../../utils/bookEvents";
+import { getStoredJson, setStoredJson } from "../../utils/storage";
+import {
+  groupTitle,
+  newPairs,
+  patchBooks,
+  recomputeGroup,
+  resolvedAmong,
+} from "../../utils/duplicateGroups";
 import { useUndoable } from "../../context/UndoContext";
 
 type Nav = NativeStackNavigationProp<AdminMainStackParamList, "Duplicates">;
 
-// One server group can be split into several parts sharing type/key/authorKey
-const groupId = (g: DuplicateGroup) =>
-  `${g.type}:${g.key}:${g.authorKey ?? ""}:${g.componentKey ?? ""}`;
+// Group ids are unique within one criterion
+const groupId = (g: DuplicateGroup) => `${g.criterion}:${g.id}`;
+
+/** Search criterion and switches — remembered on the device */
+type ViewState = {
+  criterion: DuplicateCriterion;
+  respectIsbn: boolean;
+  includeUnknownAuthor: boolean;
+  showResolved: boolean;
+};
+const VIEW_KEY = "duplicates.view";
+const DEFAULT_VIEW: ViewState = {
+  criterion: "exact",
+  respectIsbn: true,
+  includeUnknownAuthor: false,
+  showResolved: false,
+};
+
+const CRITERIA: Array<{ value: DuplicateCriterion; label: string }> = [
+  { value: "isbn", label: "ISBN" },
+  { value: "exact", label: "Автор + название" },
+  { value: "fuzzy", label: "Похожие названия" },
+];
+
+/** Where a book sits in its group */
+type BookRole = "set" | "loose" | "excluded";
 
 // ─── Book card ────────────────────────────────────────────────────────────────
 
 function BookMiniCard({
   book,
+  role,
+  volume,
+  isbnDiffers,
   onNavigate,
   onDelete,
   deleting,
-  onMarkNotDuplicate,
-  markingNotDuplicate,
+  action,
+  acting,
   stores,
-  hasExistingCopy,
   selecting,
   selected,
   onToggleSelect,
   onAddToLibrary,
   addingToLibrary,
 }: {
-  onAddToLibrary: (book: Book) => void;
-  addingToLibrary: boolean;
   book: Book;
+  role: BookRole;
+  volume?: string;
+  isbnDiffers: boolean;
   onNavigate: (id: string) => void;
   onDelete: (book: Book) => void;
   deleting: boolean;
-  onMarkNotDuplicate: () => void;
-  markingNotDuplicate: boolean;
+  /** "Не копия" / "Убрать из набора" / "Вернуть" */
+  action: { label: string; onPress: () => void };
+  acting: boolean;
   stores: OzonStore[];
-  hasExistingCopy: boolean;
   selecting: boolean;
   selected: boolean;
   onToggleSelect: () => void;
+  onAddToLibrary: (book: Book) => void;
+  addingToLibrary: boolean;
 }) {
   const coverPhoto = book.photos?.find((p) => p.sortOrder === 0);
   const storeName = book.ozonProduct?.storeId
@@ -79,13 +116,20 @@ function BookMiniCard({
   const isPublished =
     book.ozonProduct?.status === "published" ||
     book.ozonProduct?.status === "PUBLISHED";
+  const canSelect = selecting && role !== "excluded";
   return (
-    <View style={[styles.miniCard, selected && styles.miniCardSelected]}>
+    <View
+      style={[
+        styles.miniCard,
+        role === "excluded" && styles.miniCardExcluded,
+        selected && styles.miniCardSelected,
+      ]}
+    >
       <TouchableOpacity
         activeOpacity={0.8}
-        onPress={() => (selecting ? onToggleSelect() : onNavigate(book.id))}
+        onPress={() => (canSelect ? onToggleSelect() : onNavigate(book.id))}
       >
-        {selecting && (
+        {canSelect && (
           <View style={[styles.selectCheck, selected && styles.selectCheckOn]}>
             {selected && <AppText style={styles.selectCheckMark}>✓</AppText>}
           </View>
@@ -100,13 +144,20 @@ function BookMiniCard({
             <AppText style={styles.miniPlaceholderText}>Нет фото</AppText>
           </View>
         )}
-        {hasExistingCopy && (
-          <View style={[styles.copyRoleBadge, book.isCopy ? styles.copyRoleBadgeExisting : styles.copyRoleBadgeNew]}>
-            <AppText style={[styles.copyRoleBadgeText, book.isCopy ? styles.copyRoleBadgeTextExisting : styles.copyRoleBadgeTextNew]}>
-              {book.isCopy ? "Копия уже в системе" : "Новая копия"}
-            </AppText>
-          </View>
-        )}
+        <View style={styles.miniBadges}>
+          {role === "set" && book.isCopyMaster ? (
+            <View style={[styles.copyRoleBadge, styles.copyRoleBadgeExisting]}>
+              <AppText style={[styles.copyRoleBadgeText, styles.copyRoleBadgeTextExisting]}>
+                Основная
+              </AppText>
+            </View>
+          ) : null}
+          {volume ? (
+            <View style={styles.volumeBadge}>
+              <AppText style={styles.volumeBadgeText}>{volume}</AppText>
+            </View>
+          ) : null}
+        </View>
         <AppText style={styles.miniTitle} numberOfLines={2}>
           {book.title}
         </AppText>
@@ -116,6 +167,14 @@ function BookMiniCard({
           </AppText>
         ) : null}
         <AppText style={styles.miniSku}>{book.sku}</AppText>
+        {book.isbn ? (
+          <AppText
+            style={[styles.miniMeta, isbnDiffers && styles.miniIsbnDiffers]}
+            numberOfLines={1}
+          >
+            {isbnDiffers ? `ISBN отличается: ${book.isbn}` : `ISBN ${book.isbn}`}
+          </AppText>
+        ) : null}
         {book.yearPublished ? (
           <AppText style={styles.miniMeta}>{book.yearPublished}</AppText>
         ) : null}
@@ -190,16 +249,16 @@ function BookMiniCard({
         <TouchableOpacity
           style={[
             styles.notDuplicateBtn,
-            markingNotDuplicate && styles.notDuplicateBtnDisabled,
+            acting && styles.notDuplicateBtnDisabled,
           ]}
-          onPress={onMarkNotDuplicate}
-          disabled={markingNotDuplicate || deleting}
+          onPress={action.onPress}
+          disabled={acting || deleting}
           activeOpacity={0.7}
         >
-          {markingNotDuplicate ? (
+          {acting ? (
             <ActivityIndicator size="small" color="#888" />
           ) : (
-            <AppText style={styles.notDuplicateBtnText}>Не копия</AppText>
+            <AppText style={styles.notDuplicateBtnText}>{action.label}</AppText>
           )}
         </TouchableOpacity>
       )}
@@ -207,138 +266,197 @@ function BookMiniCard({
   );
 }
 
-// ─── Probability helpers ──────────────────────────────────────────────────────
-
-function probabilityMeta(p: number) {
-  if (p >= 100)
-    return {
-      border: "#E53935",
-      badge: "#FFEBEE",
-      text: "#C62828",
-      label: "Высокая вероятность",
-    };
-  if (p >= 60)
-    return {
-      border: "#FB8C00",
-      badge: "#FFF3E0",
-      text: "#E65100",
-      label: "Средняя вероятность",
-    };
-  return {
-    border: "#F9A825",
-    badge: "#FFFDE7",
-    text: "#F57F17",
-    label: "Малая вероятность",
-  };
-}
-
 // ─── Group card ───────────────────────────────────────────────────────────────
+
+type GroupHandlers = {
+  onNavigate: (id: string) => void;
+  onDelete: (book: Book) => void;
+  onAddToLibrary: (book: Book) => void;
+  /** Marks `bookIds` one copy set; `restIds` are resolved "not copies" of them */
+  onMarkCopies: (group: DuplicateGroup, bookIds: string[], restIds: string[]) => void;
+  /** Resolves every undecided pair of the group */
+  onResolveGroup: (group: DuplicateGroup) => void;
+  onNotCopy: (group: DuplicateGroup, bookId: string) => void;
+  onRemoveFromSet: (group: DuplicateGroup, bookId: string) => void;
+  onRestore: (group: DuplicateGroup, bookId: string) => void;
+};
 
 function DuplicateGroupCard({
   group,
-  onNavigate,
-  onDelete,
-  onResolve,
-  onMarkBookNotDuplicate,
-  onMarkCopies,
+  handlers,
+  busyKey,
+  busyBookId,
   deletingId,
-  resolvingKey,
-  markingNotDuplicateId,
-  markingCopiesKey,
-  stores,
-  onAddToLibrary,
   addingToLibraryId,
+  stores,
 }: {
-  onAddToLibrary: (book: Book) => void;
-  addingToLibraryId: string | null;
   group: DuplicateGroup;
-  onNavigate: (id: string) => void;
-  onDelete: (book: Book) => void;
-  onResolve: (group: DuplicateGroup) => void;
-  onMarkBookNotDuplicate: (bookId: string, group: DuplicateGroup) => void;
-  onMarkCopies: (group: DuplicateGroup, bookIds?: string[]) => void;
+  handlers: GroupHandlers;
+  /** Group whose group-level action is running */
+  busyKey: string | null;
+  /** Book whose per-book action is running */
+  busyBookId: string | null;
   deletingId: string | null;
-  resolvingKey: string | null;
-  markingNotDuplicateId: string | null;
-  markingCopiesKey: string | null;
+  addingToLibraryId: string | null;
   stores: OzonStore[];
 }) {
-  // Selection mode: pick one copy set out of a group that mixes several (A+A', B+B', ...)
+  // Selection mode: pick one copy set out of the group (Кн. 1 out of Кн. 1 + Кн. 2 …)
   const [selecting, setSelecting] = useState(false);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
-  // Leave selection mode once the selected books have left the group
+  const [excludedOpen, setExcludedOpen] = useState(false);
+  // Leave selection mode once the group changed under it
   useEffect(() => {
     setSelecting(false);
     setSelectedIds([]);
-  }, [group.books]);
+  }, [group.books, group.resolvedPairs]);
   const toggleSelect = (id: string) =>
     setSelectedIds((prev) =>
       prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
     );
+
   const gid = groupId(group);
-  const prob = group.probability ?? 30;
-  const meta = probabilityMeta(prob);
-  const fieldsLabel =
-    group.matchedFields?.join(" + ") ??
-    (group.type === "isbn" ? "ISBN" : "Название");
+  const busy = busyKey === gid;
+  const byId = useMemo(() => new Map(group.books.map((b) => [b.id, b])), [group.books]);
+  const booksOf = (ids: string[]) => ids.map((id) => byId.get(id)).filter((b): b is Book => !!b);
+  const sets = group.sets
+    .map((s) => ({ ...s, books: booksOf(s.ids) }))
+    .filter((s) => s.books.length > 0);
+  const loose = booksOf(group.looseIds);
+  const excluded = booksOf(group.excludedIds);
+  const setIds = sets.flatMap((s) => s.ids);
+  const decided = group.unresolvedCount === 0;
+
+  // Unselected books outside the sets the selection touches are "not copies" of it
+  const restOf = (ids: string[]) => {
+    const touched = new Set(ids.map((id) => byId.get(id)?.copyGroupId).filter(Boolean));
+    return group.books
+      .filter((b) => !ids.includes(b.id) && !(b.copyGroupId && touched.has(b.copyGroupId)))
+      .map((b) => b.id);
+  };
+
+  const renderBooks = (books: Book[], role: BookRole) => (
+    <ScrollView
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      style={styles.booksScroll}
+      contentContainerStyle={styles.booksScrollContent}
+    >
+      {books.map((book) => (
+        <BookMiniCard
+          key={book.id}
+          book={book}
+          role={role}
+          volume={group.volumes[book.id]}
+          isbnDiffers={group.isbnDiffers.includes(book.id)}
+          onNavigate={handlers.onNavigate}
+          onDelete={handlers.onDelete}
+          deleting={deletingId === book.id}
+          action={
+            role === "set"
+              ? { label: "Убрать из набора", onPress: () => handlers.onRemoveFromSet(group, book.id) }
+              : role === "excluded"
+                ? { label: "Вернуть", onPress: () => handlers.onRestore(group, book.id) }
+                : { label: "Не копия", onPress: () => handlers.onNotCopy(group, book.id) }
+          }
+          acting={busyBookId === book.id}
+          stores={stores}
+          selecting={selecting}
+          selected={selectedIds.includes(book.id)}
+          onToggleSelect={() => toggleSelect(book.id)}
+          onAddToLibrary={handlers.onAddToLibrary}
+          addingToLibrary={addingToLibraryId === book.id}
+        />
+      ))}
+    </ScrollView>
+  );
+
+  // One-tap actions for the common cases; anything else goes through selection
+  const quick: Array<{ label: string; ids: string[]; rest: string[] }> = [];
+  if (sets.length === 0 && loose.length >= 2) {
+    quick.push({ label: loose.length > 2 ? "Все — копии" : "Это копии", ids: group.looseIds, rest: [] });
+  } else if (sets.length === 1 && loose.length >= 1) {
+    quick.push({
+      label: `Добавить к набору (${loose.length})`,
+      ids: [...group.looseIds, ...sets[0].ids],
+      rest: [],
+    });
+  }
+  if (sets.length >= 1 && loose.length >= 2) {
+    quick.push({ label: `Остальные — отдельный набор (${loose.length})`, ids: group.looseIds, rest: setIds });
+  }
+
   return (
-    <View style={[styles.groupCard, { borderLeftColor: meta.border }]}>
+    <View style={[styles.groupCard, { borderLeftColor: decided ? "#43A047" : "#FB8C00" }]}>
       <View style={styles.groupHeader}>
-        <View style={[styles.badge, { backgroundColor: meta.badge }]}>
-          <AppText style={[styles.badgeText, { color: meta.text }]}>
-            {meta.label}
-          </AppText>
-        </View>
-        <AppText style={[styles.badgeFields, { color: meta.text }]}>
-          {fieldsLabel}
-        </AppText>
+        {group.matchedFields.map((f) => (
+          <View key={f} style={[styles.badge, styles.badgeMatched]}>
+            <AppText style={[styles.badgeText, styles.badgeMatchedText]}>✓ {f}</AppText>
+          </View>
+        ))}
+        {group.differingFields.map((f) => (
+          <View key={f} style={[styles.badge, styles.badgeDiffers]}>
+            <AppText style={[styles.badgeText, styles.badgeDiffersText]}>≠ {f}</AppText>
+          </View>
+        ))}
         <AppText style={styles.bookCount}>{group.books.length} шт.</AppText>
       </View>
-      <AppText style={styles.groupKey} numberOfLines={1}>
-        {group.type === "isbn" ? `ISBN: ${group.key}` : group.key}
+      <AppText style={styles.groupKey} numberOfLines={2}>
+        {groupTitle(group)}
       </AppText>
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        style={styles.booksScroll}
-        contentContainerStyle={styles.booksScrollContent}
-      >
-        {group.books.map((book) => (
-          <BookMiniCard
-            key={book.id}
-            book={book}
-            onNavigate={onNavigate}
-            onDelete={onDelete}
-            deleting={deletingId === book.id}
-            onMarkNotDuplicate={() => onMarkBookNotDuplicate(book.id, group)}
-            markingNotDuplicate={markingNotDuplicateId === book.id}
-            stores={stores}
-            hasExistingCopy={group.books.some((b) => b.isCopy)}
-            selecting={selecting}
-            selected={selectedIds.includes(book.id)}
-            onToggleSelect={() => toggleSelect(book.id)}
-            onAddToLibrary={onAddToLibrary}
-            addingToLibrary={addingToLibraryId === book.id}
-          />
-        ))}
-      </ScrollView>
+      <AppText style={[styles.groupProgress, decided && styles.groupProgressDone]}>
+        {decided
+          ? "Разобрана ✓"
+          : `Не решено пар: ${group.unresolvedCount}`}
+      </AppText>
+      {group.conflictPairs.length > 0 && (
+        <AppText style={styles.groupConflict}>
+          ⚠ В наборе есть книги, ранее отмеченные «не копии» — набор важнее
+        </AppText>
+      )}
+
+      {sets.map((s, i) => (
+        <View key={s.copyGroupId} style={styles.setBlock}>
+          <AppText style={styles.sectionLabel}>
+            {sets.length > 1 ? `Набор копий ${i + 1}` : "Набор копий"} ({s.books.length})
+          </AppText>
+          {renderBooks(s.books, "set")}
+        </View>
+      ))}
+      {loose.length > 0 && (
+        <>
+          {(sets.length > 0 || excluded.length > 0) && (
+            <AppText style={styles.sectionLabel}>Не разобраны ({loose.length})</AppText>
+          )}
+          {renderBooks(loose, "loose")}
+        </>
+      )}
+      {excluded.length > 0 && !selecting && (
+        <>
+          <TouchableOpacity onPress={() => setExcludedOpen((v) => !v)} activeOpacity={0.7}>
+            <AppText style={styles.sectionLabel}>
+              Не копии ({excluded.length}) {excludedOpen ? "▲" : "▼"}
+            </AppText>
+          </TouchableOpacity>
+          {excludedOpen && renderBooks(excluded, "excluded")}
+        </>
+      )}
+
       {selecting ? (
         <>
           <AppText style={styles.selectHint}>
-            Отметьте книги, которые являются копиями друг друга. Остальные
-            останутся на проверке.
+            Отметьте книги, которые являются копиями друг друга. Книга из набора
+            добавит к нему выбранные. Остальные будут отмечены «не копии» этих.
           </AppText>
           <TouchableOpacity
             style={[
               styles.markCopiesBtn,
-              (selectedIds.length < 2 || markingCopiesKey === gid) &&
-                styles.resolveBtnDisabled,
+              (selectedIds.length < 2 || busy) && styles.resolveBtnDisabled,
             ]}
-            onPress={() => onMarkCopies(group, selectedIds)}
-            disabled={selectedIds.length < 2 || markingCopiesKey === gid}
+            onPress={() => handlers.onMarkCopies(group, selectedIds, restOf(selectedIds))}
+            disabled={selectedIds.length < 2 || busy}
             activeOpacity={0.7}
           >
-            {markingCopiesKey === gid ? (
+            {busy ? (
               <ActivityIndicator size="small" color="#fff" />
             ) : (
               <AppText style={styles.markCopiesBtnText}>
@@ -354,7 +472,7 @@ function DuplicateGroupCard({
               setSelecting(false);
               setSelectedIds([]);
             }}
-            disabled={markingCopiesKey === gid}
+            disabled={busy}
             activeOpacity={0.7}
           >
             <AppText style={styles.resolveBtnText}>Отмена</AppText>
@@ -362,24 +480,22 @@ function DuplicateGroupCard({
         </>
       ) : (
         <>
-          <TouchableOpacity
-            style={[
-              styles.markCopiesBtn,
-              markingCopiesKey === gid && styles.resolveBtnDisabled,
-            ]}
-            onPress={() => onMarkCopies(group)}
-            disabled={markingCopiesKey === gid}
-            activeOpacity={0.7}
-          >
-            {markingCopiesKey === gid ? (
-              <ActivityIndicator size="small" color="#fff" />
-            ) : (
-              <AppText style={styles.markCopiesBtnText}>
-                {group.books.length > 2 ? "Все — копии" : "Это копии"}
-              </AppText>
-            )}
-          </TouchableOpacity>
-          {group.books.length > 2 && (
+          {quick.map((q) => (
+            <TouchableOpacity
+              key={q.label}
+              style={[styles.markCopiesBtn, busy && styles.resolveBtnDisabled]}
+              onPress={() => handlers.onMarkCopies(group, q.ids, q.rest)}
+              disabled={busy}
+              activeOpacity={0.7}
+            >
+              {busy ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <AppText style={styles.markCopiesBtnText}>{q.label}</AppText>
+              )}
+            </TouchableOpacity>
+          ))}
+          {loose.length + setIds.length > 2 && (
             <TouchableOpacity
               style={styles.splitBtn}
               onPress={() => setSelecting(true)}
@@ -390,23 +506,22 @@ function DuplicateGroupCard({
               </AppText>
             </TouchableOpacity>
           )}
-          <TouchableOpacity
-            style={[
-              styles.resolveBtn,
-              resolvingKey === gid && styles.resolveBtnDisabled,
-            ]}
-            onPress={() => onResolve(group)}
-            disabled={resolvingKey === gid}
-            activeOpacity={0.7}
-          >
-            {resolvingKey === gid ? (
-              <ActivityIndicator size="small" color="#555" />
-            ) : (
-              <AppText style={styles.resolveBtnText}>
-                Это не копии — пропустить
-              </AppText>
-            )}
-          </TouchableOpacity>
+          {!decided && (
+            <TouchableOpacity
+              style={[styles.resolveBtn, busy && styles.resolveBtnDisabled]}
+              onPress={() => handlers.onResolveGroup(group)}
+              disabled={busy}
+              activeOpacity={0.7}
+            >
+              {busy ? (
+                <ActivityIndicator size="small" color="#555" />
+              ) : (
+                <AppText style={styles.resolveBtnText}>
+                  {sets.length > 0 ? "Остальные — не копии" : "Это не копии — пропустить"}
+                </AppText>
+              )}
+            </TouchableOpacity>
+          )}
         </>
       )}
     </View>
@@ -454,6 +569,18 @@ type ServerFilters = {
   operatorId?: string;
   storeId?: string;
   boxId?: string;
+  criterion?: DuplicateCriterion;
+  respectIsbn?: boolean;
+  includeUnknownAuthor?: boolean;
+  showResolved?: boolean;
+};
+
+/** A copy-set request waiting for the main-copy picker */
+type MarkRequest = {
+  group: DuplicateGroup;
+  bookIds: string[];
+  restIds: string[];
+  override: boolean;
 };
 
 export function DuplicatesScreen() {
@@ -467,27 +594,26 @@ export function DuplicatesScreen() {
   const [hasMore, setHasMore] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   // Server totals for the current filters and how much was loaded so far; groups/books
-  // removed on screen (copies, not copies, delete) are subtracted from the totals.
+  // removed on screen (decided groups, deletes) are subtracted from the totals.
   const [serverTotal, setServerTotal] = useState({ groups: 0, books: 0 });
   const [loaded, setLoaded] = useState({ groups: 0, books: 0 });
 
   const [deletingId, setDeletingId] = useState<string | null>(null);
-  const [resolvingKey, setResolvingKey] = useState<string | null>(null);
-  const [markingNotDuplicateId, setMarkingNotDuplicateId] = useState<
-    string | null
-  >(null);
-  const [markingCopiesKey, setMarkingCopiesKey] = useState<string | null>(null);
+  const [busyKey, setBusyKey] = useState<string | null>(null);
+  const [busyBookId, setBusyBookId] = useState<string | null>(null);
   const [addingToLibraryId, setAddingToLibraryId] = useState<string | null>(null);
   const [stores, setStores] = useState<OzonStore[]>([]);
   const [allBoxes, setAllBoxes] = useState<Array<{ id: string; boxNumber: string }>>([]);
-  const [markCopiesPicker, setMarkCopiesPicker] = useState<{
-    group: DuplicateGroup;
-    bookIds: string[];
-  } | null>(null);
+  const [markCopiesPicker, setMarkCopiesPicker] = useState<MarkRequest | null>(null);
+
+  // Criterion + switches; filters are loaded only once the stored view is read
+  const [view, setView] = useState<ViewState>(DEFAULT_VIEW);
+  const [viewReady, setViewReady] = useState(false);
+  const viewRef = useRef(view);
+  viewRef.current = view;
 
   // Server-side filters
   const [filtersOpen, setFiltersOpen] = useState(false);
-  const [filterProb, setFilterProb] = useState<number | null>(null); // client-side only
   const [filterStatus, setFilterStatus] = useState<StatusFilter>("all");
   const [filterCount, setFilterCount] = useState<number | null>(null);
   const [filterSearch, setFilterSearch] = useState("");
@@ -504,7 +630,26 @@ export function DuplicatesScreen() {
     return () => clearTimeout(t);
   }, [filterSearch]);
 
+  useEffect(() => {
+    getStoredJson<Partial<ViewState>>(VIEW_KEY)
+      .then((stored) => {
+        if (stored) setView({ ...DEFAULT_VIEW, ...stored });
+      })
+      .catch(() => {})
+      .finally(() => setViewReady(true));
+  }, []);
+
+  const changeView = useCallback((patch: Partial<ViewState>) => {
+    setView((prev) => {
+      const next = { ...prev, ...patch };
+      setStoredJson(VIEW_KEY, next).catch(() => {});
+      return next;
+    });
+  }, []);
+
   const PAGE_SIZE = 50;
+
+  const activeFiltersRef = useRef<ServerFilters>({});
 
   const fetchData = useCallback(
     async (filters: ServerFilters, pageNum = 1, _isRefresh = false) => {
@@ -520,9 +665,11 @@ export function DuplicatesScreen() {
           adminService.getDuplicates(pageNum, PAGE_SIZE, filters),
           storesPromise,
         ]);
+        // A newer request (other criterion or filters) has started — drop this answer
+        if (activeFiltersRef.current !== filters) return;
         if (storesRes) setStores((storesRes as { stores: OzonStore[] }).stores);
 
-        const newGroups = [...res.isbnDuplicates, ...res.possibleDuplicates];
+        const newGroups = res.groups;
         setGroups(isFirstPage ? newGroups : (prev) => [...prev, ...newGroups]);
         setServerTotal({ groups: res.total, books: res.totalBooks });
         const newBooks = newGroups.reduce((n, g) => n + g.books.length, 0);
@@ -536,16 +683,31 @@ export function DuplicatesScreen() {
       } catch {
         // silent
       } finally {
-        setLoading(false);
-        setRefreshing(false);
-        setLoadingMore(false);
+        if (activeFiltersRef.current === filters) {
+          setLoading(false);
+          setRefreshing(false);
+          setLoadingMore(false);
+        }
       }
     },
     [],
   );
 
-  const activeFiltersRef = useRef<ServerFilters>({});
-  const filtersMounted = useRef(false);
+  const currentFilters = useCallback(
+    (): ServerFilters => ({
+      search: debouncedSearch.trim() || undefined,
+      status: filterStatus !== "all" ? filterStatus : undefined,
+      count: filterCount ?? undefined,
+      operatorId: filterOperatorId ?? undefined,
+      storeId: filterStoreId ?? undefined,
+      boxId: filterBoxId ?? undefined,
+      criterion: view.criterion,
+      respectIsbn: view.criterion === "isbn" ? undefined : view.respectIsbn,
+      includeUnknownAuthor: view.criterion === "isbn" ? undefined : view.includeUnknownAuthor,
+      showResolved: view.showResolved || undefined,
+    }),
+    [debouncedSearch, filterStatus, filterCount, filterOperatorId, filterStoreId, filterBoxId, view],
+  );
 
   // This screen doesn't refetch on focus — pick up edits made in ProductDetail (e.g. library status)
   useEffect(
@@ -556,10 +718,7 @@ export function DuplicatesScreen() {
     [],
   );
 
-  // Initial load
   useEffect(() => {
-    setLoading(true);
-    fetchData({});
     boxesService.getAllBoxes().then((fetched) => {
       setAllBoxes(
         fetched
@@ -567,35 +726,15 @@ export function DuplicatesScreen() {
           .sort((a, b) => a.boxNumber.localeCompare(b.boxNumber)),
       );
     }).catch(() => {});
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Refetch when server-side filters change (skip initial mount — handled above)
+  // (Re)load when the view or a server-side filter changes
   useEffect(() => {
-    if (!filtersMounted.current) {
-      filtersMounted.current = true;
-      return;
-    }
-    const filters: ServerFilters = {
-      search: debouncedSearch.trim() || undefined,
-      status: filterStatus !== "all" ? filterStatus : undefined,
-      count: filterCount ?? undefined,
-      operatorId: filterOperatorId ?? undefined,
-      storeId: filterStoreId ?? undefined,
-      boxId: filterBoxId ?? undefined,
-    };
+    if (!viewReady) return;
     setGroups([]);
     setLoading(true);
-    fetchData(filters, 1, true);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [
-    debouncedSearch,
-    filterStatus,
-    filterCount,
-    filterOperatorId,
-    filterStoreId,
-    filterBoxId,
-  ]);
+    fetchData(currentFilters(), 1, true);
+  }, [viewReady, currentFilters, fetchData]);
 
   // Extract unique operators from loaded groups (for filter UI chips)
   const operators = useMemo(() => {
@@ -608,18 +747,9 @@ export function DuplicatesScreen() {
     return Array.from(map.entries()).map(([id, name]) => ({ id, name }));
   }, [groups]);
 
-  // Probability is the only client-side filter remaining
   const totalGroups = serverTotal.groups - (loaded.groups - groups.length);
   const totalBooks =
     serverTotal.books - (loaded.books - groups.reduce((n, g) => n + g.books.length, 0));
-
-  const displayGroups = useMemo(
-    () =>
-      filterProb === null
-        ? groups
-        : groups.filter((g) => (g.probability ?? 30) === filterProb),
-    [groups, filterProb],
-  );
 
   const activeSecondaryCount = useMemo(() => {
     let n = 0;
@@ -640,7 +770,6 @@ export function DuplicatesScreen() {
   ]);
 
   const resetFilters = useCallback(() => {
-    setFilterProb(null);
     setFilterStatus("all");
     setFilterCount(null);
     setFilterSearch("");
@@ -648,6 +777,25 @@ export function DuplicatesScreen() {
     setFilterStoreId(null);
     setFilterBoxId(null);
   }, []);
+
+  /**
+   * Applies a change to one group (matched by id — the action may run after the list was
+   * reloaded). A group leaves the list when fewer than 2 books remain, or when every pair is
+   * decided and decided groups are hidden.
+   */
+  const updateGroup = useCallback(
+    (gid: string, fn: (g: DuplicateGroup) => DuplicateGroup) =>
+      setGroups((prev) =>
+        prev
+          .map((g) => (groupId(g) === gid ? fn(g) : g))
+          .filter(
+            (g) =>
+              g.books.length >= 2 &&
+              (viewRef.current.showResolved || g.unresolvedCount > 0),
+          ),
+      ),
+    [],
+  );
 
   const navigate = useCallback(
     (bookId: string) =>
@@ -673,11 +821,16 @@ export function DuplicatesScreen() {
                   await booksService.deleteBook(book.id);
                   setGroups((prev) =>
                     prev
-                      .map((g) => ({
-                        ...g,
-                        books: g.books.filter((b) => b.id !== book.id),
-                      }))
-                      .filter((g) => g.books.length >= 2),
+                      .map((g) =>
+                        g.books.some((b) => b.id === book.id)
+                          ? recomputeGroup({ ...g, books: g.books.filter((b) => b.id !== book.id) })
+                          : g,
+                      )
+                      .filter(
+                        (g) =>
+                          g.books.length >= 2 &&
+                          (viewRef.current.showResolved || g.unresolvedCount > 0),
+                      ),
                   );
                 } catch {
                   Alert.alert("Ошибка", "Не удалось удалить карточку");
@@ -721,41 +874,32 @@ export function DuplicatesScreen() {
     );
   }, [undoable]);
 
-  const handleMarkBookNotDuplicate = useCallback(
-    (bookId: string, group: DuplicateGroup) => {
+  // "Не копия": the book is resolved against every other book of the group and folds away
+  const handleNotCopy = useCallback(
+    (group: DuplicateGroup, bookId: string) => {
       const book = group.books.find((b) => b.id === bookId);
+      const pairs = newPairs(group, [bookId], group.books.map((b) => b.id));
       Alert.alert(
         "Не копия?",
-        `Книга "${book?.title ?? "..."}" будет исключена из этой группы дубликатов.`,
+        `Книга "${book?.title ?? "..."}" будет отмечена «не копия» для всех книг группы и свернётся в блок «Не копии». Решение можно отменить там же.`,
         [
           { text: "Отмена", style: "cancel" },
           {
             text: "Подтвердить",
             onPress: () =>
               undoable({
-                message: `«${book?.title ?? "Книга"}» будет исключена из группы`,
+                message: `«${book?.title ?? "Книга"}» будет отмечена «не копия»`,
                 action: async () => {
-                  setMarkingNotDuplicateId(bookId);
+                  setBusyBookId(bookId);
                   try {
-                    const others = group.books.filter((b) => b.id !== bookId);
-                    await Promise.all(
-                      others.map((other) =>
-                        adminService.resolveDuplicate(bookId, other.id),
-                      ),
-                    );
-                    setGroups((prev) =>
-                      prev
-                        .map((g) =>
-                          groupId(g) === groupId(group)
-                            ? { ...g, books: g.books.filter((b) => b.id !== bookId) }
-                            : g,
-                        )
-                        .filter((g) => g.books.length >= 2),
+                    await adminService.resolveDuplicates(pairs);
+                    updateGroup(groupId(group), (g) =>
+                      recomputeGroup({ ...g, resolvedPairs: [...g.resolvedPairs, ...pairs] }),
                     );
                   } catch {
                     Alert.alert("Ошибка", "Не удалось пометить как не копию");
                   } finally {
-                    setMarkingNotDuplicateId(null);
+                    setBusyBookId(null);
                   }
                 },
               }),
@@ -763,101 +907,196 @@ export function DuplicatesScreen() {
         ],
       );
     },
-    [undoable],
+    [undoable, updateGroup],
   );
 
-  const handleResolve = useCallback((group: DuplicateGroup) => {
-    if (group.books.length < 2) return;
-    Alert.alert(
-      "Это не копии?",
-      "Все книги группы будут исключены из списка дубликатов и больше не будут сравниваться друг с другом.",
-      [
-        { text: "Отмена", style: "cancel" },
-        {
-          text: "Пропустить",
-          onPress: () =>
-            undoable({
-              message: "Группа будет отмечена как «не копии»",
-              action: async () => {
-                setResolvingKey(groupId(group));
-                try {
-                  const pairs: Array<[string, string]> = [];
-                  for (let i = 0; i < group.books.length; i++) {
-                    for (let j = i + 1; j < group.books.length; j++) {
-                      pairs.push([group.books[i].id, group.books[j].id]);
-                    }
-                  }
-                  await Promise.all(
-                    pairs.map(([id1, id2]) => adminService.resolveDuplicate(id1, id2)),
-                  );
-                  setGroups((prev) => prev.filter((g) => groupId(g) !== groupId(group)));
-                } catch {
-                  Alert.alert("Ошибка", "Не удалось отметить как не копию");
-                } finally {
-                  setResolvingKey(null);
-                }
-              },
+  // "Вернуть": takes back the book's "not copies" inside this group
+  const handleRestore = useCallback(
+    (group: DuplicateGroup, bookId: string) => {
+      const pairs = group.resolvedPairs.filter(([a, b]) => a === bookId || b === bookId);
+      setBusyBookId(bookId);
+      adminService
+        .unresolveDuplicates(pairs)
+        .then(() =>
+          updateGroup(groupId(group), (g) =>
+            recomputeGroup({
+              ...g,
+              resolvedPairs: g.resolvedPairs.filter(([a, b]) => a !== bookId && b !== bookId),
             }),
-        },
-      ],
-    );
-  }, [undoable]);
+          ),
+        )
+        .catch(() => Alert.alert("Ошибка", "Не удалось отменить решение"))
+        .finally(() => setBusyBookId(null));
+    },
+    [updateGroup],
+  );
 
-  // bookIds: the copy set being marked — the whole group, or a subset split off from it
+  // "Убрать из набора": the book stops being a copy and is "not a copy" of the rest of its set
+  const handleRemoveFromSet = useCallback(
+    (group: DuplicateGroup, bookId: string) => {
+      const book = group.books.find((b) => b.id === bookId);
+      const mates = group.books
+        .filter((b) => b.id !== bookId && b.copyGroupId && b.copyGroupId === book?.copyGroupId)
+        .map((b) => b.id);
+      const pairs = newPairs(group, [bookId], mates);
+      Alert.alert(
+        "Убрать из набора?",
+        `"${book?.title ?? "..."}" перестанет быть копией и будет отмечена «не копия» для остальных книг этого набора.`,
+        [
+          { text: "Отмена", style: "cancel" },
+          {
+            text: "Убрать",
+            onPress: () =>
+              undoable({
+                message: `«${book?.title ?? "Книга"}» будет убрана из набора`,
+                action: async () => {
+                  setBusyBookId(bookId);
+                  try {
+                    const { unmarkedIds } = await adminService.unmarkCopies([bookId]);
+                    await adminService.resolveDuplicates(pairs);
+                    const unmarked = new Set(unmarkedIds);
+                    updateGroup(groupId(group), (g) =>
+                      patchBooks(
+                        g,
+                        (b) =>
+                          unmarked.has(b.id)
+                            ? { ...b, isCopy: false, isCopyMaster: false, copyGroupId: null }
+                            : b,
+                        [...g.resolvedPairs, ...pairs],
+                      ),
+                    );
+                  } catch {
+                    Alert.alert("Ошибка", "Не удалось убрать книгу из набора");
+                  } finally {
+                    setBusyBookId(null);
+                  }
+                },
+              }),
+          },
+        ],
+      );
+    },
+    [undoable, updateGroup],
+  );
+
+  // "Это не копии": every undecided pair of the group is resolved
+  const handleResolveGroup = useCallback(
+    (group: DuplicateGroup) => {
+      const pairs: Array<[string, string]> = [];
+      const books = group.books;
+      for (let i = 0; i < books.length; i++) {
+        for (let j = i + 1; j < books.length; j++) {
+          const a = books[i];
+          const b = books[j];
+          if (a.copyGroupId && b.copyGroupId) continue; // same set, or two sets — decided
+          pairs.push([a.id, b.id]);
+        }
+      }
+      const todo = pairs.filter(([a, b]) => newPairs(group, [a], [b]).length > 0);
+      Alert.alert(
+        group.sets.length > 0 ? "Остальные — не копии?" : "Это не копии?",
+        "Неразобранные книги группы будут отмечены «не копии» друг для друга и для наборов. Группа уйдёт в разобранные.",
+        [
+          { text: "Отмена", style: "cancel" },
+          {
+            text: "Подтвердить",
+            onPress: () =>
+              undoable({
+                message: "Группа будет отмечена «не копии»",
+                action: async () => {
+                  const gid = groupId(group);
+                  setBusyKey(gid);
+                  try {
+                    await adminService.resolveDuplicates(todo);
+                    updateGroup(gid, (g) =>
+                      recomputeGroup({ ...g, resolvedPairs: [...g.resolvedPairs, ...todo] }),
+                    );
+                  } catch {
+                    Alert.alert("Ошибка", "Не удалось отметить как не копии");
+                  } finally {
+                    setBusyKey(null);
+                  }
+                },
+              }),
+          },
+        ],
+      );
+    },
+    [undoable, updateGroup],
+  );
+
   const doMarkCopies = useCallback(
-    (group: DuplicateGroup, bookIds: string[], masterBookId: string | null) =>
+    (req: MarkRequest, masterBookId: string | null) =>
       undoable({
-        message: `Книг будет помечено как копии: ${bookIds.length}`,
+        message: `Книг будет помечено как копии: ${req.bookIds.length}`,
         action: async () => {
+          const { group, bookIds, restIds, override } = req;
           const gid = groupId(group);
-          setMarkingCopiesKey(gid);
+          setBusyKey(gid);
           try {
-            const restIds = group.books
-              .map((b) => b.id)
-              .filter((id) => !bookIds.includes(id));
-            await adminService.markCopies(
+            const { copyGroupId } = await adminService.markCopies(
               bookIds,
               masterBookId ?? undefined,
               restIds.length ? restIds : undefined,
+              override || undefined,
             );
-            setGroups((prev) =>
-              prev
-                .map((g) =>
-                  groupId(g) === gid
-                    ? { ...g, books: g.books.filter((b) => !bookIds.includes(b.id)) }
-                    : g,
-                )
-                .filter((g) => g.books.length >= 2),
+            const selected = new Set(bookIds);
+            // The server merges whole sets the selection touches into one
+            const mergedSets = new Set(
+              group.books.filter((b) => selected.has(b.id) && b.copyGroupId).map((b) => b.copyGroupId),
+            );
+            const restPairs = newPairs(group, bookIds, restIds);
+            const overridden = new Set(
+              (override ? resolvedAmong(group, bookIds) : []).map(([a, b]) => `${a}:${b}`),
+            );
+            updateGroup(gid, (g) =>
+              patchBooks(
+                g,
+                (b) => {
+                  const joins = selected.has(b.id) || (b.copyGroupId && mergedSets.has(b.copyGroupId));
+                  if (!joins) return b;
+                  const isCopyMaster = masterBookId
+                    ? b.id === masterBookId
+                    : b.isCopy ? !!b.isCopyMaster : false;
+                  return { ...b, isCopy: true, isCopyMaster, copyGroupId };
+                },
+                [
+                  ...g.resolvedPairs.filter(([a, b]) => !overridden.has(`${a}:${b}`)),
+                  ...restPairs,
+                ],
+              ),
             );
           } catch {
             Alert.alert("Ошибка", "Не удалось пометить как копии");
           } finally {
-            setMarkingCopiesKey(null);
+            setBusyKey(null);
           }
         },
       }),
-    [undoable],
+    [undoable, updateGroup],
   );
 
-  const handleMarkCopies = useCallback(
-    (group: DuplicateGroup, subsetIds?: string[]) => {
-      const bookIds = subsetIds ?? group.books.map((b) => b.id);
+  const askMarkCopies = useCallback(
+    (req: MarkRequest) => {
+      const { group, bookIds } = req;
       const books = group.books.filter((b) => bookIds.includes(b.id));
-      const isSubset = books.length < group.books.length;
+      const restCount = group.books.filter(
+        (b) => !bookIds.includes(b.id) && !b.copyGroupId,
+      ).length;
       const allUnpublished = books.every(
         (b) =>
           b.status !== BookStatus.PUBLISHED && b.status !== BookStatus.ARCHIVED,
       );
-      const restNote = isSubset
-        ? ` Остальные ${group.books.length - books.length} останутся на проверке.`
+      const restNote = restCount
+        ? ` Остальные ${restCount} останутся на проверке.`
         : "";
       Alert.alert(
         "Пометить как копии?",
         (allUnpublished
           ? books.some((b) => b.isCopyMaster)
             ? "Новые книги будут добавлены к уже подтверждённым копиям. Можно оставить текущую основную книгу или выбрать другую."
-            : `Выберите основную книгу — она останется доступной для публикации на Ozon. Остальные ${isSubset ? "выбранные " : ""}будут помечены как копии.`
-          : `${isSubset ? "Выбранные" : "Все"} ${books.length} книги будут помечены как копии и скрыты из очереди публикации.`) +
+            : "Выберите основную книгу — она останется доступной для публикации на Ozon. Остальные выбранные будут помечены как копии."
+          : `Выбранные ${books.length} книги будут помечены как копии и скрыты из очереди публикации.`) +
           restNote,
         [
           { text: "Отмена", style: "cancel" },
@@ -865,9 +1104,9 @@ export function DuplicatesScreen() {
             text: "Это копии",
             onPress: () => {
               if (allUnpublished) {
-                setMarkCopiesPicker({ group, bookIds });
+                setMarkCopiesPicker(req);
               } else {
-                doMarkCopies(group, bookIds, null);
+                doMarkCopies(req, null);
               }
             },
           },
@@ -875,6 +1114,40 @@ export function DuplicatesScreen() {
       );
     },
     [doMarkCopies],
+  );
+
+  const handleMarkCopies = useCallback(
+    (group: DuplicateGroup, bookIds: string[], restIds: string[]) => {
+      const req: MarkRequest = { group, bookIds, restIds, override: false };
+      const conflicts = resolvedAmong(group, bookIds);
+      if (!conflicts.length) {
+        askMarkCopies(req);
+        return;
+      }
+      Alert.alert(
+        "Ранее отмечены как разные",
+        `Среди выбранных книг ${conflicts.length} ${pluralRu(conflicts.length, "пара была отмечена", "пары были отмечены", "пар были отмечены")} «не копии». Всё равно объединить? Эти решения будут сняты.`,
+        [
+          { text: "Отмена", style: "cancel" },
+          { text: "Объединить", onPress: () => askMarkCopies({ ...req, override: true }) },
+        ],
+      );
+    },
+    [askMarkCopies],
+  );
+
+  const handlers = useMemo<GroupHandlers>(
+    () => ({
+      onNavigate: navigate,
+      onDelete: handleDelete,
+      onAddToLibrary: handleAddToLibrary,
+      onMarkCopies: handleMarkCopies,
+      onResolveGroup: handleResolveGroup,
+      onNotCopy: handleNotCopy,
+      onRemoveFromSet: handleRemoveFromSet,
+      onRestore: handleRestore,
+    }),
+    [navigate, handleDelete, handleAddToLibrary, handleMarkCopies, handleResolveGroup, handleNotCopy, handleRemoveFromSet, handleRestore],
   );
 
   // Books offered in the main-copy picker; the set's current main copy (if any) goes first
@@ -892,23 +1165,67 @@ export function DuplicatesScreen() {
     fetchData(activeFiltersRef.current, page + 1);
   }, [loadingMore, hasMore, loading, page, fetchData]);
 
-  const PROB_FILTERS = [
-    { label: "Высокая", value: 100, color: "#E53935" },
-    { label: "Средняя", value: 60, color: "#FB8C00" },
-  ];
-
   const COUNT_OPTIONS = [
     { label: "2", value: 2 },
     { label: "3", value: 3 },
     { label: "4+", value: 4 },
   ];
 
-  const totalActive =
-    filterProb !== null ? activeSecondaryCount + 1 : activeSecondaryCount;
+  const totalActive = activeSecondaryCount;
 
   return (
     <View style={styles.container}>
       <View style={styles.filterPanel}>
+        <View style={styles.criterionRow}>
+          {CRITERIA.map((c) => (
+            <TouchableOpacity
+              key={c.value}
+              style={[
+                styles.criterionBtn,
+                view.criterion === c.value && styles.criterionBtnActive,
+              ]}
+              onPress={() => changeView({ criterion: c.value })}
+              activeOpacity={0.7}
+            >
+              <AppText
+                style={[
+                  styles.criterionBtnText,
+                  view.criterion === c.value && styles.criterionBtnTextActive,
+                ]}
+                numberOfLines={2}
+              >
+                {c.label}
+              </AppText>
+            </TouchableOpacity>
+          ))}
+        </View>
+        <View style={styles.switchRow}>
+          {view.criterion !== "isbn" && (
+            <View style={styles.switchItem}>
+              <Switch
+                value={view.respectIsbn}
+                onValueChange={(v) => changeView({ respectIsbn: v })}
+              />
+              <AppText style={styles.switchLabel}>Учитывать ISBN</AppText>
+            </View>
+          )}
+          {view.criterion !== "isbn" && (
+            <View style={styles.switchItem}>
+              <Switch
+                value={view.includeUnknownAuthor}
+                onValueChange={(v) => changeView({ includeUnknownAuthor: v })}
+              />
+              <AppText style={styles.switchLabel}>Книги без автора</AppText>
+            </View>
+          )}
+          <View style={styles.switchItem}>
+            <Switch
+              value={view.showResolved}
+              onValueChange={(v) => changeView({ showResolved: v })}
+            />
+            <AppText style={styles.switchLabel}>Разобранные</AppText>
+          </View>
+        </View>
         <View style={styles.filterRow}>
           <TouchableOpacity
             style={[
@@ -929,7 +1246,7 @@ export function DuplicatesScreen() {
             </AppText>
           </TouchableOpacity>
           <AppText style={styles.filterCount}>
-            {displayGroups.length} {pluralRu(displayGroups.length, "группа", "группы", "групп")} из{" "}
+            {groups.length} {pluralRu(groups.length, "группа", "группы", "групп")} из{" "}
             {totalGroups} · {totalBooks}{" "}
             {pluralRu(totalBooks, "книга", "книги", "книг")}
           </AppText>
@@ -938,34 +1255,6 @@ export function DuplicatesScreen() {
         {/* Expanded filter panel */}
         {filtersOpen && (
           <View style={styles.filterExpanded}>
-            {/* Probability */}
-            <AppText style={styles.filterSectionLabel}>
-              Вероятность дублирования
-            </AppText>
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              style={styles.chipsScroll}
-            >
-              <View style={styles.chipsRow}>
-                <FilterChip
-                  label="Все"
-                  active={filterProb === null}
-                  onPress={() => setFilterProb(null)}
-                />
-                {PROB_FILTERS.map((f) => (
-                  <FilterChip
-                    key={f.value}
-                    label={f.label}
-                    active={filterProb === f.value}
-                    color={f.color}
-                    onPress={() =>
-                      setFilterProb(filterProb === f.value ? null : f.value)
-                    }
-                  />
-                ))}
-              </View>
-            </ScrollView>
 
             {/* Search */}
             {/* <AppText style={styles.filterSectionLabel}>Название / Автор</AppText>
@@ -1157,23 +1446,17 @@ export function DuplicatesScreen() {
       ) : (
         <FlatList
           style={styles.container}
-          data={displayGroups}
+          data={groups}
           keyExtractor={groupId}
           renderItem={({ item }) => (
             <DuplicateGroupCard
               group={item}
-              onNavigate={navigate}
-              onDelete={handleDelete}
-              onResolve={handleResolve}
-              onMarkBookNotDuplicate={handleMarkBookNotDuplicate}
-              onMarkCopies={handleMarkCopies}
+              handlers={handlers}
+              busyKey={busyKey}
+              busyBookId={busyBookId}
               deletingId={deletingId}
-              resolvingKey={resolvingKey}
-              markingNotDuplicateId={markingNotDuplicateId}
-              markingCopiesKey={markingCopiesKey}
-              stores={stores}
-              onAddToLibrary={handleAddToLibrary}
               addingToLibraryId={addingToLibraryId}
+              stores={stores}
             />
           )}
           contentContainerStyle={styles.listContent}
@@ -1182,18 +1465,7 @@ export function DuplicatesScreen() {
               refreshing={refreshing}
               onRefresh={() => {
                 setRefreshing(true);
-                fetchData(
-                  {
-                    search: debouncedSearch.trim() || undefined,
-                    status: filterStatus !== "all" ? filterStatus : undefined,
-                    count: filterCount ?? undefined,
-                    operatorId: filterOperatorId ?? undefined,
-                    storeId: filterStoreId ?? undefined,
-                    boxId: filterBoxId ?? undefined,
-                  },
-                  1,
-                  true,
-                );
+                fetchData(currentFilters(), 1, true);
               }}
             />
           }
@@ -1212,7 +1484,9 @@ export function DuplicatesScreen() {
               <AppText style={styles.empty}>
                 {totalActive > 0
                   ? "Нет групп, подходящих под фильтры"
-                  : "Копий не найдено"}
+                  : view.showResolved
+                  ? "Копий не найдено"
+                  : "Неразобранных групп нет"}
               </AppText>
             </View>
           }
@@ -1249,10 +1523,10 @@ export function DuplicatesScreen() {
                     style={styles.keepMasterBtn}
                     activeOpacity={0.7}
                     onPress={() => {
-                      const { group, bookIds } = markCopiesPicker!;
+                      const req = markCopiesPicker!;
                       setMarkCopiesPicker(null);
                       // no master id → the server keeps the set's current main copy
-                      doMarkCopies(group, bookIds, null);
+                      doMarkCopies(req, null);
                     }}
                   >
                     <AppText style={styles.keepMasterBtnText}>
@@ -1271,9 +1545,9 @@ export function DuplicatesScreen() {
                         style={styles.masterPickerItem}
                         activeOpacity={0.7}
                         onPress={() => {
-                          const { group, bookIds } = markCopiesPicker!;
+                          const req = markCopiesPicker!;
                           setMarkCopiesPicker(null);
-                          doMarkCopies(group, bookIds, item.id);
+                          doMarkCopies(req, item.id);
                         }}
                       >
                         {cover ? (
@@ -1558,11 +1832,17 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "700",
   },
-  badgeFields: {
-    fontSize: 11,
-    fontWeight: "600",
-    marginLeft: 4,
-    flexShrink: 1,
+  badgeMatched: {
+    backgroundColor: "#E8F5E9",
+  },
+  badgeMatchedText: {
+    color: "#2E7D32",
+  },
+  badgeDiffers: {
+    backgroundColor: "#FFF3E0",
+  },
+  badgeDiffersText: {
+    color: "#E65100",
   },
   bookCount: {
     fontSize: 11,
@@ -1570,9 +1850,106 @@ const styles = StyleSheet.create({
     marginLeft: "auto",
   },
   groupKey: {
+    fontSize: 13,
+    color: "#444",
+    fontWeight: "600",
+    marginBottom: 4,
+  },
+  groupProgress: {
     fontSize: 12,
-    color: "#888",
+    color: "#E65100",
     marginBottom: 8,
+  },
+  groupProgressDone: {
+    color: "#2E7D32",
+  },
+  groupConflict: {
+    fontSize: 12,
+    color: "#C62828",
+    marginBottom: 8,
+  },
+  setBlock: {
+    borderWidth: 1,
+    borderColor: "#A5D6A7",
+    backgroundColor: "#F6FBF6",
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingTop: 6,
+    marginBottom: 10,
+  },
+  sectionLabel: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#555",
+    marginBottom: 6,
+  },
+  miniCardExcluded: {
+    opacity: 0.6,
+  },
+  miniBadges: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 4,
+  },
+  volumeBadge: {
+    alignSelf: "flex-start",
+    backgroundColor: "#E3F2FD",
+    borderRadius: 4,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    marginTop: 4,
+  },
+  volumeBadgeText: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: "#1565C0",
+  },
+  miniIsbnDiffers: {
+    color: "#E65100",
+    fontWeight: "600",
+  },
+  criterionRow: {
+    flexDirection: "row",
+    gap: 6,
+    marginBottom: 8,
+  },
+  criterionBtn: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: "#1976D2",
+    borderRadius: 8,
+    paddingVertical: 6,
+    paddingHorizontal: 4,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#fff",
+  },
+  criterionBtnActive: {
+    backgroundColor: "#1976D2",
+  },
+  criterionBtnText: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#1976D2",
+    textAlign: "center",
+  },
+  criterionBtnTextActive: {
+    color: "#fff",
+  },
+  switchRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 16,
+    marginBottom: 6,
+  },
+  switchItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  switchLabel: {
+    fontSize: 13,
+    color: "#444",
   },
   booksScroll: {
     marginBottom: 12,

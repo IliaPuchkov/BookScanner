@@ -21,7 +21,7 @@ import { CreateUserDto } from '../users/dto/create-user.dto';
 import { UpdateUserDto } from '../users/dto/update-user.dto';
 import { PaginationDto } from '../common/dto/pagination.dto';
 import { SearchBooksDto } from './dto/search-books.dto';
-import { ResolveDuplicateDto } from './dto/resolve-duplicate.dto';
+import { ResolveDuplicateDto, ResolvePairsDto } from './dto/resolve-duplicate.dto';
 import { DuplicateFiltersDto } from './dto/duplicate-filters.dto';
 import { LibraryFiltersDto } from './dto/library-filters.dto';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
@@ -122,16 +122,36 @@ export class AdminController {
     return this.adminService.resolveDuplicate(dto.book1Id, dto.book2Id, user.id);
   }
 
+  @Post('books/duplicates/resolve-many')
+  @ApiOperation({ summary: 'Пометить несколько пар книг как не дубликаты' })
+  resolveDuplicates(@Body() dto: ResolvePairsDto, @CurrentUser() user: any) {
+    return this.adminService.resolveDuplicates(dto.pairs, user.id);
+  }
+
+  @Post('books/duplicates/unresolve')
+  @ApiOperation({ summary: 'Отменить решение «не копии» для пар книг' })
+  unresolveDuplicates(@Body() dto: ResolvePairsDto) {
+    return this.adminService.unresolveDuplicates(dto.pairs);
+  }
+
   @Post('books/mark-copies')
   @ApiOperation({
     summary: 'Пометить группу книг как копии друг друга',
-    description: 'restBookIds — остальные книги группы дубликатов, если админ выделил из неё только часть',
+    description:
+      'restBookIds — остальные книги группы дубликатов, если админ выделил из неё только часть. ' +
+      'overrideResolutions — снять ранее поставленные «не копии» между выбранными книгами',
   })
   markCopies(
-    @Body() dto: { bookIds: string[]; masterBookId?: string; restBookIds?: string[] },
+    @Body() dto: { bookIds: string[]; masterBookId?: string; restBookIds?: string[]; overrideResolutions?: boolean },
     @CurrentUser() user: any,
   ) {
-    return this.adminService.markCopies(dto.bookIds, dto.masterBookId, dto.restBookIds ?? [], user.id);
+    return this.adminService.markCopies(
+      dto.bookIds,
+      dto.masterBookId,
+      dto.restBookIds ?? [],
+      user.id,
+      dto.overrideResolutions === true,
+    );
   }
 
   @Post('books/unmark-copies')

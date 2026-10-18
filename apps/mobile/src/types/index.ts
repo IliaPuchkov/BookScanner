@@ -160,20 +160,41 @@ export interface StatsSummary {
   }>;
 }
 
+/** How the Duplicates screen looks for copies */
+export type DuplicateCriterion = 'isbn' | 'exact' | 'fuzzy';
+
+/**
+ * Books the criterion considers the same. Admin decisions never cut a group — they decide its
+ * pairs: one copy set (copies), two sets or a `resolvedPairs` entry (not copies). The group
+ * leaves the queue once `unresolvedCount` is 0.
+ */
 export interface DuplicateGroup {
-  type: 'isbn' | 'title';
+  criterion: DuplicateCriterion;
+  /** Smallest book id — unique within one criterion */
+  id: string;
+  /** ISBN (isbn), normalized title (exact) or title core (fuzzy) */
   key: string;
-  authorKey?: string;
-  /** Set when the server split one candidate group into several parts (same type/key/authorKey) */
-  componentKey?: string;
   books: Book[];
-  probability?: number;
-  matchedFields?: string[];
+  sets: Array<{ copyGroupId: string; ids: string[] }>;
+  /** Books in no set with an undecided pair */
+  looseIds: string[];
+  /** Books in no set resolved "not copies" with every other book (shown folded) */
+  excludedIds: string[];
+  /** Explicit "not copies" inside the group */
+  resolvedPairs: Array<[string, string]>;
+  /** "Not copies" between two books of one set — old data, the set wins */
+  conflictPairs: Array<[string, string]>;
+  unresolvedCount: number;
+  matchedFields: string[];
+  differingFields: string[];
+  /** Books whose valid ISBN is not the group's most common one */
+  isbnDiffers: string[];
+  /** Volume label per book id, e.g. "Кн. 1" */
+  volumes: Record<string, string>;
 }
 
 export interface DuplicatesResponse {
-  isbnDuplicates: DuplicateGroup[];
-  possibleDuplicates: DuplicateGroup[];
+  groups: DuplicateGroup[];
   total: number;
   totalBooks: number;
   page: number;
