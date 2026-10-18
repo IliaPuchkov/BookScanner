@@ -328,10 +328,18 @@ function DuplicateGroupCard({
     setSelecting(false);
     setSelectedIds([]);
   }, [group.books, group.resolvedPairs]);
+  // Tapping a book of a copy set selects or clears the whole set — marking copies merges whole
+  // sets anyway, so there is no point in tapping each of its books
   const toggleSelect = (id: string) =>
-    setSelectedIds((prev) =>
-      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
-    );
+    setSelectedIds((prev) => {
+      const setId = group.books.find((b) => b.id === id)?.copyGroupId;
+      const ids = setId
+        ? group.books.filter((b) => b.copyGroupId === setId).map((b) => b.id)
+        : [id];
+      return prev.includes(id)
+        ? prev.filter((x) => !ids.includes(x))
+        : [...prev, ...ids.filter((x) => !prev.includes(x))];
+    });
 
   const gid = groupId(group);
   const busy = busyKey === gid;
@@ -447,12 +455,11 @@ function DuplicateGroupCard({
       <AppText style={styles.groupKey} numberOfLines={2}>
         {groupTitle(group)}
       </AppText>
-      <AppText style={[styles.groupProgress, decided && styles.groupProgressDone]}>
-        {decided
-          ? "Разобрана ✓"
-          : `Не решено пар: ${group.unresolvedCount}` +
-            (newCount ? ` · новых книг: ${newCount}` : "")}
-      </AppText>
+      {(decided || newCount > 0) && (
+        <AppText style={[styles.groupProgress, decided && styles.groupProgressDone]}>
+          {decided ? "Разобрана ✓" : `Новых книг: ${newCount}`}
+        </AppText>
+      )}
       {group.conflictPairs.length > 0 && (
         <AppText style={styles.groupConflict}>
           ⚠ В наборе есть книги, ранее отмеченные «не копии» — набор важнее
@@ -489,8 +496,9 @@ function DuplicateGroupCard({
       {selecting ? (
         <>
           <AppText style={styles.selectHint}>
-            Отметьте книги, которые являются копиями друг друга. Книга из набора
-            добавит к нему выбранные. Остальные будут отмечены «не копии» этих.
+            Отметьте книги, которые являются копиями друг друга. Нажатие на книгу
+            набора выбирает весь набор — выбранные книги добавятся к нему. Остальные
+            будут отмечены «не копии» этих.
           </AppText>
           <TouchableOpacity
             style={[
@@ -1229,10 +1237,11 @@ export function DuplicatesScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.filterPanel}>
-        <View style={styles.filterRow}>
+        <View style={styles.toggleRow}>
           <TouchableOpacity
             style={[
               styles.filterToggleBtn,
+              styles.criterionToggleBtn,
               criteriaOpen && styles.filterToggleBtnActive,
             ]}
             onPress={() => {
@@ -1246,6 +1255,7 @@ export function DuplicatesScreen() {
                 styles.filterToggleText,
                 criteriaOpen && styles.filterToggleTextActive,
               ]}
+              numberOfLines={1}
             >
               Критерий: {CRITERIA.find((c) => c.value === view.criterion)?.label}
               {criteriaOpen ? " ▲" : " ▼"}
@@ -1272,12 +1282,13 @@ export function DuplicatesScreen() {
               {filtersOpen ? " ▲" : " ▼"}
             </AppText>
           </TouchableOpacity>
-          <AppText style={styles.filterCount}>
-            {groups.length} {pluralRu(groups.length, "группа", "группы", "групп")} из{" "}
-            {totalGroups} · {totalBooks}{" "}
-            {pluralRu(totalBooks, "книга", "книги", "книг")}
-          </AppText>
         </View>
+        {/* Own line, so a longer "Фильтры (N)" never pushes the buttons apart */}
+        <AppText style={styles.filterCount}>
+          {groups.length} {pluralRu(groups.length, "группа", "группы", "групп")} из{" "}
+          {totalGroups} · {totalBooks}{" "}
+          {pluralRu(totalBooks, "книга", "книги", "книг")}
+        </AppText>
 
         {/* Expanded criterion panel: how copies are looked for */}
         {criteriaOpen && (
@@ -1843,7 +1854,16 @@ const styles = StyleSheet.create({
   filterCount: {
     fontSize: 12,
     color: "#999",
-    marginLeft: "auto",
+    textAlign: "right",
+    marginTop: 6,
+  },
+  toggleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  criterionToggleBtn: {
+    flexShrink: 1,
   },
   filterExpanded: {
     paddingTop: 10,
@@ -1934,10 +1954,10 @@ const styles = StyleSheet.create({
     marginLeft: "auto",
   },
   groupKey: {
-    fontSize: 13,
-    color: "#444",
-    fontWeight: "600",
-    marginBottom: 4,
+    fontSize: 16,
+    color: "#1A1A1A",
+    fontWeight: "700",
+    marginBottom: 8,
   },
   groupProgress: {
     fontSize: 12,
@@ -1962,9 +1982,11 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   sectionLabel: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: "700",
-    color: "#555",
+    color: "#8A8A8A",
+    textTransform: "uppercase",
+    letterSpacing: 0.4,
     marginBottom: 6,
   },
   miniCardExcluded: {
