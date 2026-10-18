@@ -2,7 +2,7 @@
 # BookScanner — server backup script
 # Backs up: PostgreSQL database, SSL certificates
 # Storage: Yandex Cloud S3
-# Retention: 7 days
+# Retention: 14 days
 
 set -euo pipefail
 
@@ -18,7 +18,7 @@ BACKUP_BUCKET="${BACKUP_S3_BUCKET:-}"
 AWS_ENDPOINT="${AWS_ENDPOINT:-https://storage.yandexcloud.net}"
 TIMESTAMP="$(date -u +%Y%m%dT%H%M%SZ)"
 TMP_DIR="$(mktemp -d)"
-RETENTION_DAYS=7
+RETENTION_DAYS=14
 
 # ─── Validation ──────────────────────────────────────────────────────────────
 
@@ -73,7 +73,7 @@ s3_delete_old() {
         --bucket "$BACKUP_BUCKET" \
         --key "$key" \
         --endpoint-url "$AWS_ENDPOINT" \
-        --quiet && echo "  deleted: $key"
+        > /dev/null && echo "  deleted: $key"
     done
 }
 
