@@ -484,9 +484,18 @@ function DuplicateGroupCard({
       ))}
       {excluded.length > 0 && !selecting && (
         <>
-          <TouchableOpacity onPress={() => setExcludedOpen((v) => !v)} activeOpacity={0.7}>
-            <AppText style={styles.sectionLabel}>
-              Не копии ({excluded.length}) {excludedOpen ? "▲" : "▼"}
+          {/* Bordered toggle with its own spacing — it must not read as part of the actions below */}
+          <TouchableOpacity
+            style={[styles.excludedToggle, excludedOpen && styles.excludedToggleOpen]}
+            onPress={() => setExcludedOpen((v) => !v)}
+            activeOpacity={0.7}
+            hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+          >
+            <AppText style={styles.excludedToggleText}>
+              Не копии ({excluded.length})
+            </AppText>
+            <AppText style={styles.excludedToggleArrow}>
+              {excludedOpen ? "Свернуть ▲" : "Показать ▼"}
             </AppText>
           </TouchableOpacity>
           {excludedOpen && renderBooks(excluded, "excluded")}
@@ -2009,6 +2018,33 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: "700",
     color: "#1565C0",
+  },
+  excludedToggle: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    borderWidth: 1,
+    borderColor: "#D6D6D6",
+    borderStyle: "dashed",
+    borderRadius: 8,
+    backgroundColor: "#FAFAFA",
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginTop: 4,
+    marginBottom: 16,
+  },
+  excludedToggleOpen: {
+    marginBottom: 10,
+  },
+  excludedToggleText: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#616161",
+  },
+  excludedToggleArrow: {
+    fontSize: 12,
+    color: "#1976D2",
+    fontWeight: "600",
   },
   miniNote: {
     fontSize: 11,
