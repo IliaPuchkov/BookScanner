@@ -287,6 +287,14 @@ export class AdminService {
     return this.booksService.getLibraryBooks(pagination, filters);
   }
 
+  async findCopySets(forBookId: string | undefined, search: string | undefined) {
+    return this.booksService.findCopySets(forBookId, search);
+  }
+
+  async moveToCopySet(bookId: string, copyGroupId: string, adminId: string) {
+    return this.booksService.moveToCopySet(bookId, copyGroupId, adminId);
+  }
+
   async getCopyGroups(dto: {
     page?: number;
     limit?: number;

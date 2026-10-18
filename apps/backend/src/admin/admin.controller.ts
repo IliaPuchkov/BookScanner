@@ -21,7 +21,7 @@ import { CreateUserDto } from '../users/dto/create-user.dto';
 import { UpdateUserDto } from '../users/dto/update-user.dto';
 import { PaginationDto } from '../common/dto/pagination.dto';
 import { SearchBooksDto } from './dto/search-books.dto';
-import { ResolveDuplicateDto, ResolvePairsDto, UnresolveLastDto } from './dto/resolve-duplicate.dto';
+import { MoveToCopySetDto, ResolveDuplicateDto, ResolvePairsDto, UnresolveLastDto } from './dto/resolve-duplicate.dto';
 import { DuplicateFiltersDto } from './dto/duplicate-filters.dto';
 import { LibraryFiltersDto } from './dto/library-filters.dto';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
@@ -200,6 +200,34 @@ export class AdminController {
       storeId: storeId || undefined,
       boxId: boxId || undefined,
     });
+  }
+
+  // Adding a book to a copy set by hand
+  @Get('books/copy-sets')
+  @ApiOperation({
+    summary: 'Наборы копий для ручного добавления книги',
+    description: 'Без search — наборы, похожие на книгу forBookId (тот же ISBN или похожее название того же автора); с search — по названию, автору, ISBN или SKU',
+  })
+  @ApiQuery({ name: 'forBookId', required: false })
+  @ApiQuery({ name: 'search', required: false })
+  findCopySets(
+    @Query('forBookId', new ParseUUIDPipe({ optional: true })) forBookId?: string,
+    @Query('search') search?: string,
+  ) {
+    return this.adminService.findCopySets(forBookId, search);
+  }
+
+  @Post('books/:id/copy-set')
+  @ApiOperation({
+    summary: 'Добавить книгу в набор копий',
+    description: 'Книга уходит из своего набора (если был), снимаются её «не копии» с книгами набора, и она наследует «не копии» набора',
+  })
+  moveToCopySet(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: MoveToCopySetDto,
+    @CurrentUser() user: any,
+  ) {
+    return this.adminService.moveToCopySet(id, dto.copyGroupId, user.id);
   }
 
   // Home library ("Домашняя книга")

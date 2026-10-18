@@ -10,6 +10,19 @@ export interface SystemSetting {
   updatedAt: string;
 }
 
+/** A copy set offered for adding a book by hand (GET /admin/books/copy-sets) */
+export interface CopySetOption {
+  copyGroupId: string;
+  /** Shortest title among its books */
+  title: string;
+  author: string | null;
+  count: number;
+  /** Looks like the book: same valid ISBN or a similar title by the same author */
+  suggested: boolean;
+  /** Up to 3 books, main copy first, with photos */
+  books: Book[];
+}
+
 export interface OzonStore {
   id: string;
   name: string;
@@ -310,6 +323,26 @@ export const adminService = {
     await api.post('/admin/books/duplicates/unresolve', {
       pairs: pairs.map(([book1Id, book2Id]) => ({ book1Id, book2Id })),
     });
+  },
+
+  /** Copy sets to add a book to: look-alikes of `forBookId`, or any set matching `search` */
+  async findCopySets(forBookId: string, search?: string): Promise<{ sets: CopySetOption[]; total: number }> {
+    const { data } = await api.get<{ sets: CopySetOption[]; total: number }>('/admin/books/copy-sets', {
+      params: { forBookId, search },
+    });
+    return data;
+  },
+
+  /**
+   * Puts the book into an existing copy set (moving it out of its own); the set's "not copies"
+   * pass to the book. `oldSetMaster` is the SKU of the new main copy of the set it left, if any.
+   */
+  async moveToCopySet(
+    bookId: string,
+    copyGroupId: string,
+  ): Promise<{ book: Book; removed: number; inherited: number; oldSetMaster: string | null }> {
+    const { data } = await api.post(`/admin/books/${bookId}/copy-set`, { copyGroupId });
+    return data;
   },
 
   /**

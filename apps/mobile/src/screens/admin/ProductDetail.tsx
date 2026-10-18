@@ -23,6 +23,7 @@ import {
 } from "@react-navigation/native";
 import { type NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { Button } from "../../components/Button";
+import { CopySetPicker } from "../../components/CopySetPicker";
 import { booksService } from "../../services/books.service";
 import { visionService } from "../../services/vision.service";
 import type { ExtractPreviewResult } from "../../services/vision.service";
@@ -288,6 +289,8 @@ export function ProductDetailScreen() {
   const [loading, setLoading] = useState(true);
   const [removingFromLibrary, setRemovingFromLibrary] = useState(false);
   const [addingToLibrary, setAddingToLibrary] = useState(false);
+  // «Добавить в набор копий» picker
+  const [copySetOpen, setCopySetOpen] = useState(false);
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [publishing, setPublishing] = useState(false);
@@ -738,6 +741,11 @@ export function ProductDetailScreen() {
 
   return (
     <>
+      <CopySetPicker
+        book={copySetOpen ? book : null}
+        onClose={() => setCopySetOpen(false)}
+        onMoved={(updated) => setBook((prev) => (prev ? { ...prev, ...updated } : updated))}
+      />
       <Modal
         visible={lightboxVisible}
         transparent={false}
@@ -1226,6 +1234,12 @@ export function ProductDetailScreen() {
                         style={{ marginBottom: 8 }}
                       />
                     )}
+                  <Button
+                    title={book.copyGroupId ? "Перенести в другой набор копий" : "Добавить в набор копий"}
+                    onPress={() => setCopySetOpen(true)}
+                    variant="secondary"
+                    style={{ marginBottom: 8 }}
+                  />
                   {book.status === BookStatus.IN_LIBRARY && (
                     <Button
                       title="Вернуть на проверку"

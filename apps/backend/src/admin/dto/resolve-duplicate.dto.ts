@@ -34,3 +34,9 @@ export class UnresolveLastDto {
   @IsUUID('all', { each: true })
   otherIds: string[];
 }
+
+export class MoveToCopySetDto {
+  @ApiProperty({ description: 'Набор копий, в который перенести книгу' })
+  @IsUUID()
+  copyGroupId: string;
+}

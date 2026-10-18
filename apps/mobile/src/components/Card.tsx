@@ -20,6 +20,8 @@ interface Props {
   onPress: () => void;
   userRole?: string;
   storeName?: string;
+  /** Shows a ⋮ button in the corner (admin book database) */
+  onMenu?: () => void;
 }
 
 function getStatusConfig(book: Book): { color: string; label: string } {
@@ -41,7 +43,7 @@ function getStatusConfig(book: Book): { color: string; label: string } {
   }
 }
 
-export function BookCard({ book, onPress, userRole, storeName }: Props) {
+export function BookCard({ book, onPress, userRole, storeName, onMenu }: Props) {
   const coverPhoto = book.photos?.find((p) => p.sortOrder === 0);
   const statusConfig = getStatusConfig(book);
 
@@ -54,7 +56,7 @@ export function BookCard({ book, onPress, userRole, storeName }: Props) {
           <AppText style={styles.placeholderText}>Нет фото</AppText>
         </View>
       )}
-      <View style={styles.info}>
+      <View style={[styles.info, onMenu ? styles.infoWithMenu : null]}>
         <AppText style={styles.title} numberOfLines={2}>
           {book.title}
         </AppText>
@@ -99,6 +101,17 @@ export function BookCard({ book, onPress, userRole, storeName }: Props) {
           </View>
         )}
       </View>
+      {onMenu ? (
+        <TouchableOpacity
+          style={styles.menuBtn}
+          onPress={onMenu}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          activeOpacity={0.6}
+          accessibilityLabel="Действия с книгой"
+        >
+          <AppText style={styles.menuIcon}>⋮</AppText>
+        </TouchableOpacity>
+      ) : null}
     </TouchableOpacity>
   );
 }
@@ -115,6 +128,22 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.08,
     shadowRadius: 4,
     elevation: 2,
+  },
+  infoWithMenu: {
+    paddingRight: 24,
+  },
+  menuBtn: {
+    position: "absolute",
+    top: 6,
+    right: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+  },
+  menuIcon: {
+    fontSize: 22,
+    fontWeight: "700",
+    color: "#555",
+    lineHeight: 24,
   },
   image: {
     width: 70,

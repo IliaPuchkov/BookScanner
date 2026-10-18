@@ -24,6 +24,7 @@ import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import type { RouteProp } from "@react-navigation/native";
 import { Input } from "../../components/Input";
 import { BookCard } from "../../components/Card";
+import { CopySetPicker } from "../../components/CopySetPicker";
 import { DatePickerInput } from "../../components/DatePickerInput";
 import { FilterTag, FilterRow } from "../../components/FilterControls";
 import { adminService } from "../../services/admin.service";
@@ -56,6 +57,8 @@ export function BookDatabaseScreen() {
   const navigation = useNavigation<Nav>();
   const route = useRoute<Route>();
   const [books, setBooks] = useState<Book[]>([]);
+  // Book being added to a copy set by hand (⋮ → «Добавить в набор копий»)
+  const [copySetBook, setCopySetBook] = useState<Book | null>(null);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -372,6 +375,13 @@ export function BookDatabaseScreen() {
 
   return (
     <View style={styles.container}>
+      <CopySetPicker
+        book={copySetBook}
+        onClose={() => setCopySetBook(null)}
+        onMoved={(updated) =>
+          setBooks((prev) => prev.map((b) => (b.id === updated.id ? { ...b, ...updated } : b)))
+        }
+      />
       {/* Search bar */}
       <View style={styles.searchBar}>
         <Input
@@ -856,6 +866,15 @@ export function BookDatabaseScreen() {
                 navigation.navigate("ProductDetail", { bookId: item.id });
               }}
               userRole="admin"
+              onMenu={() =>
+                Alert.alert(item.title, item.sku, [
+                  {
+                    text: item.copyGroupId ? "Перенести в другой набор копий" : "Добавить в набор копий",
+                    onPress: () => setCopySetBook(item),
+                  },
+                  { text: "Отмена", style: "cancel" },
+                ])
+              }
               storeName={
                 item.ozonProduct?.storeId
                   ? ozonStores.find((s) => s.id === item.ozonProduct!.storeId)?.name

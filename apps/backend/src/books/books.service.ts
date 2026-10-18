@@ -15,6 +15,8 @@ import {
   Criterion,
   DuplicateGroup,
   groupMatch,
+  isKnownAuthor,
+  authorTokens,
   groupState,
   pairKey,
   StateRow,
@@ -547,6 +549,161 @@ export class BooksService {
     return { groups, total, totalBooks, page, totalPages: Math.ceil(total / limit) };
   }
 
+  /**
+   * Copy sets offered when a book is added to a set by hand (book card / book database).
+   * Without a search: sets that look like this book — a book of theirs shares its valid ISBN, or
+   * a similar title by the same author (fuzzy view, ISBN and missing authors ignored). With a
+   * search: sets with a book whose title, author, ISBN or SKU contains it, look-alikes first.
+   * The book's own set is left out.
+   */
+  async findCopySets(forBookId: string | undefined, search: string | undefined, limit = 20) {
+    const rows: Array<{
+      id: string;
+      sku: string;
+      title: string | null;
+      author: string | null;
+      isbn: string | null;
+      copyGroupId: string;
+      isCopyMaster: boolean;
+    }> = await this.booksRepository.manager.query(`
+      SELECT id::text AS id, sku, title, author, isbn, "copyGroupId"::text AS "copyGroupId", "isCopyMaster"
+      FROM books
+      WHERE "isCopy" = true AND "copyGroupId" IS NOT NULL
+      ORDER BY "createdAt", id
+    `);
+    type Row = (typeof rows)[number];
+    const sets = new Map<string, Row[]>();
+    for (const r of rows) {
+      const s = sets.get(r.copyGroupId);
+      if (s) s.push(r); else sets.set(r.copyGroupId, [r]);
+    }
+
+    let ownSet: string | null = null;
+    const lookAlike = new Set<string>();
+    if (forBookId) {
+      const [own] = await this.booksRepository.manager.query(
+        `SELECT "copyGroupId"::text AS "copyGroupId" FROM books WHERE id = $1`,
+        [forBookId],
+      );
+      ownSet = own?.copyGroupId ?? null;
+      const views: DuplicateQuery[] = [
+        { criterion: 'isbn' },
+        { criterion: 'fuzzy', respectIsbn: false, includeUnknownAuthor: true },
+      ];
+      for (const view of views) {
+        const { groups } = await this.getViewGroups(view);
+        const group = groups.groups.find((g) => g.ids.includes(forBookId));
+        for (const id of group?.ids ?? []) {
+          const set = groups.rows.byId.get(id)?.copyGroupId;
+          if (set) lookAlike.add(set);
+        }
+      }
+    }
+
+    const needle = search?.trim().toLowerCase();
+    const hit = (r: Row) => [r.title, r.author, r.isbn, r.sku].some((f) => f?.toLowerCase().includes(needle!));
+    const list = [...sets]
+      .filter(([id]) => id !== ownSet)
+      .map(([id, books]) => ({ id, books, suggested: lookAlike.has(id) }))
+      .filter((s) => (needle ? s.books.some(hit) : s.suggested))
+      .sort((a, b) => Number(b.suggested) - Number(a.suggested) || b.books.length - a.books.length);
+    const page = list.slice(0, limit);
+
+    // Cover photos for the first books of each set (main copy first)
+    const shown = page.map((s) => [...s.books].sort((a, b) => Number(b.isCopyMaster) - Number(a.isCopyMaster)).slice(0, 3));
+    const ids = shown.flat().map((r) => r.id);
+    const full = new Map<string, Book>();
+    if (ids.length) {
+      (await this.booksRepository.find({ where: { id: In(ids) }, relations: ['photos'] })).forEach((b) => full.set(b.id, b));
+    }
+
+    return {
+      total: list.length,
+      sets: page.map((s, i) => ({
+        copyGroupId: s.id,
+        title: s.books.map((b) => b.title).filter((t): t is string => !!t).sort((a, b) => a.length - b.length)[0] ?? '',
+        author: s.books.find((b) => isKnownAuthor(authorTokens(b.author)))?.author ?? null,
+        count: s.books.length,
+        suggested: s.suggested,
+        books: shown[i].map((r) => full.get(r.id)).filter((b): b is Book => !!b),
+      })),
+    };
+  }
+
+  /**
+   * Puts a book into an existing copy set by hand, moving it out of its own set if it has one.
+   * Decisions follow the set: earlier "not copies" between the book and the set's books are
+   * dropped, and the book inherits every "not copies" the set has with other books (whatever
+   * the set was ruled not to be, its new copy isn't either). Leaving an old set marks the book
+   * "not a copy" of that set's other books; a set left with one book dissolves, and a set that
+   * lost its main copy gets a new one (an already published book first, else the oldest).
+   */
+  async moveToCopySet(bookId: string, copyGroupId: string, adminId: string) {
+    const book = await this.findOne(bookId);
+    if (book.copyGroupId === copyGroupId) {
+      throw new BadRequestException('Книга уже в этом наборе копий');
+    }
+    const members = await this.booksRepository.find({ select: ['id'], where: { copyGroupId, isCopy: true } });
+    if (!members.length) throw new NotFoundException('Набор копий не найден');
+    const memberIds = members.map((m) => m.id);
+    const oldSet = book.copyGroupId;
+    const wasMaster = book.isCopyMaster;
+
+    const { removed, inherited } = await this.booksRepository.manager.transaction(async (em) => {
+      const deleted = await em.query(
+        `DELETE FROM duplicate_resolutions
+         WHERE (book1_id = $1 AND book2_id = ANY($2::uuid[]))
+            OR (book2_id = $1 AND book1_id = ANY($2::uuid[]))`,
+        [bookId, memberIds],
+      );
+      const oldMates: string[] = oldSet
+        ? (await em.query(`SELECT id::text AS id FROM books WHERE "copyGroupId" = $1 AND id <> $2`, [oldSet, bookId]))
+            .map((r: { id: string }) => r.id)
+        : [];
+      const added = await em.query(
+        `INSERT INTO duplicate_resolutions (book1_id, book2_id, resolved_by_id)
+         SELECT DISTINCT LEAST($1::uuid, o), GREATEST($1::uuid, o), $3::uuid
+         FROM (
+           SELECT CASE WHEN r.book1_id = ANY($2::uuid[]) THEN r.book2_id ELSE r.book1_id END AS o
+           FROM duplicate_resolutions r
+           WHERE r.book1_id = ANY($2::uuid[]) OR r.book2_id = ANY($2::uuid[])
+           UNION
+           SELECT unnest($4::uuid[])
+         ) x
+         WHERE o <> $1::uuid AND NOT (o = ANY($2::uuid[]))
+         ON CONFLICT DO NOTHING
+         RETURNING id`,
+        [bookId, memberIds, adminId, oldMates],
+      );
+      await em.update(Book, bookId, { isCopy: true, isCopyMaster: false, copyGroupId });
+      // TypeORM's postgres driver returns [rows, count] for DELETE and rows for INSERT … RETURNING
+      return { removed: Array.isArray(deleted) ? Number(deleted[1]) || 0 : 0, inherited: added.length as number };
+    });
+
+    let oldSetMaster: string | null = null;
+    if (oldSet) {
+      await this.unmarkSingletonCopy(oldSet);
+      if (wasMaster) oldSetMaster = await this.ensureCopyMaster(oldSet);
+    }
+    this.dropDuplicateCache();
+    return { copyGroupId, removed, inherited, oldSetMaster, book: await this.findOne(bookId) };
+  }
+
+  // A set of 2+ copies without a main copy has nothing to publish: pick an already published
+  // book, else the oldest. Returns the SKU of the new main copy, or null when nothing changed.
+  private async ensureCopyMaster(copyGroupId: string): Promise<string | null> {
+    const books = await this.booksRepository.find({
+      select: ['id', 'sku', 'isCopyMaster', 'publishedToOzon', 'createdAt'],
+      where: { copyGroupId, isCopy: true },
+      order: { createdAt: 'ASC' },
+    });
+    if (books.length < 2 || books.some((b) => b.isCopyMaster)) return null;
+    const pick = books.find((b) => b.publishedToOzon) ?? books[0];
+    await this.booksRepository.update(pick.id, { isCopyMaster: true });
+    return pick.sku;
+  }
+
+
   /** Dashboard count — copy groups, the same grouping as getCopyGroups (a copy without a set is its own group). */
   async countCopies(): Promise<number> {
     const row = await this.booksRepository
@@ -1017,10 +1174,8 @@ export class BooksService {
   // Grouping and pair states take a few hundred ms, so both are cached per view
   // (criterion + switches): groups until the rows are reloaded, states until then or until
   // a resolution changes (dropDuplicateStates).
-  private async getDuplicateCards(
-    resolvedPairs: Array<{ book1Id: string; book2Id: string }>,
-    query: DuplicateQuery,
-  ): Promise<DuplicateCard[]> {
+  /** Candidate groups of one view (criterion + switches), cached until the rows reload. */
+  private async getViewGroups(query: DuplicateQuery): Promise<{ viewKey: string; groups: GroupsEntry }> {
     const criterion = query.criterion ?? 'exact';
     const respectIsbn = criterion === 'isbn' || query.respectIsbn !== false;
     const includeUnknownAuthor = criterion === 'isbn' || query.includeUnknownAuthor === true;
@@ -1033,6 +1188,15 @@ export class BooksService {
       this._groupsCache.set(viewKey, groups);
       this.logger.debug(`[duplicates] ${viewKey}: books=${rows.list.length} groups=${groups.groups.length}`);
     }
+    return { viewKey, groups };
+  }
+
+  private async getDuplicateCards(
+    resolvedPairs: Array<{ book1Id: string; book2Id: string }>,
+    query: DuplicateQuery,
+  ): Promise<DuplicateCard[]> {
+    const { viewKey, groups } = await this.getViewGroups(query);
+    const rows = groups.rows;
 
     const cached = this._cardsCache.get(viewKey);
     if (cached && cached.groups === groups) return cached.cards;
