@@ -117,6 +117,12 @@ export interface CopyGroup {
   type: 'isbn' | 'title';
   key: string;
   books: Book[];
+  /** ✓ chips: what all books share (ISBN / Название / Автор) */
+  matchedFields?: string[];
+  /** ≠ chips: where the books differ */
+  differingFields?: string[];
+  /** Books whose valid ISBN is not the group's most common one */
+  isbnDiffers?: string[];
 }
 
 export interface CopyGroupsResponse {

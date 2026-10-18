@@ -292,11 +292,12 @@ export class AdminService {
     limit?: number;
     search?: string;
     status?: 'published' | 'not_published' | 'archived';
+    count?: number;
+    operatorId?: string;
+    storeId?: string;
+    boxId?: string;
   }) {
-    return this.booksService.getCopyGroups(
-      dto.page ?? 1,
-      dto.limit ?? 20,
-      { search: dto.search, status: dto.status },
-    );
+    const { page, limit, ...filters } = dto;
+    return this.booksService.getCopyGroups(page ?? 1, limit ?? 20, filters);
   }
 }

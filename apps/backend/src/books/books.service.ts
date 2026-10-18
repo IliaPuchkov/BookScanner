@@ -446,39 +446,53 @@ export class BooksService {
   async getCopyGroups(
     page: number,
     limit: number,
-    filters: { search?: string; status?: 'published' | 'not_published' | 'archived' } = {},
+    filters: {
+      search?: string;
+      status?: 'published' | 'not_published' | 'archived';
+      count?: number;
+      operatorId?: string;
+      storeId?: string;
+      boxId?: string;
+    } = {},
   ) {
-    const qb = this.booksRepository
-      .createQueryBuilder('book')
-      .leftJoinAndSelect('book.photos', 'photos')
-      .leftJoinAndSelect('book.box', 'box')
-      .leftJoinAndSelect('book.createdBy', 'createdBy')
-      .leftJoinAndSelect('book.ozonProduct', 'ozonProduct')
-      .leftJoinAndSelect('book.libraryOwner', 'libraryOwner')
-      .where('book.isCopy = true')
-      .orderBy('book.createdAt', 'DESC');
-
-    const books = await qb.getMany();
+    // Grouping and filtering run on light rows of every copy; photos, box, store etc. are loaded
+    // only for the books of the requested page (loading all ~3.5k copies with relations took
+    // ~14k joined rows per request).
+    const rows: Array<{
+      id: string;
+      isbn: string | null;
+      title: string | null;
+      author: string | null;
+      status: BookStatus;
+      copyGroupId: string | null;
+      createdById: string | null;
+      boxId: string | null;
+      storeId: string | null;
+    }> = await this.booksRepository.manager.query(`
+      SELECT b.id::text AS id, b.isbn, b.title, b.author, b.status,
+             b."copyGroupId"::text AS "copyGroupId", b.created_by::text AS "createdById",
+             b.box_id::text AS "boxId", op."storeId" AS "storeId"
+      FROM books b
+      LEFT JOIN ozon_products op ON op.book_id = b.id
+      WHERE b."isCopy" = true
+      ORDER BY b."createdAt" DESC, b.id
+    `);
 
     // Grouped by copy set (every copy has one since migration 1747800000000); `id` is the unique
     // group key, `type`/`key` are only for display. A copy without a set shows on its own.
-    const groupMap = new Map<string, { id: string; type: 'isbn' | 'title'; key: string; books: Book[] }>();
-    for (const book of books) {
-      const isbn = book.isbn?.trim();
-      const gk = `set:${book.copyGroupId ?? book.id}`;
-      if (!groupMap.has(gk)) {
-        groupMap.set(gk, isbn
-          ? { id: gk, type: 'isbn', key: book.isbn, books: [] }
-          : { id: gk, type: 'title', key: book.title ?? '', books: [] });
-      }
-      groupMap.get(gk)!.books.push(book);
+    type Row = (typeof rows)[number];
+    const groupMap = new Map<string, Row[]>();
+    for (const r of rows) {
+      const gk = `set:${r.copyGroupId ?? r.id}`;
+      const g = groupMap.get(gk);
+      if (g) g.push(r); else groupMap.set(gk, [r]);
     }
 
-    // Status/search pick whole groups: a group is listed when at least one of its books matches,
-    // and it keeps all its books with the matching ones first — so "На Ozon" shows each set with
-    // its published copies in front instead of a lone published book.
+    // Book-level filters pick whole groups: a group is listed when at least one of its books
+    // matches, and it keeps all its books with the matching ones first — so "На Ozon" shows each
+    // set with its published copies in front instead of a lone published book.
     const search = filters.search?.trim().toLowerCase();
-    const matches = (b: Book) => {
+    const matches = (b: Row) => {
       if (filters.status === 'published' && b.status !== BookStatus.PUBLISHED) return false;
       if (filters.status === 'archived' && b.status !== BookStatus.ARCHIVED) return false;
       if (
@@ -486,22 +500,51 @@ export class BooksService {
         (b.status === BookStatus.PUBLISHED || b.status === BookStatus.ARCHIVED)
       ) return false;
       if (search && ![b.title, b.author, b.isbn].some((f) => f?.toLowerCase().includes(search))) return false;
+      if (filters.operatorId && b.createdById !== filters.operatorId) return false;
+      if (filters.boxId && b.boxId !== filters.boxId) return false;
+      if (filters.storeId && b.storeId !== filters.storeId) return false;
       return true;
     };
-    if (filters.status || search) {
-      for (const [gk, g] of groupMap) {
-        const hit = g.books.filter(matches);
-        if (!hit.length) groupMap.delete(gk);
-        else g.books = [...hit, ...g.books.filter((b) => !hit.includes(b))];
+    const bookFilter = filters.status || search || filters.operatorId || filters.boxId || filters.storeId;
+    const allGroups: Array<{ id: string; rows: Row[] }> = [];
+    for (const [id, g] of groupMap) {
+      // Count filter: 4 means "4 or more"
+      if (filters.count && (filters.count >= 4 ? g.length < 4 : g.length !== filters.count)) continue;
+      if (!bookFilter) {
+        allGroups.push({ id, rows: g });
+        continue;
       }
+      const hit = g.filter(matches);
+      if (hit.length) allGroups.push({ id, rows: [...hit, ...g.filter((b) => !hit.includes(b))] });
     }
 
-    const allGroups = Array.from(groupMap.values());
     const total = allGroups.length;
-    const totalBooks = allGroups.reduce((n, g) => n + g.books.length, 0);
+    const totalBooks = allGroups.reduce((n, g) => n + g.rows.length, 0);
     const pageGroups = allGroups.slice((page - 1) * limit, page * limit);
 
-    return { groups: pageGroups, total, totalBooks, page, totalPages: Math.ceil(total / limit) };
+    const pageIds = pageGroups.flatMap((g) => g.rows.map((r) => r.id));
+    const bookMap = new Map<string, Book>();
+    if (pageIds.length) {
+      const books = await this.booksRepository.find({
+        where: { id: In(pageIds) },
+        relations: ['photos', 'box', 'createdBy', 'ozonProduct', 'libraryOwner'],
+      });
+      books.forEach((b) => bookMap.set(b.id, b));
+    }
+
+    const groups = pageGroups.map((g) => {
+      const first = g.rows[0];
+      return {
+        id: g.id,
+        type: first.isbn?.trim() ? ('isbn' as const) : ('title' as const),
+        key: first.isbn?.trim() ? first.isbn : (first.title ?? ''),
+        books: g.rows.map((r) => bookMap.get(r.id)).filter((b): b is Book => !!b),
+        // Same ✓/≠ chips as the Duplicates screen
+        ...groupMatch(g.rows, 'exact'),
+      };
+    });
+
+    return { groups, total, totalBooks, page, totalPages: Math.ceil(total / limit) };
   }
 
   /** Dashboard count — copy groups, the same grouping as getCopyGroups (a copy without a set is its own group). */

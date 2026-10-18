@@ -357,6 +357,11 @@ export const adminService = {
     filters?: {
       search?: string;
       status?: 'published' | 'not_published' | 'archived';
+      /** 2 | 3 | 4 (= 4 and more) */
+      count?: number;
+      operatorId?: string;
+      storeId?: string;
+      boxId?: string;
     },
   ): Promise<CopyGroupsResponse> {
     const { data } = await api.get<CopyGroupsResponse>('/admin/books/copies/groups', {

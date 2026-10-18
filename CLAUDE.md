@@ -266,7 +266,7 @@ All routes prefixed with `/api`.
 - `POST /books/duplicates/unresolve-last` — `{ bookId, otherIds }`: take back the book's latest decision in the group; returns `pairs`.
 - `POST /books/mark-copies` — Mark bookIds one copy set (`masterBookId`, `restBookIds`, `overrideResolutions`); returns `copyGroupId`
 - `POST /books/unmark-copies` — Clear the copy flags; returns `unmarkedIds` (incl. a book left alone in its set)
-- `GET /books/copies/groups` — Books with `isCopy=true`, grouped by ISBN or normalized title. Filters: `search`, `status` (published/not_published/archived)
+- `GET /books/copies/groups` — Books with `isCopy=true`, grouped by copy set (`copyGroupId`), with `matchedFields`/`differingFields`/`isbnDiffers`. Filters: `search`, `status` (published/not_published/archived), `count`, `operatorId`, `storeId`, `boxId`
 - `GET /books/library` — "Домашняя книга": books with status `IN_LIBRARY`. Filters: `ownerId`, `search`
 - `POST /books/:id/library` — Add a PENDING_REVIEW, never-published book to the current admin's library
 - `DELETE /books/:id/library` — Remove from library → back to PENDING_REVIEW
@@ -337,7 +337,9 @@ The admin has two dedicated screens for managing books that are potential or con
 
 **Copies screen** (`GET /admin/books/copies/groups`) — "Копии":
 - Shows only books where `isCopy=true`, grouped by `copyGroupId` (set by mark-copies; several copy sets can share an ISBN/title). Every copy has one since the backfill migration `1747800000000` (built with `buildCopySets()`); a copy without a set would show alone. Each group has a unique `id`.
-- Status chips and search select **whole groups**: a set is listed when at least one of its books matches, and all its books are returned with the matching ones first (filter → sort), never a lone matching book
+- Grouping/filtering runs on light rows of all copies (one raw SQL, ~60 ms); photos/box/store/createdBy are loaded only for the page's books.
+- Filters (collapsible «Фильтры», same as Duplicates): status, count (2/3/4+), store, operator, box — plus search. Book-level filters select **whole groups**: a set is listed when at least one of its books matches, and all its books are returned with the matching ones first (filter → sort), never a lone matching book
+- Each group shows the Duplicates-style ✓/≠ chips (ISBN / Название / Автор via `groupMatch(rows, "exact")`) and its shortest title; a book whose ISBN differs is captioned "ISBN отличается"
 - Each book card shows: cover photo, title, author, SKU, price, box number, publication status
 - Published books display store name (e.g. "Основной магазин") + "Опубликована на Ozon"
 - Archived books show "В архиве" badge (no delete); unpublished books have a delete button

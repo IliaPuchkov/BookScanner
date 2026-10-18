@@ -176,17 +176,29 @@ export class AdminController {
   @ApiQuery({ name: 'limit', required: false })
   @ApiQuery({ name: 'search', required: false })
   @ApiQuery({ name: 'status', required: false, enum: ['published', 'not_published', 'archived'] })
+  @ApiQuery({ name: 'count', required: false, description: 'Книг в группе: 2, 3 или 4 (= 4+)' })
+  @ApiQuery({ name: 'operatorId', required: false })
+  @ApiQuery({ name: 'storeId', required: false })
+  @ApiQuery({ name: 'boxId', required: false })
   getCopyGroups(
     @Query('page') page?: string,
     @Query('limit') limit?: string,
     @Query('search') search?: string,
     @Query('status') status?: 'published' | 'not_published' | 'archived',
+    @Query('count') count?: string,
+    @Query('operatorId') operatorId?: string,
+    @Query('storeId') storeId?: string,
+    @Query('boxId') boxId?: string,
   ) {
     return this.adminService.getCopyGroups({
       page: page ? parseInt(page, 10) : undefined,
       limit: limit ? parseInt(limit, 10) : undefined,
       search,
       status,
+      count: count ? parseInt(count, 10) || undefined : undefined,
+      operatorId: operatorId || undefined,
+      storeId: storeId || undefined,
+      boxId: boxId || undefined,
     });
   }
 
