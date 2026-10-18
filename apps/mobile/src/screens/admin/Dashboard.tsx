@@ -10,7 +10,8 @@ import { AppText } from "../../components/AppText";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import { type NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { adminService } from "../../services/admin.service";
-import type { StatsSummary, Book } from "../../types";
+import type { StatsSummary, Book, DuplicateCriterion } from "../../types";
+import { DUPLICATE_CRITERIA, duplicatesViewParams, loadDuplicatesView } from "../../utils/duplicatesView";
 import type { AdminMainStackParamList } from "../../navigation/AdminNavigator";
 import { NativeBottomTabBarProps } from "@react-navigation/bottom-tabs/unstable";
 
@@ -24,6 +25,7 @@ export function DashboardScreen() {
   const [recentBooks, setRecentBooks] = useState<Book[]>([]);
   const [pendingCount, setPendingCount] = useState(0);
   const [duplicatesCount, setDuplicatesCount] = useState(0);
+  const [duplicatesCriterion, setDuplicatesCriterion] = useState<DuplicateCriterion>("exact");
   const [ocrErrorsCount, setOcrErrorsCount] = useState(0);
   const [ozonErrorsCount, setOzonErrorsCount] = useState(0);
   const [underpricedCount, setUnderpricedCount] = useState(0);
@@ -33,7 +35,15 @@ export function DashboardScreen() {
 
   const fetchData = useCallback(async () => {
     try {
-      const [statsData, booksData] = await Promise.all([
+      // "На проверке: Копии" counts groups of the criterion chosen on that screen; the
+      // statistics count (exact title) is the fallback
+      const viewCount = loadDuplicatesView().then((view) =>
+        adminService
+          .getDuplicates(1, 1, duplicatesViewParams(view))
+          .then((res) => ({ total: res.total, criterion: view.criterion }))
+          .catch(() => null),
+      );
+      const [statsData, booksData, dupView] = await Promise.all([
         adminService.getStatistics(
           (() => {
             const d = new Date();
@@ -49,11 +59,13 @@ export function DashboardScreen() {
           })(),
         ),
         adminService.getBookDatabase(1, 4),
+        viewCount,
       ]);
       setStats(statsData);
       setRecentBooks(booksData.data);
       setPendingCount(statsData.pendingReviewCount ?? 0);
-      setDuplicatesCount(statsData.duplicatesCount ?? 0);
+      setDuplicatesCount(dupView?.total ?? statsData.duplicatesCount ?? 0);
+      setDuplicatesCriterion(dupView?.criterion ?? "exact");
       setOcrErrorsCount(statsData.ocrErrorsCount ?? 0);
       setOzonErrorsCount(statsData.ozonErrorsCount ?? 0);
       setUnderpricedCount(statsData.underpricedCount ?? 0);
@@ -109,8 +121,11 @@ export function DashboardScreen() {
         >
           <AppText style={styles.gridCardTitle}>На проверке: Копии</AppText>
           <AppText style={[styles.gridCardCount, { color: "#00838F" }]}>
-            {/* exact title + author view only; other criteria on the screen differ */}
+            {/* undecided groups of the criterion chosen on the Duplicates screen */}
             {duplicatesCount > 0 ? `~${duplicatesCount}` : 0}
+          </AppText>
+          <AppText style={styles.gridCardSub} numberOfLines={1}>
+            {DUPLICATE_CRITERIA.find((c) => c.value === duplicatesCriterion)?.label}
           </AppText>
         </TouchableOpacity>
 
@@ -299,6 +314,11 @@ const styles = StyleSheet.create({
     elevation: 2,
     minHeight: 100,
     justifyContent: "space-between",
+  },
+  gridCardSub: {
+    fontSize: 11,
+    color: "#888",
+    marginTop: 2,
   },
   gridCardTitle: {
     fontSize: 13,

@@ -34,7 +34,14 @@ import type { AdminMainStackParamList } from "../../navigation/AdminNavigator";
 import { thumbUri } from "../../utils/photos";
 import { libraryLabel, pluralRu } from "../../utils/format";
 import { bookEvents, replaceBookInGroups } from "../../utils/bookEvents";
-import { getStoredJson, setStoredJson } from "../../utils/storage";
+import {
+  DEFAULT_DUPLICATES_VIEW,
+  DUPLICATE_CRITERIA,
+  duplicatesViewParams,
+  loadDuplicatesView,
+  saveDuplicatesView,
+  type DuplicatesView,
+} from "../../utils/duplicatesView";
 import {
   groupTitle,
   newPairs,
@@ -50,26 +57,10 @@ type Nav = NativeStackNavigationProp<AdminMainStackParamList, "Duplicates">;
 // Group ids are unique within one criterion
 const groupId = (g: DuplicateGroup) => `${g.criterion}:${g.id}`;
 
-/** Search criterion and switches — remembered on the device */
-type ViewState = {
-  criterion: DuplicateCriterion;
-  respectIsbn: boolean;
-  includeUnknownAuthor: boolean;
-  showResolved: boolean;
-};
-const VIEW_KEY = "duplicates.view";
-const DEFAULT_VIEW: ViewState = {
-  criterion: "exact",
-  respectIsbn: true,
-  includeUnknownAuthor: false,
-  showResolved: false,
-};
-
-const CRITERIA: Array<{ value: DuplicateCriterion; label: string }> = [
-  { value: "isbn", label: "ISBN" },
-  { value: "exact", label: "Автор + название" },
-  { value: "fuzzy", label: "Похожие названия" },
-];
+/** Search criterion and switches — remembered on the device (shared with the Dashboard) */
+type ViewState = DuplicatesView;
+const DEFAULT_VIEW = DEFAULT_DUPLICATES_VIEW;
+const CRITERIA = DUPLICATE_CRITERIA;
 
 /** Where a book sits in its group */
 type BookRole = "set" | "loose" | "excluded";
@@ -696,18 +687,15 @@ export function DuplicatesScreen() {
   }, [filterSearch]);
 
   useEffect(() => {
-    getStoredJson<Partial<ViewState>>(VIEW_KEY)
-      .then((stored) => {
-        if (stored) setView({ ...DEFAULT_VIEW, ...stored });
-      })
-      .catch(() => {})
+    loadDuplicatesView()
+      .then(setView)
       .finally(() => setViewReady(true));
   }, []);
 
   const changeView = useCallback((patch: Partial<ViewState>) => {
     setView((prev) => {
       const next = { ...prev, ...patch };
-      setStoredJson(VIEW_KEY, next).catch(() => {});
+      saveDuplicatesView(next);
       return next;
     });
   }, []);
@@ -766,9 +754,7 @@ export function DuplicatesScreen() {
       operatorId: filterOperatorId ?? undefined,
       storeId: filterStoreId ?? undefined,
       boxId: filterBoxId ?? undefined,
-      criterion: view.criterion,
-      respectIsbn: view.criterion === "isbn" ? undefined : view.respectIsbn,
-      includeUnknownAuthor: view.criterion === "isbn" ? undefined : view.includeUnknownAuthor,
+      ...duplicatesViewParams(view),
       showResolved: view.showResolved || undefined,
     }),
     [debouncedSearch, filterStatus, filterCount, filterOperatorId, filterStoreId, filterBoxId, view],
