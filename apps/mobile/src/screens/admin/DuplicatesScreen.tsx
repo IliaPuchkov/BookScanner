@@ -683,6 +683,7 @@ export function DuplicatesScreen() {
 
   // Server-side filters
   const [filtersOpen, setFiltersOpen] = useState(false);
+  const [criteriaOpen, setCriteriaOpen] = useState(false);
   const [filterStatus, setFilterStatus] = useState<StatusFilter>("all");
   const [filterCount, setFilterCount] = useState<number | null>(null);
   const [filterSearch, setFilterSearch] = useState("");
@@ -1245,63 +1246,37 @@ export function DuplicatesScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.filterPanel}>
-        <View style={styles.criterionRow}>
-          {CRITERIA.map((c) => (
-            <TouchableOpacity
-              key={c.value}
-              style={[
-                styles.criterionBtn,
-                view.criterion === c.value && styles.criterionBtnActive,
-              ]}
-              onPress={() => changeView({ criterion: c.value })}
-              activeOpacity={0.7}
-            >
-              <AppText
-                style={[
-                  styles.criterionBtnText,
-                  view.criterion === c.value && styles.criterionBtnTextActive,
-                ]}
-                numberOfLines={2}
-              >
-                {c.label}
-              </AppText>
-            </TouchableOpacity>
-          ))}
-        </View>
-        <View style={styles.switchRow}>
-          {view.criterion !== "isbn" && (
-            <View style={styles.switchItem}>
-              <Switch
-                value={view.respectIsbn}
-                onValueChange={(v) => changeView({ respectIsbn: v })}
-              />
-              <AppText style={styles.switchLabel}>Учитывать ISBN</AppText>
-            </View>
-          )}
-          {view.criterion !== "isbn" && (
-            <View style={styles.switchItem}>
-              <Switch
-                value={view.includeUnknownAuthor}
-                onValueChange={(v) => changeView({ includeUnknownAuthor: v })}
-              />
-              <AppText style={styles.switchLabel}>Книги без автора</AppText>
-            </View>
-          )}
-          <View style={styles.switchItem}>
-            <Switch
-              value={view.showResolved}
-              onValueChange={(v) => changeView({ showResolved: v })}
-            />
-            <AppText style={styles.switchLabel}>Разобранные</AppText>
-          </View>
-        </View>
         <View style={styles.filterRow}>
+          <TouchableOpacity
+            style={[
+              styles.filterToggleBtn,
+              criteriaOpen && styles.filterToggleBtnActive,
+            ]}
+            onPress={() => {
+              setCriteriaOpen((v) => !v);
+              setFiltersOpen(false);
+            }}
+            activeOpacity={0.7}
+          >
+            <AppText
+              style={[
+                styles.filterToggleText,
+                criteriaOpen && styles.filterToggleTextActive,
+              ]}
+            >
+              Критерий: {CRITERIA.find((c) => c.value === view.criterion)?.label}
+              {criteriaOpen ? " ▲" : " ▼"}
+            </AppText>
+          </TouchableOpacity>
           <TouchableOpacity
             style={[
               styles.filterToggleBtn,
               filtersOpen && styles.filterToggleBtnActive,
             ]}
-            onPress={() => setFiltersOpen((v) => !v)}
+            onPress={() => {
+              setFiltersOpen((v) => !v);
+              setCriteriaOpen(false);
+            }}
             activeOpacity={0.7}
           >
             <AppText
@@ -1320,6 +1295,63 @@ export function DuplicatesScreen() {
             {pluralRu(totalBooks, "книга", "книги", "книг")}
           </AppText>
         </View>
+
+        {/* Expanded criterion panel: how copies are looked for */}
+        {criteriaOpen && (
+          <View style={styles.filterExpanded}>
+            <AppText style={styles.filterSectionLabel}>Искать копии по</AppText>
+            <View style={styles.criterionRow}>
+              {CRITERIA.map((c) => (
+                <TouchableOpacity
+                  key={c.value}
+                  style={[
+                    styles.criterionBtn,
+                    view.criterion === c.value && styles.criterionBtnActive,
+                  ]}
+                  onPress={() => changeView({ criterion: c.value })}
+                  activeOpacity={0.7}
+                >
+                  <AppText
+                    style={[
+                      styles.criterionBtnText,
+                      view.criterion === c.value && styles.criterionBtnTextActive,
+                    ]}
+                    numberOfLines={2}
+                  >
+                    {c.label}
+                  </AppText>
+                </TouchableOpacity>
+              ))}
+            </View>
+            <View style={styles.switchRow}>
+              {view.criterion !== "isbn" && (
+                <View style={styles.switchItem}>
+                  <Switch
+                    value={view.respectIsbn}
+                    onValueChange={(v) => changeView({ respectIsbn: v })}
+                  />
+                  <AppText style={styles.switchLabel}>Учитывать ISBN</AppText>
+                </View>
+              )}
+              {view.criterion !== "isbn" && (
+                <View style={styles.switchItem}>
+                  <Switch
+                    value={view.includeUnknownAuthor}
+                    onValueChange={(v) => changeView({ includeUnknownAuthor: v })}
+                  />
+                  <AppText style={styles.switchLabel}>Книги без автора</AppText>
+                </View>
+              )}
+              <View style={styles.switchItem}>
+                <Switch
+                  value={view.showResolved}
+                  onValueChange={(v) => changeView({ showResolved: v })}
+                />
+                <AppText style={styles.switchLabel}>Разобранные</AppText>
+              </View>
+            </View>
+          </View>
+        )}
 
         {/* Expanded filter panel */}
         {filtersOpen && (
