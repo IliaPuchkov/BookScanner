@@ -29,6 +29,7 @@ ssh "$SSH_USER@$SERVER_IP" bash << EOF
   cd $REMOTE_DIR
 
   # Build
+  PREV_IMAGE=\$(docker images -q docker-backend:latest)
   docker compose -f docker/docker-compose.prod.yml --env-file docker/.env build backend
 
   # Restart
@@ -44,6 +45,14 @@ ssh "$SSH_USER@$SERVER_IP" bash << EOF
   echo "==> Running migrations..."
   sleep 3
   docker exec bookscanner-backend sh -c "cd /app/apps/backend && pnpm migration:run"
+
+  # Each build leaves the old image untagged (~130 MB); keep the last one as
+  # docker-backend:previous for rollback and drop the rest.
+  if [ -n "\$PREV_IMAGE" ] && [ "\$PREV_IMAGE" != "\$(docker images -q docker-backend:latest)" ]; then
+    docker tag "\$PREV_IMAGE" docker-backend:previous
+  fi
+  docker image prune -f
+  docker builder prune -f --filter until=72h
 
   echo "==> Done. Containers:"
   docker compose -f docker/docker-compose.prod.yml --env-file docker/.env ps

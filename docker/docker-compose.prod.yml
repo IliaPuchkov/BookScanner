@@ -1,10 +1,19 @@
 version: '3.8'
 
+# Docker's json-file driver has no size limit by default; nginx's log is what
+# fail2ban reads, and it handles rotation.
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: '20m'
+    max-file: '5'
+
 services:
   postgres:
     image: postgres:14-alpine
     container_name: bookscanner-db
     restart: unless-stopped
+    logging: *default-logging
     environment:
       POSTGRES_USER: ${DB_USER}
       POSTGRES_PASSWORD: ${DB_PASSWORD}
@@ -25,6 +34,7 @@ services:
     image: redis:7-alpine
     container_name: bookscanner-redis
     restart: unless-stopped
+    logging: *default-logging
     networks:
       - internal
     healthcheck:
@@ -39,6 +49,7 @@ services:
       dockerfile: apps/backend/Dockerfile
     container_name: bookscanner-backend
     restart: unless-stopped
+    logging: *default-logging
     env_file:
       - ../apps/backend/.env
     environment:
@@ -60,6 +71,7 @@ services:
     image: nginx:alpine
     container_name: bookscanner-nginx
     restart: unless-stopped
+    logging: *default-logging
     ports:
       - '80:80'
       - '443:443'
@@ -76,6 +88,7 @@ services:
     image: certbot/certbot
     container_name: bookscanner-certbot
     restart: unless-stopped
+    logging: *default-logging
     volumes:
       - certbot-www:/var/www/certbot
       - certbot-conf:/etc/letsencrypt
