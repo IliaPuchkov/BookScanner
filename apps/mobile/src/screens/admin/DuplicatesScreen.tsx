@@ -40,7 +40,7 @@ import {
   newPairs,
   patchBooks,
   recomputeGroup,
-  splitLoose,
+  undecidedCount,
   resolvedAmong,
 } from "../../utils/duplicateGroups";
 import { useUndoable } from "../../context/UndoContext";
@@ -101,7 +101,7 @@ function BookMiniCard({
   isbnDiffers: boolean;
   /** No decision about this book in the group yet, while others were already reviewed */
   isNew: boolean;
-  /** Decisions already made about the book, e.g. "Не копия с 3 книгами" */
+  /** Where the book stands, e.g. "Не решено с 2 книгами" or "Не копия со всеми" */
   note?: string;
   onNavigate: (id: string) => void;
   onDelete: (book: Book) => void;
@@ -155,7 +155,7 @@ function BookMiniCard({
           {isNew ? (
             <View style={[styles.copyRoleBadge, styles.copyRoleBadgeNew]}>
               <AppText style={[styles.copyRoleBadgeText, styles.copyRoleBadgeTextNew]}>
-                Новая копия
+                Новая
               </AppText>
             </View>
           ) : null}
@@ -345,21 +345,23 @@ function DuplicateGroupCard({
   const setIds = sets.flatMap((s) => s.ids);
   const decided = group.unresolvedCount === 0;
 
-  // "Not copies" already recorded per book. A loose book without any is new to the group
-  // (e.g. added after the admin resolved the others) and goes first; the rest were reviewed.
-  const notCopyCount = new Map<string, number>();
-  for (const [a, b] of group.resolvedPairs) {
-    notCopyCount.set(a, (notCopyCount.get(a) ?? 0) + 1);
-    notCopyCount.set(b, (notCopyCount.get(b) ?? 0) + 1);
-  }
+  // Undecided books: the ones with the most open pairs first (a new arrival is open against
+  // everyone), then the newest. «Новая» = no decision about the book at all, in a group that
+  // already has some.
+  const touched = new Set(group.resolvedPairs.flat());
   const hasHistory = sets.length > 0 || group.resolvedPairs.length > 0;
-  const split = splitLoose(group, (id) => byId.get(id)?.createdAt ?? "");
-  const fresh = booksOf(split.fresh);
-  const reviewed = booksOf(split.reviewed);
-  const freshIds = new Set(split.fresh);
-  const noteOf = (id: string) => {
-    const n = notCopyCount.get(id);
-    return n ? `Не копия с ${n} ${pluralRu(n, "книгой", "книгами", "книгами")}` : undefined;
+  const openCount = new Map(loose.map((b) => [b.id, undecidedCount(group, b.id)]));
+  const undecided = [...loose].sort(
+    (a, b) =>
+      openCount.get(b.id)! - openCount.get(a.id)! ||
+      (b.createdAt ?? "").localeCompare(a.createdAt ?? ""),
+  );
+  const isNew = (id: string) => hasHistory && !touched.has(id);
+  const newCount = loose.filter((b) => isNew(b.id)).length;
+  const noteOf = (id: string, role: BookRole) => {
+    if (role === "excluded") return "Не копия со всеми";
+    const n = openCount.get(id) ?? 0;
+    return `Не решено с ${n} ${pluralRu(n, "книгой", "книгами", "книгами")}`;
   };
 
   // Unselected books outside the sets the selection touches are "not copies" of it
@@ -384,8 +386,8 @@ function DuplicateGroupCard({
           role={role}
           volume={group.volumes[book.id]}
           isbnDiffers={group.isbnDiffers.includes(book.id)}
-          isNew={role === "loose" && hasHistory && freshIds.has(book.id)}
-          note={role === "set" ? undefined : noteOf(book.id)}
+          isNew={role === "loose" && isNew(book.id)}
+          note={role === "set" ? undefined : noteOf(book.id, role)}
           onNavigate={handlers.onNavigate}
           onDelete={handlers.onDelete}
           deleting={deletingId === book.id}
@@ -408,34 +410,23 @@ function DuplicateGroupCard({
     </ScrollView>
   );
 
-  // One-tap actions for the common cases; anything else goes through selection. When the
-  // group has new books they act on those only, so reviewed books are never glued by accident.
-  const candidates = fresh.length > 0 ? fresh : loose;
-  const candIds = candidates.map((b) => b.id);
-  const others = group.books.filter((b) => !candIds.includes(b.id)).map((b) => b.id);
-  const onlyNew = hasHistory && fresh.length > 0;
+  // One-tap actions for the common cases; anything else goes through selection. They never
+  // offer to join books already marked "not copies" of each other.
+  const looseIds = loose.map((b) => b.id);
+  const looseClean = resolvedAmong(group, looseIds).length === 0;
+  const others = group.books.filter((b) => !looseIds.includes(b.id)).map((b) => b.id);
   const quick: Array<{ label: string; ids: string[]; rest: string[] }> = [];
-  if (sets.length === 0 && candidates.length >= 2 && resolvedAmong(group, candIds).length === 0) {
-    quick.push({
-      label: onlyNew
-        ? `Новые — копии (${candidates.length})`
-        : candidates.length > 2 ? "Все — копии" : "Это копии",
-      ids: candIds,
-      rest: onlyNew ? others : [],
-    });
-  } else if (sets.length === 1 && candidates.length >= 1) {
-    quick.push({
-      label: `Добавить к набору (${candidates.length})`,
-      ids: [...candIds, ...sets[0].ids],
-      rest: [],
-    });
+  if (sets.length === 0 && loose.length >= 2 && looseClean) {
+    quick.push({ label: loose.length > 2 ? "Все — копии" : "Это копии", ids: looseIds, rest: [] });
   }
-  if (sets.length >= 1 && candidates.length >= 2) {
-    quick.push({
-      label: `${onlyNew ? "Новые" : "Остальные"} — отдельный набор (${candidates.length})`,
-      ids: candIds,
-      rest: others,
-    });
+  if (sets.length === 1) {
+    const addable = looseIds.filter((id) => resolvedAmong(group, [id, ...sets[0].ids]).length === 0);
+    if (addable.length) {
+      quick.push({ label: `Добавить к набору (${addable.length})`, ids: [...addable, ...sets[0].ids], rest: [] });
+    }
+  }
+  if (sets.length >= 1 && loose.length >= 2 && looseClean) {
+    quick.push({ label: `Остальные — отдельный набор (${loose.length})`, ids: looseIds, rest: others });
   }
 
   return (
@@ -460,7 +451,7 @@ function DuplicateGroupCard({
         {decided
           ? "Разобрана ✓"
           : `Не решено пар: ${group.unresolvedCount}` +
-            (onlyNew ? ` · новых книг: ${fresh.length}` : "")}
+            (newCount ? ` · новых книг: ${newCount}` : "")}
       </AppText>
       {group.conflictPairs.length > 0 && (
         <AppText style={styles.groupConflict}>
@@ -468,12 +459,12 @@ function DuplicateGroupCard({
         </AppText>
       )}
 
-      {fresh.length > 0 && (
+      {undecided.length > 0 && (
         <>
-          {hasHistory && (
-            <AppText style={styles.sectionLabel}>Неразобранные копии ({fresh.length})</AppText>
+          {(sets.length > 0 || excluded.length > 0) && (
+            <AppText style={styles.sectionLabel}>Не разобраны ({undecided.length})</AppText>
           )}
-          {renderBooks(fresh, "loose")}
+          {renderBooks(undecided, "loose")}
         </>
       )}
       {sets.map((s, i) => (
@@ -484,19 +475,6 @@ function DuplicateGroupCard({
           {renderBooks(s.books, "set")}
         </View>
       ))}
-      {reviewed.length > 0 && (
-        <>
-          <AppText style={styles.sectionLabel}>
-            {fresh.length === 0
-              ? "Не разобраны"
-              : reviewed.length > 1
-                ? "Уже разобрано — не копии между собой"
-                : "Уже разобрано — не копии"}{" "}
-            ({reviewed.length})
-          </AppText>
-          {renderBooks(reviewed, "loose")}
-        </>
-      )}
       {excluded.length > 0 && !selecting && (
         <>
           <TouchableOpacity onPress={() => setExcludedOpen((v) => !v)} activeOpacity={0.7}>
@@ -584,9 +562,9 @@ function DuplicateGroupCard({
                 <ActivityIndicator size="small" color="#555" />
               ) : (
                 <AppText style={styles.resolveBtnText}>
-                  {onlyNew
-                    ? "Новые — не копии"
-                    : sets.length > 0 ? "Остальные — не копии" : "Это не копии — пропустить"}
+                  {sets.length > 0 || excluded.length > 0
+                    ? "Остальные — не копии"
+                    : "Это не копии — пропустить"}
                 </AppText>
               )}
             </TouchableOpacity>
@@ -981,20 +959,25 @@ export function DuplicatesScreen() {
   );
 
   // "Вернуть": takes back the book's "not copies" inside this group
+  // "Вернуть": takes back only the book's latest "not copies" in this group (the last tap);
+  // its older decisions stay
   const handleRestore = useCallback(
     (group: DuplicateGroup, bookId: string) => {
-      const pairs = group.resolvedPairs.filter(([a, b]) => a === bookId || b === bookId);
+      const others = group.books.map((b) => b.id).filter((id) => id !== bookId);
       setBusyBookId(bookId);
       adminService
-        .unresolveDuplicates(pairs)
-        .then(() =>
+        .unresolveLast(bookId, others)
+        .then((undone) => {
+          const gone = new Set(undone.map(([a, b]) => (a < b ? `${a}:${b}` : `${b}:${a}`)));
           updateGroup(groupId(group), (g) =>
             recomputeGroup({
               ...g,
-              resolvedPairs: g.resolvedPairs.filter(([a, b]) => a !== bookId && b !== bookId),
+              resolvedPairs: g.resolvedPairs.filter(
+                ([a, b]) => !gone.has(a < b ? `${a}:${b}` : `${b}:${a}`),
+              ),
             }),
-          ),
-        )
+          );
+        })
         .catch(() => Alert.alert("Ошибка", "Не удалось отменить решение"))
         .finally(() => setBusyBookId(null));
     },

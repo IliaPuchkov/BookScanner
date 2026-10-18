@@ -21,7 +21,7 @@ import { CreateUserDto } from '../users/dto/create-user.dto';
 import { UpdateUserDto } from '../users/dto/update-user.dto';
 import { PaginationDto } from '../common/dto/pagination.dto';
 import { SearchBooksDto } from './dto/search-books.dto';
-import { ResolveDuplicateDto, ResolvePairsDto } from './dto/resolve-duplicate.dto';
+import { ResolveDuplicateDto, ResolvePairsDto, UnresolveLastDto } from './dto/resolve-duplicate.dto';
 import { DuplicateFiltersDto } from './dto/duplicate-filters.dto';
 import { LibraryFiltersDto } from './dto/library-filters.dto';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
@@ -132,6 +132,15 @@ export class AdminController {
   @ApiOperation({ summary: 'Отменить решение «не копии» для пар книг' })
   unresolveDuplicates(@Body() dto: ResolvePairsDto) {
     return this.adminService.unresolveDuplicates(dto.pairs);
+  }
+
+  @Post('books/duplicates/unresolve-last')
+  @ApiOperation({
+    summary: 'Отменить последнее решение «не копии» для книги в группе',
+    description: 'Снимает только решения последнего нажатия (записанные в пределах 5 с от самого свежего); старые остаются',
+  })
+  unresolveLast(@Body() dto: UnresolveLastDto) {
+    return this.adminService.unresolveLast(dto.bookId, dto.otherIds);
   }
 
   @Post('books/mark-copies')

@@ -313,6 +313,19 @@ export const adminService = {
   },
 
   /**
+   * Takes back only the book's latest "not copies" with `otherIds` (one tap); older decisions
+   * stay. Returns the pairs that became undecided.
+   */
+  async unresolveLast(bookId: string, otherIds: string[]): Promise<Array<[string, string]>> {
+    if (!otherIds.length) return [];
+    const { data } = await api.post<{ pairs: Array<[string, string]> }>(
+      '/admin/books/duplicates/unresolve-last',
+      { bookId, otherIds },
+    );
+    return data.pairs;
+  },
+
+  /**
    * `restBookIds`: the other books of the duplicate group when only a subset is marked.
    * `overrideResolutions`: drop earlier "not copies" between the marked books.
    * Returns the id of the copy set the books are now in.

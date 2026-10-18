@@ -83,31 +83,17 @@ export function patchBooks(
   return recomputeGroup({ ...group, books: group.books.map(patch), resolvedPairs });
 }
 
-/**
- * Splits a group's undecided books (outside sets) into new arrivals and books the admin already
- * went through. A book with no "not copies" at all is new. Of the others, the oldest ones that
- * are all "not copies" of each other are "already sorted"; when there are at least two of them,
- * the rest — books still undecided against them, e.g. added after the admin's review — are new
- * too. With fewer than two there is no sorted part to speak of (a split-off remainder still
- * undecided among itself), and those books stay plainly undecided.
- */
-export function splitLoose(
-  group: DuplicateGroup,
-  createdAt: (id: string) => string,
-): { fresh: string[]; reviewed: string[] } {
-  const resolved = new Set(group.resolvedPairs.map(([a, b]) => pairKey(a, b)));
-  const touched = new Set(group.resolvedPairs.flat());
-  const fresh = group.looseIds.filter((id) => !touched.has(id));
-  const older = group.looseIds
-    .filter((id) => touched.has(id))
-    .sort((a, b) => createdAt(a).localeCompare(createdAt(b)) || a.localeCompare(b));
-  const sorted: string[] = [];
-  for (const id of older) {
-    if (sorted.every((s) => resolved.has(pairKey(s, id)))) sorted.push(id);
-  }
-  if (sorted.length < 2) return { fresh, reviewed: older };
-  const late = older.filter((id) => !sorted.includes(id));
-  return { fresh: [...fresh, ...late], reviewed: sorted };
+/** Books of the group this (loose) book has no decision with yet. */
+export function undecidedCount(group: DuplicateGroup, bookId: string): number {
+  const book = group.books.find((b) => b.id === bookId);
+  const resolved = new Set(group.resolvedPairs.map(([x, y]) => pairKey(x, y)));
+  return group.books.filter(
+    (b) =>
+      b.id !== bookId &&
+      !resolved.has(pairKey(b.id, bookId)) &&
+      // two books in sets are decided either way (same set — copies, different — not)
+      !(b.copyGroupId && book?.copyGroupId),
+  ).length;
 }
 
 /** The heading of a group: the ISBN, or the shortest title among its books. */

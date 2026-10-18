@@ -21,3 +21,16 @@ export class ResolvePairsDto {
   @Type(() => ResolveDuplicateDto)
   pairs: ResolveDuplicateDto[];
 }
+
+export class UnresolveLastDto {
+  @ApiProperty()
+  @IsUUID()
+  bookId: string;
+
+  @ApiProperty({ type: [String], description: 'Другие книги группы — снимаются решения только с ними' })
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(1000)
+  @IsUUID('all', { each: true })
+  otherIds: string[];
+}

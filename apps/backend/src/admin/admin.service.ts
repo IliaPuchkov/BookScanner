@@ -204,6 +204,40 @@ export class AdminService {
   }
 
   /**
+   * «Вернуть» on a folded book: takes back only its latest decision inside the group — the
+   * "not copies" with `otherIds` written by the last tap. One tap is one resolve-many insert
+   * (one NOW()); the 5 s window also catches old app versions that sent pairs one by one.
+   * Older decisions about the book stay. Returns the pairs that became undecided.
+   */
+  async unresolveLast(bookId: string, otherIds: string[]) {
+    const others = otherIds.filter((id) => id !== bookId);
+    if (!others.length) return { pairs: [] };
+    // The prod table holds repeated rows for some pairs (no unique index there), so the last
+    // tap picks pairs and every row of those pairs goes — a leftover older row would keep the
+    // pair resolved.
+    const result = await this.dupResRepository.manager.query(
+      `WITH mine AS (
+         SELECT book1_id, book2_id, resolved_at FROM duplicate_resolutions
+         WHERE (book1_id = $1 AND book2_id = ANY($2::uuid[]))
+            OR (book2_id = $1 AND book1_id = ANY($2::uuid[]))
+       ), last AS (
+         SELECT DISTINCT book1_id, book2_id FROM mine
+         WHERE resolved_at >= (SELECT max(resolved_at) FROM mine) - interval '5 seconds'
+       )
+       DELETE FROM duplicate_resolutions r
+       USING last
+       WHERE r.book1_id = last.book1_id AND r.book2_id = last.book2_id
+       RETURNING r.book1_id::text AS "book1Id", r.book2_id::text AS "book2Id"`,
+      [bookId, others],
+    );
+    // TypeORM's postgres driver returns [rows, count] for DELETE … RETURNING
+    const rows: Array<{ book1Id: string; book2Id: string }> = Array.isArray(result[0]) ? result[0] : result;
+    this.booksService.dropDuplicateStates();
+    const pairs = new Map(rows.map((r) => [`${r.book1Id}:${r.book2Id}`, [r.book1Id, r.book2Id] as [string, string]]));
+    return { pairs: [...pairs.values()] };
+  }
+
+  /**
    * Marks `bookIds` as one copy set. `restBookIds` are the other books of the suspected group
    * when the admin splits it: each selected book is resolved as "not a duplicate" of them.
    * With `overrideResolutions`, earlier "not copies" between the selected books are removed —
