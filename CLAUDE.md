@@ -65,7 +65,7 @@ BookScanner/
 │       │   ├── types/              # index.ts
 │       │   └── config.ts           # API base URL
 │       ├── App.tsx
-│       ├── app.json               # name: "Jolly Book", version: "1.0.1"
+│       ├── app.json               # name: "Jolly Book" (version: see «Version bump» in Important Notes)
 │       └── package.json
 │
 ├── packages/
@@ -481,4 +481,13 @@ Build order in Dockerfile: `shared` → `ocr-processor` → `backend`
 7. **TypeORM column naming — mixed**: Most DB columns are camelCase (e.g. `"isCopy"`, `"publishedToOzon"`, `"yearPublished"`), but several older FK columns are snake_case: `work_session_id`, `box_id`, `created_by`. In QueryBuilder `.andWhere()` always use the TypeORM **entity property name** (e.g. `book.workSession` or `book.work_session_id`). In raw `manager.query()` SQL, use the **actual DB column name** — check `\d books` if unsure.
 8. **Deployment uses rsync, not git**: the production server at `31.184.197.226` has no `.git` directory. Code is pushed via `bash deploy.sh 31.184.197.226 jollybook.duckdns.org`. The script rsyncs source, rebuilds the backend Docker image, restarts the container, and runs migrations.
 9. **`useFocusEffect` always passes `isRefresh=true`**: when fetching stores or other secondary data in an admin screen, guard on `pageNum === 1` only (not `&& !isRefresh`), otherwise the data never loads on navigation focus.
-10. **Prod host hardening** (`31.184.197.226`, not in code): SSH is key-only (`PasswordAuthentication no`, root `prohibit-password`); fail2ban runs three jails — `sshd`, `bookscanner-login` (nginx auth-endpoint abuse), and `recidive` (repeat offenders → permanent ban). TLS is Let's Encrypt via the `certbot` compose service (`restart: unless-stopped`); nginx access logs reach fail2ban through the Docker `json-file` driver. The jail's `logpath` glob (`/var/lib/docker/containers/*/*-json.log`) is expanded only on load, so after recreating containers run `fail2ban-client reload bookscanner-login` (`deploy.sh` does). Container logs are capped at 20 MB × 5 (`x-logging` in the prod compose).
+10. **Version bump — always update every file at once.** The native `android/` and `ios/` projects are committed, so `expo run:android` / `expo run:ios` read the version from them and ignore `app.json` (that's how builds stayed at 1.11.1 while `app.json` said 1.13.0). One version (`X.Y.Z`) and one build number (`N`, +1 on every release) go into all of:
+    - `apps/mobile/app.json` — `expo.version` = X.Y.Z, `expo.ios.buildNumber` = "N", `expo.android.versionCode` = N
+    - `apps/mobile/android/app/build.gradle` — `versionName "X.Y.Z"`, `versionCode N`
+    - `apps/mobile/ios/JollyBook.xcodeproj/project.pbxproj` — `MARKETING_VERSION = X.Y.Z;` and `CURRENT_PROJECT_VERSION = N;` (2 build configs each)
+    - `apps/mobile/ios/JollyBook/Info.plist` — `CFBundleShortVersionString` = X.Y.Z, `CFBundleVersion` = N
+    - `apps/mobile/package.json` and `apps/backend/package.json` — `"version": "X.Y.Z"`
+    - `apps/backend/src/main.ts` — Swagger `.setVersion('X.Y.Z')`
+
+    Check before committing — every value must match: `git grep -nE -A1 'versionName|versionCode|MARKETING_VERSION|CURRENT_PROJECT_VERSION|setVersion|"version"|"buildNumber"|CFBundleShortVersionString|CFBundleVersion' -- apps/mobile/app.json apps/mobile/android/app/build.gradle apps/mobile/ios/JollyBook.xcodeproj/project.pbxproj apps/mobile/ios/JollyBook/Info.plist apps/mobile/package.json apps/backend/package.json apps/backend/src/main.ts`. Versions of `packages/*` are not app versions and stay as they are.
+11. **Prod host hardening** (`31.184.197.226`, not in code): SSH is key-only (`PasswordAuthentication no`, root `prohibit-password`); fail2ban runs three jails — `sshd`, `bookscanner-login` (nginx auth-endpoint abuse), and `recidive` (repeat offenders → permanent ban). TLS is Let's Encrypt via the `certbot` compose service (`restart: unless-stopped`); nginx access logs reach fail2ban through the Docker `json-file` driver. The jail's `logpath` glob (`/var/lib/docker/containers/*/*-json.log`) is expanded only on load, so after recreating containers run `fail2ban-client reload bookscanner-login` (`deploy.sh` does). Container logs are capped at 20 MB × 5 (`x-logging` in the prod compose).
