@@ -1,8 +1,10 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, ForbiddenException } from '@nestjs/common';
+import { randomInt } from 'crypto';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { UsersService } from '../users/users.service';
 import { BooksService } from '../books/books.service';
+import { StatsService } from '../stats/stats.service';
 import { CreateUserDto } from '../users/dto/create-user.dto';
 import { UpdateUserDto } from '../users/dto/update-user.dto';
 import { PaginationDto } from '../common/dto/pagination.dto';
@@ -11,11 +13,30 @@ import { DuplicateFiltersDto } from './dto/duplicate-filters.dto';
 import { DuplicateResolution } from './entities/duplicate-resolution.entity';
 import { UserRole, BookStatus } from '@bookscanner/shared';
 
+// No look-alikes (0/O, 1/l/I) — the password is read out or retyped by hand.
+const LOWER = 'abcdefghijkmnpqrstuvwxyz';
+const UPPER = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
+const DIGITS = '23456789';
+
+/** 10 random characters with at least one lower, upper and digit (StrongPassword). */
+export function generateTemporaryPassword(): string {
+  const all = LOWER + UPPER + DIGITS;
+  const pick = (set: string) => set[randomInt(set.length)];
+  const chars = [pick(LOWER), pick(UPPER), pick(DIGITS)];
+  while (chars.length < 10) chars.push(pick(all));
+  for (let i = chars.length - 1; i > 0; i--) {
+    const j = randomInt(i + 1);
+    [chars[i], chars[j]] = [chars[j], chars[i]];
+  }
+  return chars.join('');
+}
+
 @Injectable()
 export class AdminService {
   constructor(
     private readonly usersService: UsersService,
     private readonly booksService: BooksService,
+    private readonly statsService: StatsService,
     @InjectRepository(DuplicateResolution)
     private readonly dupResRepository: Repository<DuplicateResolution>,
   ) {}
@@ -25,13 +46,33 @@ export class AdminService {
   }
 
   async createUser(dto: CreateUserDto) {
-    const user = await this.usersService.create(dto);
+    // The admin chose this password, so the user must replace it on first login.
+    const user = await this.usersService.create(dto, true);
     // Auto-approve when created by admin
     return this.usersService.update(user.id, { isApproved: true });
   }
 
   async updateUser(id: string, dto: UpdateUserDto) {
     return this.usersService.update(id, dto);
+  }
+
+  /**
+   * Admins can set a temporary password for operators only, never for another
+   * admin. Without `password` one is generated and returned once.
+   */
+  async setUserPassword(
+    adminId: string,
+    id: string,
+    password?: string,
+  ): Promise<{ generatedPassword?: string }> {
+    const user = await this.usersService.findById(id);
+    if (user.role === UserRole.ADMIN) {
+      throw new ForbiddenException('Нельзя задать пароль администратору');
+    }
+    const generated = password ? undefined : generateTemporaryPassword();
+    await this.usersService.setPassword(id, password ?? generated!, true);
+    await this.statsService.logActivity(adminId, 'password_reset', 'user', id);
+    return generated ? { generatedPassword: generated } : {};
   }
 
   async deleteUser(id: string) {

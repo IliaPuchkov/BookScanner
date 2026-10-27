@@ -118,6 +118,33 @@ api.interceptors.response.use(
   },
 );
 
+// ─── Temporary password set by an admin ──────────────────────────────────────
+// The server answers 403 { error: 'PasswordChangeRequired' } to every call until
+// the user picks their own password; AuthContext reloads the user to show the form.
+type PasswordChangeListener = () => void;
+const _passwordChangeListeners: PasswordChangeListener[] = [];
+
+export function onPasswordChangeRequired(listener: PasswordChangeListener): () => void {
+  _passwordChangeListeners.push(listener);
+  return () => {
+    const idx = _passwordChangeListeners.indexOf(listener);
+    if (idx >= 0) _passwordChangeListeners.splice(idx, 1);
+  };
+}
+
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (
+      error.response?.status === 403 &&
+      error.response.data?.error === 'PasswordChangeRequired'
+    ) {
+      _passwordChangeListeners.forEach((l) => l());
+    }
+    return Promise.reject(error);
+  },
+);
+
 // ─── Server reachability tracking ────────────────────────────────────────────
 type ServerStatusListener = (reachable: boolean) => void;
 const _serverStatusListeners: ServerStatusListener[] = [];

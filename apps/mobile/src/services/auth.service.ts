@@ -33,6 +33,10 @@ export const authService = {
     await api.post('/users/me/consent');
   },
 
+  async changePassword(currentPassword: string, newPassword: string): Promise<void> {
+    await api.post('/users/me/password', { currentPassword, newPassword });
+  },
+
   async deleteMe(): Promise<void> {
     await api.delete('/users/me');
   },

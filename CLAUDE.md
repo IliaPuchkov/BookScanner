@@ -135,7 +135,7 @@ BookScanner/
 
 | Table | Key Columns |
 |-------|-------------|
-| `users` | id (UUID), fullName, phone (unique), email (unique), passwordHash, role (OPERATOR/ADMIN), isApproved, refreshToken, failedLoginAttempts (int, default 0), lockedUntil (timestamp, nullable) |
+| `users` | id (UUID), fullName, phone (unique), email (unique), passwordHash, role (OPERATOR/ADMIN), isApproved, refreshToken, failedLoginAttempts (int, default 0), lockedUntil (timestamp, nullable), mustChangePassword (boolean, default false) |
 | `boxes` | id (UUID), boxNumber, description, createdById (FK users) — unique (boxNumber, createdById) |
 | `books` | id (UUID), sku (unique), title, author, isbn, publisher, yearPublished, dimensions (JSONB), weightGross, weightNet, paperType, coverType, pageCount, language, price, annotation, hashtags[], condition, bookType, direction, boxId, createdById, workSessionId, status (PENDING_REVIEW/PENDING_PUBLICATION/PUBLISHED/PUBLICATION_FAILED/ARCHIVED/IN_LIBRARY), publishedToOzon, isCopy (boolean, default false), libraryOwnerId (FK users, nullable), addedToLibraryAt (timestamp, nullable) |
 | `book_photos` | id (UUID), bookId, fileUrl, fileKey, sortOrder, originalFilename, mimeType, fileSizeBytes |
@@ -157,6 +157,7 @@ Located in `apps/backend/src/database/migrations/`:
 - `1747700000000-AddBookCopyGroupId.ts` — adds `"copyGroupId"` (uuid, nullable, partial index) to `books`: id of the copy set a book was marked into
 - `1747800000000-BackfillCopyGroupIds.ts` — data migration: assigns a `copyGroupId` to every legacy copy using `buildCopySets()` (same matching as duplicates + same raw ISBN text with the same 20-char title start); existing set ids are kept; `down()` is a no-op
 - `1747900000000-DedupeDuplicateResolutions.ts` — prod `duplicate_resolutions` had no unique index / order check (table predates 1711200000000), so `orIgnore()` never skipped repeats (8 397 extra rows on 2026-10-18). Keeps the earliest row per pair, sorts pairs, adds `uq_dup_res_pair` + `chk_dup_res_order`; aborts if the set of pairs would change
+- `1748000000000-AddUserMustChangePassword.ts` — adds `"mustChangePassword"` (boolean, default false) to `users` (temporary password set by an admin)
 
 ---
 
@@ -252,6 +253,7 @@ All routes prefixed with `/api`.
 - `GET /status/:bookId` — Get publication status
 
 ### Admin (`/api/admin`)
+- `POST /users/:id/password` — `{ password? }`: set a **temporary** password for an **operator** (403 for admins); without `password` the server generates one (`generateTemporaryPassword`, 10 chars, no look-alikes) and returns `generatedPassword` once. Clears the login lock and the stored refresh token, sets `mustChangePassword`, logged as `password_reset` in `activity_logs`. `POST /users` (admin-created user) also sets `mustChangePassword`
 - `GET /statistics` — Statistics summary (includes `copiesCount`, `duplicatesCount`, etc.)
 - `GET /books/database` — Search books across all users
 - `GET /books/pending-review` — Books with PENDING_REVIEW status (excludes `isCopy=true` unless already published)
@@ -287,6 +289,7 @@ All routes prefixed with `/api`.
 - `PATCH /:id` — Update session status (complete)
 
 ### Users (`/api/users`)
+- `POST /me/password` — `{ currentPassword, newPassword }`: change own password (Profile → «Сменить пароль»). Throttled 5/60s; a wrong current password counts towards the login lockout, and a locked account gets 403. The current session is kept. Password rule: `@StrongPassword()` (`common/decorators/strong-password.decorator.ts`), mirrored in mobile `passwordRuleError()` (`components/PasswordModal.tsx`)
 - `GET /` — List users (admin)
 - `GET /:id` — Get user
 - `POST /` — Create user (admin)
@@ -381,6 +384,12 @@ The admin has two dedicated screens for managing books that are potential or con
 - `@Roles('admin')` decorator for admin-only endpoints
 - `@CurrentUser()` decorator extracts user from JWT payload
 - Mobile: Axios interceptor auto-refreshes token on 401, retries original request
+
+#### Temporary password (`mustChangePassword`)
+
+- Set when an admin chose the password (password reset or admin-created user); cleared by `POST /users/me/password`.
+- While set, `JwtStrategy` answers `403 { error: 'PasswordChangeRequired' }` to everything except `/users/me`, `/users/me/password`, `/users/me/consent` and `/auth/logout`. Mobile 1.13.x has no form for it, so such users are stuck there until they update.
+- Mobile: `AppNavigator` mounts no tabs and shows `PasswordModal` («Временный пароль» → new one, or «Выйти») after consent. A device that was already logged in learns about it from that 403 (`onPasswordChangeRequired` in `services/api.ts` → `AuthContext`).
 
 #### Login brute-force protection
 

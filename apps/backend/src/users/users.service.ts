@@ -2,6 +2,8 @@ import {
   Injectable,
   NotFoundException,
   ConflictException,
+  BadRequestException,
+  ForbiddenException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -24,7 +26,7 @@ export class UsersService {
     private readonly usersRepository: Repository<User>,
   ) {}
 
-  async create(dto: CreateUserDto): Promise<User> {
+  async create(dto: CreateUserDto, temporaryPassword = false): Promise<User> {
     const existing = await this.usersRepository.findOne({
       where: [{ email: dto.email }, { phone: dto.phone }],
     });
@@ -41,6 +43,7 @@ export class UsersService {
       email: dto.email,
       passwordHash,
       role: dto.role,
+      mustChangePassword: temporaryPassword,
     });
 
     return this.usersRepository.save(user);
@@ -105,6 +108,46 @@ export class UsersService {
     await this.usersRepository.update(id, {
       refreshToken: hashedToken ?? (undefined as any),
     });
+  }
+
+  /**
+   * Replace the user's password and clear any login lock. A temporary password
+   * (chosen by an admin) drops the stored refresh token, so other devices are
+   * logged out once their access token expires, and makes the user pick their
+   * own password before the API opens again.
+   */
+  async setPassword(id: string, password: string, temporary: boolean): Promise<void> {
+    const passwordHash = await bcrypt.hash(password, BCRYPT_ROUNDS);
+    await this.usersRepository.update(id, {
+      passwordHash,
+      failedLoginAttempts: 0,
+      lockedUntil: null,
+      mustChangePassword: temporary,
+      ...(temporary ? { refreshToken: null as any } : {}),
+    });
+  }
+
+  /**
+   * The user changes their own password. Wrong guesses count towards the same
+   * lockout as failed logins, so a stolen session cannot brute-force it. This
+   * device keeps its session: the stored refresh token is its own.
+   */
+  async changePassword(user: User, currentPassword: string, newPassword: string): Promise<void> {
+    if (user.lockedUntil && user.lockedUntil.getTime() > Date.now()) {
+      const minutes = Math.ceil((user.lockedUntil.getTime() - Date.now()) / 60_000);
+      throw new ForbiddenException(
+        `Слишком много неверных попыток. Повторите через ${minutes} мин.`,
+      );
+    }
+    const isCurrentValid = await bcrypt.compare(currentPassword, user.passwordHash);
+    if (!isCurrentValid) {
+      await this.recordFailedLogin(user);
+      throw new BadRequestException('Неверный текущий пароль');
+    }
+    if (newPassword === currentPassword) {
+      throw new BadRequestException('Новый пароль совпадает с текущим');
+    }
+    await this.setPassword(user.id, newPassword, false);
   }
 
   async giveConsent(id: string): Promise<void> {

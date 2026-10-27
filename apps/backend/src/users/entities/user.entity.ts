@@ -47,6 +47,10 @@ export class User {
   @Column({ type: 'timestamp', nullable: true })
   consentGivenAt: Date | null;
 
+  /** Set when an admin chose the password; the API is closed until the user picks their own. */
+  @Column({ default: false })
+  mustChangePassword: boolean;
+
   @CreateDateColumn()
   createdAt: Date;
 

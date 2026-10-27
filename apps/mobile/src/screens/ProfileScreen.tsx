@@ -22,6 +22,7 @@ import {
   PUBLIC_OFFER_TEXT,
 } from "../constants/legal";
 import { useUndoable } from "../context/UndoContext";
+import { PasswordModal } from "../components/PasswordModal";
 
 const FONT_SIZE_LABELS: Record<FontSizeOption, string> = {
   small: 'А',
@@ -44,6 +45,7 @@ export function ProfileScreen() {
   const isAdmin = user?.role === "admin";
   const [deleting, setDeleting] = useState(false);
   const [docModal, setDocModal] = useState<{ title: string; text: string } | null>(null);
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
   const insets = useSafeAreaInsets();
 
   const handleLogout = () => {
@@ -104,6 +106,18 @@ export function ProfileScreen() {
             value={user?.isApproved ? "Подтвержден" : "Ожидает подтверждения"}
           />
         </View>
+      </View>
+
+      <View style={styles.section}>
+        <AppText style={styles.sectionTitle}>Безопасность</AppText>
+        <TouchableOpacity
+          style={[styles.docRow, { borderBottomWidth: 0 }]}
+          onPress={() => setShowPasswordModal(true)}
+          activeOpacity={0.7}
+        >
+          <AppText style={styles.docRowText}>Сменить пароль</AppText>
+          <AppText style={styles.docRowArrow}>›</AppText>
+        </TouchableOpacity>
       </View>
 
       <View style={styles.section}>
@@ -172,6 +186,17 @@ export function ProfileScreen() {
       <AppText style={styles.version}>
         Версия {Constants.expoConfig?.version ?? "—"}
       </AppText>
+
+      <PasswordModal
+        visible={showPasswordModal}
+        title="Смена пароля"
+        askCurrent
+        onSubmit={async (newPassword, currentPassword) => {
+          await authService.changePassword(currentPassword, newPassword);
+          Alert.alert("Готово", "Пароль изменён");
+        }}
+        onClose={() => setShowPasswordModal(false)}
+      />
 
       <Modal visible={!!docModal} animationType="slide" onRequestClose={() => setDocModal(null)}>
         <View style={styles.docContainer}>

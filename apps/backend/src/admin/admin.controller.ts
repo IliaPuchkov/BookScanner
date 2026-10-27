@@ -10,6 +10,8 @@ import {
   UseGuards,
   ParseUUIDPipe,
   Request,
+  HttpCode,
+  HttpStatus,
 } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiQuery } from '@nestjs/swagger';
 import { AdminService } from './admin.service';
@@ -19,6 +21,8 @@ import { Roles } from '../common/decorators/roles.decorator';
 import { UserRole } from '@bookscanner/shared';
 import { CreateUserDto } from '../users/dto/create-user.dto';
 import { UpdateUserDto } from '../users/dto/update-user.dto';
+import { SetPasswordDto } from '../users/dto/password.dto';
+import { User } from '../users/entities/user.entity';
 import { PaginationDto } from '../common/dto/pagination.dto';
 import { SearchBooksDto } from './dto/search-books.dto';
 import { MoveToCopySetDto, StartCopySetDto, ResolveDuplicateDto, ResolvePairsDto, UnresolveLastDto } from './dto/resolve-duplicate.dto';
@@ -54,6 +58,20 @@ export class AdminController {
     @Body() dto: UpdateUserDto,
   ) {
     return this.adminService.updateUser(id, dto);
+  }
+
+  @Post('users/:id/password')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary:
+      'Временный пароль оператору: сбрасывает блокировку и сессию, при входе потребуется сменить. Без password сервер сгенерирует его и вернёт generatedPassword',
+  })
+  setUserPassword(
+    @CurrentUser() admin: User,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: SetPasswordDto,
+  ) {
+    return this.adminService.setUserPassword(admin.id, id, dto.password);
   }
 
   @Delete('users/:id')

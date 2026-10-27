@@ -6,8 +6,11 @@ import {
   UseGuards,
   HttpCode,
   HttpStatus,
+  Body,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
+import { ChangePasswordDto } from './dto/password.dto';
 import { UsersService } from './users.service';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -33,6 +36,16 @@ export class UsersController {
   @ApiOperation({ summary: 'Принять пользовательское соглашение и политику конфиденциальности' })
   giveConsent(@CurrentUser() user: User) {
     return this.usersService.giveConsent(user.id);
+  }
+
+  @Post('me/password')
+  @UseGuards(JwtAuthGuard, ThrottlerGuard)
+  @Throttle({ default: { ttl: 60_000, limit: 5 } })
+  @ApiBearerAuth()
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({ summary: 'Сменить свой пароль (нужен текущий пароль)' })
+  changePassword(@CurrentUser() user: User, @Body() dto: ChangePasswordDto) {
+    return this.usersService.changePassword(user, dto.currentPassword, dto.newPassword);
   }
 
   @Delete('me')

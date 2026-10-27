@@ -85,6 +85,15 @@ export const adminService = {
     return data;
   },
 
+  /** Without `password` the server generates one and returns it once. */
+  async setUserPassword(id: string, password?: string): Promise<{ generatedPassword?: string }> {
+    const { data } = await api.post<{ generatedPassword?: string }>(
+      `/admin/users/${id}/password`,
+      password ? { password } : {},
+    );
+    return data;
+  },
+
   async deleteUser(id: string): Promise<void> {
     await api.delete(`/admin/users/${id}`);
   },

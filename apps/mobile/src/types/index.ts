@@ -31,6 +31,8 @@ export interface User {
   role: UserRole;
   isApproved: boolean;
   consentGivenAt?: string | null;
+  /** An admin set a temporary password; the app is closed until the user picks their own. */
+  mustChangePassword?: boolean;
 }
 
 export interface AuthTokens {

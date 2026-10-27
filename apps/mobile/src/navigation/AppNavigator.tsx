@@ -22,6 +22,7 @@ import { OperatorNavigator } from './OperatorNavigator';
 import { AdminNavigator } from './AdminNavigator';
 import { MaintenanceScreen } from '../screens/MaintenanceScreen';
 import { authService } from '../services/auth.service';
+import { PasswordModal } from '../components/PasswordModal';
 import {
   PRIVACY_POLICY_TITLE,
   PRIVACY_POLICY_TEXT,
@@ -31,11 +32,16 @@ import {
 
 export type RootStackParamList = {
   Auth: undefined;
+  ChangePassword: undefined;
   OperatorTabs: undefined;
   AdminTabs: undefined;
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
+
+function BlankScreen() {
+  return <View style={{ flex: 1, backgroundColor: '#F5F5F5' }} />;
+}
 
 function formatDateTime(iso: string | null): string {
   if (!iso) return '—';
@@ -45,13 +51,15 @@ function formatDateTime(iso: string | null): string {
 }
 
 export function AppNavigator() {
-  const { isAuthenticated, isLoading, user, refreshUser } = useAuth();
+  const { isAuthenticated, isLoading, user, refreshUser, logout } = useAuth();
   const [consentPrivacy, setConsentPrivacy] = useState(false);
   const [consentOffer, setConsentOffer] = useState(false);
   const [consentLoading, setConsentLoading] = useState(false);
   const [docModal, setDocModal] = useState<{ title: string; text: string } | null>(null);
 
   const needsConsent = isAuthenticated && user?.consentGivenAt === null;
+  // The server answers 403 to everything else meanwhile, so no tabs are mounted.
+  const needsPasswordChange = isAuthenticated && !!user?.mustChangePassword;
 
   const handleAcceptConsent = async () => {
     if (!consentPrivacy || !consentOffer) {
@@ -90,6 +98,8 @@ export function AppNavigator() {
         <Stack.Navigator screenOptions={{ headerShown: false }}>
           {!isAuthenticated ? (
             <Stack.Screen name="Auth" component={AuthNavigator} />
+          ) : needsPasswordChange ? (
+            <Stack.Screen name="ChangePassword" component={BlankScreen} />
           ) : user?.role === UserRole.ADMIN ? (
             <Stack.Screen name="AdminTabs" component={AdminNavigator} />
           ) : (
@@ -205,6 +215,23 @@ export function AppNavigator() {
           </View>
         </View>
       </Modal>
+
+      {/* Temporary password set by an admin — the user must pick their own */}
+      <PasswordModal
+        visible={needsPasswordChange && !needsConsent}
+        title="Придумайте новый пароль"
+        subtitle="Администратор задал вам временный пароль. Чтобы продолжить, придумайте свой."
+        askCurrent
+        currentLabel="Временный пароль"
+        submitTitle="Сохранить и продолжить"
+        onSubmit={async (newPassword, currentPassword) => {
+          await authService.changePassword(currentPassword, newPassword);
+          await refreshUser();
+        }}
+        onClose={() => {}}
+        cancelTitle="Выйти"
+        onCancel={logout}
+      />
 
       {/* Pre-maintenance warning modal */}
       <Modal

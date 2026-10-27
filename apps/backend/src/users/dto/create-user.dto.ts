@@ -1,4 +1,5 @@
-import { IsString, IsEmail, IsNotEmpty, MinLength, MaxLength, Matches, IsOptional, IsEnum } from 'class-validator';
+import { IsString, IsEmail, IsNotEmpty, IsOptional, IsEnum } from 'class-validator';
+import { StrongPassword } from '../../common/decorators/strong-password.decorator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { UserRole } from '@bookscanner/shared';
 
@@ -18,12 +19,7 @@ export class CreateUserDto {
   email: string;
 
   @ApiProperty({ example: 'SecurePass123!', minLength: 8 })
-  @IsString()
-  @MinLength(8, { message: 'Пароль должен содержать минимум 8 символов' })
-  @MaxLength(128)
-  @Matches(/(?=.*[a-zа-яё])(?=.*[A-ZА-ЯЁ])(?=.*\d)/, {
-    message: 'Пароль должен содержать строчные и заглавные буквы, а также цифры',
-  })
+  @StrongPassword()
   password: string;
 
   @ApiPropertyOptional({ enum: UserRole, default: UserRole.OPERATOR })

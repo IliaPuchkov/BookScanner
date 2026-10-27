@@ -12,11 +12,13 @@ import {
   TouchableWithoutFeedback,
   Keyboard,
   Platform,
+  Share,
 } from 'react-native';
 import { AppText } from '../../components/AppText';
 import { useFocusEffect } from '@react-navigation/native';
 import { Input } from '../../components/Input';
 import { Button } from '../../components/Button';
+import { PasswordModal } from '../../components/PasswordModal';
 import { adminService } from '../../services/admin.service';
 import { useAuth } from '../../hooks/useAuth';
 import type { User } from '../../types';
@@ -30,6 +32,11 @@ export function UserManagementScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [editTarget, setEditTarget] = useState<User | null>(null);
+  const [passwordTarget, setPasswordTarget] = useState<User | null>(null);
+  const [issued, setIssued] = useState<{ fullName: string; password: string } | null>(null);
+  // iOS cannot present a modal while another one is being dismissed.
+  const showIssued = (value: { fullName: string; password: string }) =>
+    setTimeout(() => setIssued(value), 400);
 
   // Create user form
   const [fullName, setFullName] = useState('');
@@ -236,6 +243,21 @@ export function UserManagementScreen() {
               </TouchableOpacity>
             )}
 
+            {editTarget?.role !== 'admin' && (
+              <TouchableOpacity
+                style={styles.actionRow}
+                onPress={() => {
+                  setPasswordTarget(editTarget);
+                  setEditTarget(null);
+                }}
+              >
+                <View style={[styles.actionIcon, { backgroundColor: '#E3F2FD' }]}>
+                  <AppText style={{ fontSize: 16 }}>🔑</AppText>
+                </View>
+                <AppText style={styles.actionText}>Задать новый пароль</AppText>
+              </TouchableOpacity>
+            )}
+
             {editTarget?.id !== currentUser?.id && editTarget?.role !== 'admin' && (
               <TouchableOpacity
                 style={styles.actionRow}
@@ -262,6 +284,58 @@ export function UserManagementScreen() {
         </TouchableOpacity>
       </Modal>
 
+      <PasswordModal
+        visible={!!passwordTarget}
+        title="Временный пароль"
+        subtitle={`${passwordTarget?.fullName ?? ''} · при входе нужно будет придумать свой пароль, вход на других устройствах будет сброшен`}
+        submitTitle="Задать пароль"
+        onSubmit={async (password) => {
+          if (!passwordTarget) return;
+          const target = passwordTarget;
+          await adminService.setUserPassword(target.id, password);
+          showIssued({ fullName: target.fullName, password });
+        }}
+        extraAction={{
+          title: 'Сгенерировать автоматически',
+          onPress: async () => {
+            if (!passwordTarget) return;
+            const target = passwordTarget;
+            const { generatedPassword } = await adminService.setUserPassword(target.id);
+            showIssued({ fullName: target.fullName, password: generatedPassword ?? '' });
+          },
+        }}
+        onClose={() => setPasswordTarget(null)}
+      />
+
+      {/* The temporary password, shown once to pass it on */}
+      <Modal visible={!!issued} animationType="fade" transparent onRequestClose={() => setIssued(null)}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modal}>
+            <AppText style={styles.modalTitle}>Пароль задан</AppText>
+            <AppText style={styles.modalSubtitle}>
+              Передайте временный пароль пользователю {issued?.fullName}. При входе он придумает свой,
+              блокировка входа снята.
+            </AppText>
+            <AppText style={styles.issuedPassword} selectable>
+              {issued?.password}
+            </AppText>
+            <Button
+              title="Отправить…"
+              onPress={() =>
+                issued &&
+                Share.share({ message: `Временный пароль для входа в Jolly Book: ${issued.password}` })
+              }
+            />
+            <Button
+              title="Готово"
+              onPress={() => setIssued(null)}
+              variant="secondary"
+              style={{ marginTop: 8 }}
+            />
+          </View>
+        </View>
+      </Modal>
+
       {/* Create user modal */}
       <Modal visible={showCreateModal} animationType="slide" transparent>
         <KeyboardAvoidingView
@@ -279,7 +353,10 @@ export function UserManagementScreen() {
                   <Input label="ФИО" value={fullName} onChangeText={setFullName} />
                   <Input label="Телефон" value={phone} onChangeText={setPhone} keyboardType="phone-pad" />
                   <Input label="Email" value={email} onChangeText={setEmail} autoCapitalize="none" />
-                  <Input label="Пароль" value={password} onChangeText={setPassword} secureTextEntry />
+                  <Input label="Временный пароль" value={password} onChangeText={setPassword} secureTextEntry />
+                  <AppText style={styles.createHint}>
+                    При первом входе пользователь придумает свой пароль
+                  </AppText>
                   <Button title="Создать" onPress={handleCreate} loading={creating} />
                   <Button
                     title="Отмена"
@@ -438,5 +515,22 @@ const styles = StyleSheet.create({
   actionText: {
     fontSize: 15,
     color: '#222',
+  },
+  createHint: {
+    fontSize: 12,
+    color: '#999',
+    marginTop: -8,
+    marginBottom: 16,
+  },
+  issuedPassword: {
+    fontSize: 26,
+    fontWeight: '700',
+    color: '#1976D2',
+    textAlign: 'center',
+    letterSpacing: 2,
+    paddingVertical: 16,
+    marginBottom: 16,
+    backgroundColor: '#F5F7FF',
+    borderRadius: 12,
   },
 });

@@ -1,6 +1,11 @@
 import React, { createContext, useState, useEffect, useCallback } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { STORAGE_KEYS, decodeJwtPayload, notifyServerUnreachable } from '../services/api';
+import {
+  STORAGE_KEYS,
+  decodeJwtPayload,
+  notifyServerUnreachable,
+  onPasswordChangeRequired,
+} from '../services/api';
 import { authService } from '../services/auth.service';
 import type { User } from '../types';
 import { UserRole } from '../types';
@@ -104,6 +109,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // ignore
     }
   }, []);
+
+  // An admin set a temporary password while this device was logged in.
+  useEffect(
+    () =>
+      onPasswordChangeRequired(() =>
+        setState((prev) =>
+          prev.user && !prev.user.mustChangePassword
+            ? { ...prev, user: { ...prev.user, mustChangePassword: true } }
+            : prev,
+        ),
+      ),
+    [],
+  );
 
   return (
     <AuthContext.Provider value={{ ...state, login, register, logout, refreshUser }}>

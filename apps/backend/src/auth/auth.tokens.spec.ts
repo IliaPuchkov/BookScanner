@@ -25,6 +25,7 @@ const usersService = {
 const jwt = new JwtService({ secret: env.JWT_SECRET });
 const auth = new AuthService(usersService, jwt, config);
 const strategy = new JwtStrategy(config, usersService);
+const req = { path: '/api/books' } as any;
 
 async function issue() {
   return (auth as any).generateTokens(user) as Promise<{
@@ -36,8 +37,8 @@ async function issue() {
 describe('access / refresh token split', () => {
   it('a refresh token is not accepted as a bearer token', async () => {
     const { accessToken, refreshToken } = await issue();
-    await expect(strategy.validate(jwt.decode(accessToken))).resolves.toBe(user);
-    await expect(strategy.validate(jwt.decode(refreshToken))).rejects.toThrow(
+    await expect(strategy.validate(req, jwt.decode(accessToken))).resolves.toBe(user);
+    await expect(strategy.validate(req, jwt.decode(refreshToken))).rejects.toThrow(
       UnauthorizedException,
     );
     // and it cannot even pass the signature check of the access secret
@@ -53,7 +54,7 @@ describe('access / refresh token split', () => {
   it('legacy tokens (no typ): refresh still works, bearer use does not', async () => {
     const legacy = jwt.sign({ sub: 'u1', role: user.role });
     expect(auth.verifyRefreshToken(legacy).sub).toBe('u1');
-    await expect(strategy.validate(jwt.decode(legacy))).rejects.toThrow(
+    await expect(strategy.validate(req, jwt.decode(legacy))).rejects.toThrow(
       UnauthorizedException,
     );
   });

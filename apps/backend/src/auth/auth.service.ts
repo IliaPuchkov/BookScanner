@@ -97,6 +97,7 @@ export class AuthService {
         role: user.role,
         isApproved: user.isApproved,
         consentGivenAt: user.consentGivenAt,
+        mustChangePassword: user.mustChangePassword,
       },
     };
   }
