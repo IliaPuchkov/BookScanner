@@ -295,6 +295,10 @@ export class AdminService {
     return this.booksService.moveToCopySet(bookId, copyGroupId, adminId);
   }
 
+  async startCopySet(bookId: string, withBookId: string, adminId: string) {
+    return this.booksService.startCopySet(bookId, withBookId, adminId);
+  }
+
   async getCopyGroups(dto: {
     page?: number;
     limit?: number;

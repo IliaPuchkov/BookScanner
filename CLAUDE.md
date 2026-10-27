@@ -267,8 +267,9 @@ All routes prefixed with `/api`.
 - `POST /books/mark-copies` — Mark bookIds one copy set (`masterBookId`, `restBookIds`, `overrideResolutions`); returns `copyGroupId`
 - `POST /books/unmark-copies` — Clear the copy flags; returns `unmarkedIds` (incl. a book left alone in its set)
 - `GET /books/copies/groups` — Books with `isCopy=true`, grouped by copy set (`copyGroupId`), with `matchedFields`/`differingFields`/`isbnDiffers`. Filters: `search`, `status` (published/not_published/archived), `count`, `operatorId`, `storeId`, `boxId`
-- `GET /books/copy-sets` — Copy sets to add a book to by hand: `forBookId` (look-alike sets first — same valid ISBN or similar title by the same author) and/or `search` (title, author, ISBN, SKU); the book's own set is left out
+- `GET /books/copy-sets` — Copy sets (`sets`) and books in no set (`books: [{ book, suggested }]`) to add a book to by hand: `forBookId` (look-alikes first — same valid ISBN, same raw ISBN text even with a bad checksum (`rawIsbn`), or similar title by the same author) and/or `search` (title, author, ISBN, SKU); the book's own set is left out
 - `POST /books/:id/copy-set` — `{ copyGroupId }`: put the book into that set (see «Adding a book to a copy set by hand»)
+- `POST /books/:id/copy-set/new` — `{ withBookId }`: start a new set of the book and a book in no set (`startCopySet`); returns `master` (SKU of the main copy)
 - `GET /books/library` — "Домашняя книга": books with status `IN_LIBRARY`. Filters: `ownerId`, `search`
 - `POST /books/:id/library` — Add a PENDING_REVIEW, never-published book to the current admin's library
 - `DELETE /books/:id/library` — Remove from library → back to PENDING_REVIEW
@@ -351,6 +352,7 @@ The admin has two dedicated screens for managing books that are potential or con
 **Adding a book to a copy set by hand** (`moveToCopySet`, mobile `components/CopySetPicker.tsx`; opened from BookDatabase ⋮ on a book card and from ProductDetail «Добавить в набор копий» / «Перенести в другой набор копий»):
 - The book leaves its own set (if any) and joins the chosen one as a plain copy (`isCopyMaster=false`). Decisions follow the set: its earlier "not copies" with the set's books are deleted, and it inherits every "not copies" the set has with other books. Leaving an old set records "not a copy" with that set's other books; a set left with one book dissolves (`unmarkSingletonCopy`), and a set that lost its main copy gets a new one (`ensureCopyMaster`: an already published book first, else the oldest) — the response's `oldSetMaster` names it.
 - Runs in one transaction; drops the duplicate caches afterwards.
+- The picker also lists books in no set («Похожие книги без набора»): choosing one starts a new set of the two (`startCopySet` — the other book gets a fresh `copyGroupId`, then the book joins it via `moveToCopySet`; main copy = an already published book, else the older one, via `ensureCopyMaster`). If the other book is already in a set, the book just joins that set.
 
 **Key invariant**: `isCopy=true` books with `publishedToOzon IS NULL` are excluded from the pending-review queue and cannot be published to Ozon until `isCopy` is cleared.
 

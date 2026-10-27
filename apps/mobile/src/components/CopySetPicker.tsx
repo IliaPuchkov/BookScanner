@@ -14,17 +14,29 @@ import {
   StyleSheet,
 } from "react-native";
 import { AppText } from "./AppText";
-import { adminService, type CopySetOption } from "../services/admin.service";
-import type { Book } from "../types";
+import { adminService, type CopySetOption, type LooseBookOption } from "../services/admin.service";
+import { BookStatus, type Book } from "../types";
 import { thumbUri } from "../utils/photos";
 import { pluralRu } from "../utils/format";
 import { bookEvents } from "../utils/bookEvents";
 import { useUndoable } from "../context/UndoContext";
 
+type Item =
+  | { kind: "header"; key: string; title: string }
+  | { kind: "set"; key: string; set: CopySetOption }
+  | { kind: "book"; key: string; option: LooseBookOption };
+
+const STATUS_LABEL: Partial<Record<BookStatus, string>> = {
+  [BookStatus.PUBLISHED]: "Опубликована",
+  [BookStatus.ARCHIVED]: "В архиве",
+  [BookStatus.PENDING_REVIEW]: "На проверке",
+};
+
 /**
- * Adds a book to an existing copy set by hand (book card, book database). Opens with the sets
- * that look like the book; the search finds any set by title, author, ISBN or SKU. The server
- * moves the book out of its own set and carries the set's "not copies" over to it.
+ * Adds a book to a copy set by hand (book card, book database). Opens with the sets and the
+ * books in no set that look like the book; the search finds any by title, author, ISBN or SKU.
+ * The server moves the book out of its own set and carries the set's "not copies" over to it;
+ * choosing a book in no set starts a new set of the two.
  */
 export function CopySetPicker({
   book,
@@ -39,6 +51,7 @@ export function CopySetPicker({
   const undoable = useUndoable();
   const [search, setSearch] = useState("");
   const [sets, setSets] = useState<CopySetOption[]>([]);
+  const [books, setBooks] = useState<LooseBookOption[]>([]);
   const [loading, setLoading] = useState(false);
   const [failed, setFailed] = useState(false);
   const requestRef = useRef(0);
@@ -57,7 +70,9 @@ export function CopySetPicker({
         adminService
           .findCopySets(book.id, search.trim() || undefined)
           .then((res) => {
-            if (requestRef.current === request) setSets(res.sets);
+            if (requestRef.current !== request) return;
+            setSets(res.sets);
+            setBooks(res.books);
           })
           .catch(() => {
             if (requestRef.current === request) setFailed(true);
@@ -106,6 +121,130 @@ export function CopySetPicker({
     ]);
   };
 
+  const chooseBook = (other: Book) => {
+    if (!book) return;
+    const target = book;
+    const notes = [
+      `«${target.title}» и «${other.title}» (${other.sku}) станут новым набором копий.`,
+      "Основной копией станет опубликованная из двух, иначе более старая.",
+      "Решения «не копия» второй книги перейдут на эту.",
+      target.copyGroupId ? "Из своего текущего набора книга будет убрана." : "",
+    ].filter(Boolean);
+    Alert.alert("Новый набор копий?", notes.join(" "), [
+      { text: "Отмена", style: "cancel" },
+      {
+        text: "Создать",
+        onPress: () => {
+          onClose();
+          undoable({
+            message: `«${target.title}» и ${other.sku} станут набором копий`,
+            action: async () => {
+              try {
+                const res = await adminService.startCopySet(target.id, other.id);
+                bookEvents.emitBookUpdated(res.book);
+                onMoved?.(res.book);
+                const done = [
+                  res.master ? `Основная копия — ${res.master}.` : "",
+                  res.oldSetMaster ? `Основной копией в старом наборе стала ${res.oldSetMaster}.` : "",
+                ].filter(Boolean);
+                if (done.length) Alert.alert("Набор создан", done.join(" "));
+              } catch {
+                Alert.alert("Ошибка", "Не удалось создать набор копий");
+              }
+            },
+          });
+        },
+      },
+    ]);
+  };
+
+  const items: Item[] = [];
+  if (sets.length) {
+    items.push({ kind: "header", key: "h:sets", title: search ? "Наборы копий" : "Похожие наборы копий" });
+    for (const s of sets) items.push({ kind: "set", key: `s:${s.copyGroupId}`, set: s });
+  }
+  if (books.length) {
+    items.push({ kind: "header", key: "h:books", title: search ? "Книги без набора" : "Похожие книги без набора" });
+    for (const o of books) items.push({ kind: "book", key: `b:${o.book.id}`, option: o });
+  }
+
+  const renderSet = (item: CopySetOption) => {
+    const cover = item.books[0]?.photos?.find((p) => p.sortOrder === 0);
+    return (
+      <TouchableOpacity style={styles.row} onPress={() => choose(item)} activeOpacity={0.7}>
+        {cover ? (
+          <Image source={{ uri: thumbUri(cover) }} style={styles.thumb} />
+        ) : (
+          <View style={[styles.thumb, styles.thumbEmpty]}>
+            <AppText style={styles.thumbEmptyText}>Нет фото</AppText>
+          </View>
+        )}
+        <View style={styles.info}>
+          <AppText style={styles.setTitle} numberOfLines={2}>
+            {item.title}
+          </AppText>
+          {item.author ? (
+            <AppText style={styles.setAuthor} numberOfLines={1}>
+              {item.author}
+            </AppText>
+          ) : null}
+          <View style={styles.metaRow}>
+            <AppText style={styles.count}>
+              {item.count} {pluralRu(item.count, "книга", "книги", "книг")}
+            </AppText>
+            {item.suggested && (
+              <View style={styles.suggested}>
+                <AppText style={styles.suggestedText}>Похож</AppText>
+              </View>
+            )}
+          </View>
+          <AppText style={styles.skus} numberOfLines={1}>
+            {item.books.map((b) => b.sku).join(" · ")}
+          </AppText>
+        </View>
+        <AppText style={styles.arrow}>›</AppText>
+      </TouchableOpacity>
+    );
+  };
+
+  const renderBook = ({ book: other, suggested }: LooseBookOption) => {
+    const cover = other.photos?.find((p) => p.sortOrder === 0);
+    const status = STATUS_LABEL[other.status as BookStatus];
+    return (
+      <TouchableOpacity style={styles.row} onPress={() => chooseBook(other)} activeOpacity={0.7}>
+        {cover ? (
+          <Image source={{ uri: thumbUri(cover) }} style={styles.thumb} />
+        ) : (
+          <View style={[styles.thumb, styles.thumbEmpty]}>
+            <AppText style={styles.thumbEmptyText}>Нет фото</AppText>
+          </View>
+        )}
+        <View style={styles.info}>
+          <AppText style={styles.setTitle} numberOfLines={2}>
+            {other.title}
+          </AppText>
+          {other.author ? (
+            <AppText style={styles.setAuthor} numberOfLines={1}>
+              {other.author}
+            </AppText>
+          ) : null}
+          <View style={styles.metaRow}>
+            {status ? <AppText style={styles.bookStatus}>{status}</AppText> : null}
+            {suggested && (
+              <View style={styles.suggested}>
+                <AppText style={styles.suggestedText}>Похожа</AppText>
+              </View>
+            )}
+          </View>
+          <AppText style={styles.skus} numberOfLines={1}>
+            {[other.sku, other.isbn, other.yearPublished].filter(Boolean).join(" · ")}
+          </AppText>
+        </View>
+        <AppText style={styles.arrow}>›</AppText>
+      </TouchableOpacity>
+    );
+  };
+
   return (
     <Modal visible={book !== null} transparent animationType="slide" onRequestClose={onClose}>
       <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={{ flex: 1 }}>
@@ -128,67 +267,37 @@ export function CopySetPicker({
                   style={styles.search}
                   value={search}
                   onChangeText={setSearch}
-                  placeholder="Название, автор, ISBN или SKU набора"
+                  placeholder="Название, автор, ISBN или SKU"
                   placeholderTextColor="#aaa"
                   clearButtonMode="while-editing"
                 />
-                {!search && sets.length > 0 && (
-                  <AppText style={styles.hint}>Похожие на эту книгу наборы</AppText>
-                )}
-                {loading && sets.length === 0 ? (
+                {loading && items.length === 0 ? (
                   <ActivityIndicator style={{ marginVertical: 24 }} color="#00838F" />
                 ) : (
                   <FlatList
-                    data={sets}
-                    keyExtractor={(s) => s.copyGroupId}
+                    data={items}
+                    keyExtractor={(it) => it.key}
                     keyboardShouldPersistTaps="handled"
                     style={styles.list}
-                    renderItem={({ item }) => {
-                      const cover = item.books[0]?.photos?.find((p) => p.sortOrder === 0);
-                      return (
-                        <TouchableOpacity style={styles.row} onPress={() => choose(item)} activeOpacity={0.7}>
-                          {cover ? (
-                            <Image source={{ uri: thumbUri(cover) }} style={styles.thumb} />
-                          ) : (
-                            <View style={[styles.thumb, styles.thumbEmpty]}>
-                              <AppText style={styles.thumbEmptyText}>Нет фото</AppText>
-                            </View>
-                          )}
-                          <View style={styles.info}>
-                            <AppText style={styles.setTitle} numberOfLines={2}>
-                              {item.title}
-                            </AppText>
-                            {item.author ? (
-                              <AppText style={styles.setAuthor} numberOfLines={1}>
-                                {item.author}
-                              </AppText>
-                            ) : null}
-                            <View style={styles.metaRow}>
-                              <AppText style={styles.count}>
-                                {item.count} {pluralRu(item.count, "книга", "книги", "книг")}
-                              </AppText>
-                              {item.suggested && (
-                                <View style={styles.suggested}>
-                                  <AppText style={styles.suggestedText}>Похож</AppText>
-                                </View>
-                              )}
-                            </View>
-                            <AppText style={styles.skus} numberOfLines={1}>
-                              {item.books.map((b) => b.sku).join(" · ")}
-                            </AppText>
-                          </View>
-                          <AppText style={styles.arrow}>›</AppText>
-                        </TouchableOpacity>
-                      );
-                    }}
+                    renderItem={({ item }) =>
+                      item.kind === "header" ? (
+                        <AppText style={[styles.hint, item.key === "h:books" && sets.length > 0 && styles.hintGap]}>
+                          {item.title}
+                        </AppText>
+                      ) : item.kind === "set" ? (
+                        renderSet(item.set)
+                      ) : (
+                        renderBook(item.option)
+                      )
+                    }
                     ListEmptyComponent={
                       loading ? null : (
                         <AppText style={styles.empty}>
                           {failed
                             ? "Не удалось загрузить наборы. Проверьте связь и попробуйте ещё раз."
                             : search
-                              ? "Наборов не найдено. Попробуйте другое слово или SKU."
-                              : "Похожих наборов не нашлось. Найдите набор по названию, автору, ISBN или SKU."}
+                              ? "Ничего не найдено. Попробуйте другое слово или SKU."
+                              : "Похожих наборов и книг не нашлось. Найдите их по названию, автору, ISBN или SKU."}
                         </AppText>
                       )
                     }
@@ -230,6 +339,8 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   hint: { fontSize: 11, fontWeight: "700", color: "#8A8A8A", textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 6 },
+  hintGap: { marginTop: 14 },
+  bookStatus: { fontSize: 12, color: "#555", fontWeight: "600" },
   list: { flexGrow: 0 },
   row: {
     flexDirection: "row",

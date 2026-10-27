@@ -40,3 +40,9 @@ export class MoveToCopySetDto {
   @IsUUID()
   copyGroupId: string;
 }
+
+export class StartCopySetDto {
+  @ApiProperty({ description: 'Книга без набора, с которой начать новый набор копий' })
+  @IsUUID()
+  withBookId: string;
+}

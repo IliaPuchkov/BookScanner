@@ -23,6 +23,13 @@ export interface CopySetOption {
   books: Book[];
 }
 
+/** A book in no copy set offered as the start of a new set (GET /admin/books/copy-sets) */
+export interface LooseBookOption {
+  book: Book;
+  /** Looks like the book: same ISBN (even with a wrong checksum) or a similar title by the same author */
+  suggested: boolean;
+}
+
 export interface OzonStore {
   id: string;
   name: string;
@@ -325,11 +332,30 @@ export const adminService = {
     });
   },
 
-  /** Copy sets to add a book to: look-alikes of `forBookId`, or any set matching `search` */
-  async findCopySets(forBookId: string, search?: string): Promise<{ sets: CopySetOption[]; total: number }> {
-    const { data } = await api.get<{ sets: CopySetOption[]; total: number }>('/admin/books/copy-sets', {
-      params: { forBookId, search },
-    });
+  /**
+   * Copy sets and books in no set to add a book to: look-alikes of `forBookId`, or any matching
+   * `search`
+   */
+  async findCopySets(
+    forBookId: string,
+    search?: string,
+  ): Promise<{ sets: CopySetOption[]; books: LooseBookOption[]; total: number }> {
+    const { data } = await api.get<{ sets: CopySetOption[]; books?: LooseBookOption[]; total: number }>(
+      '/admin/books/copy-sets',
+      { params: { forBookId, search } },
+    );
+    return { ...data, books: data.books ?? [] };
+  },
+
+  /**
+   * Starts a new copy set of the book and `withBookId` (a book in no set). `master` is the SKU of
+   * the main copy picked (a published book first, else the older one).
+   */
+  async startCopySet(
+    bookId: string,
+    withBookId: string,
+  ): Promise<{ book: Book; master: string | null; oldSetMaster: string | null }> {
+    const { data } = await api.post(`/admin/books/${bookId}/copy-set/new`, { withBookId });
     return data;
   },
 

@@ -19,6 +19,7 @@ import {
   authorTokens,
   groupState,
   pairKey,
+  rawIsbn,
   StateRow,
   volumeLabel,
 } from './duplicate-matching';
@@ -550,11 +551,12 @@ export class BooksService {
   }
 
   /**
-   * Copy sets offered when a book is added to a set by hand (book card / book database).
-   * Without a search: sets that look like this book — a book of theirs shares its valid ISBN, or
-   * a similar title by the same author (fuzzy view, ISBN and missing authors ignored). With a
-   * search: sets with a book whose title, author, ISBN or SKU contains it, look-alikes first.
-   * The book's own set is left out.
+   * What a book can be added to by hand (book card / book database): copy sets, and books in no
+   * set (choosing one starts a new set of the two, see startCopySet).
+   * Without a search: look-alikes of this book — the same valid ISBN, the same ISBN text even
+   * with a wrong checksum, or a similar title by the same author (fuzzy view, ISBN and missing
+   * authors ignored). With a search: whatever has a title, author, ISBN or SKU containing it,
+   * look-alikes first. The book's own set is left out.
    */
   async findCopySets(forBookId: string | undefined, search: string | undefined, limit = 20) {
     const rows: Array<{
@@ -580,23 +582,29 @@ export class BooksService {
 
     let ownSet: string | null = null;
     const lookAlike = new Set<string>();
+    // Look-alike books in no set, most likely first
+    const lookAlikeBooks = new Set<string>();
     if (forBookId) {
       const [own] = await this.booksRepository.manager.query(
-        `SELECT "copyGroupId"::text AS "copyGroupId" FROM books WHERE id = $1`,
+        `SELECT "copyGroupId"::text AS "copyGroupId", isbn FROM books WHERE id = $1`,
         [forBookId],
       );
       ownSet = own?.copyGroupId ?? null;
+      const rows = await this.getDuplicateRows();
+      const ownIsbn = rawIsbn(own?.isbn);
+      const similar = ownIsbn ? rows.list.filter((r) => rawIsbn(r.isbn) === ownIsbn).map((r) => r.id) : [];
       const views: DuplicateQuery[] = [
         { criterion: 'isbn' },
         { criterion: 'fuzzy', respectIsbn: false, includeUnknownAuthor: true },
       ];
       for (const view of views) {
         const { groups } = await this.getViewGroups(view);
-        const group = groups.groups.find((g) => g.ids.includes(forBookId));
-        for (const id of group?.ids ?? []) {
-          const set = groups.rows.byId.get(id)?.copyGroupId;
-          if (set) lookAlike.add(set);
-        }
+        similar.push(...(groups.groups.find((g) => g.ids.includes(forBookId))?.ids ?? []));
+      }
+      for (const id of similar) {
+        if (id === forBookId) continue;
+        const set = rows.byId.get(id)?.copyGroupId;
+        if (set) lookAlike.add(set); else lookAlikeBooks.add(id);
       }
     }
 
@@ -609,9 +617,30 @@ export class BooksService {
       .sort((a, b) => Number(b.suggested) - Number(a.suggested) || b.books.length - a.books.length);
     const page = list.slice(0, limit);
 
+    // Books in no set: the look-alikes, or with a search the matching ones (look-alikes first).
+    // Books of active work sessions are left out, as in duplicate search.
+    let loose = [...lookAlikeBooks];
+    if (needle) {
+      const found: Array<{ id: string }> = await this.booksRepository.manager.query(
+        `SELECT b.id::text AS id
+         FROM books b
+         LEFT JOIN work_sessions ws ON ws.id = b.work_session_id
+         WHERE b."copyGroupId" IS NULL
+           AND ($1::uuid IS NULL OR b.id <> $1::uuid)
+           AND (b.work_session_id IS NULL OR ws.status = 'completed')
+           AND (b.title ILIKE $2 OR b.author ILIKE $2 OR b.isbn ILIKE $2 OR b.sku ILIKE $2)
+         ORDER BY b."createdAt" DESC, b.id
+         LIMIT $3`,
+        [forBookId ?? null, `%${needle}%`, limit],
+      );
+      const ids = found.map((r) => r.id);
+      loose = [...loose.filter((id) => ids.includes(id)), ...ids.filter((id) => !lookAlikeBooks.has(id))];
+    }
+    loose = loose.slice(0, limit);
+
     // Cover photos for the first books of each set (main copy first)
     const shown = page.map((s) => [...s.books].sort((a, b) => Number(b.isCopyMaster) - Number(a.isCopyMaster)).slice(0, 3));
-    const ids = shown.flat().map((r) => r.id);
+    const ids = [...shown.flat().map((r) => r.id), ...loose];
     const full = new Map<string, Book>();
     if (ids.length) {
       (await this.booksRepository.find({ where: { id: In(ids) }, relations: ['photos'] })).forEach((b) => full.set(b.id, b));
@@ -627,7 +656,37 @@ export class BooksService {
         suggested: s.suggested,
         books: shown[i].map((r) => full.get(r.id)).filter((b): b is Book => !!b),
       })),
+      books: loose
+        .map((id) => full.get(id))
+        .filter((b): b is Book => !!b)
+        .map((book) => ({ book, suggested: lookAlikeBooks.has(book.id) })),
     };
+  }
+
+  /**
+   * Starts a copy set by hand from two books: `withBookId` (in no set) and the book, which joins
+   * it as in moveToCopySet. When `withBookId` is already in a set the book simply joins that
+   * set. The main copy is an already published book of the two, else the older one; its SKU is
+   * returned as `master`.
+   */
+  async startCopySet(bookId: string, withBookId: string, adminId: string) {
+    if (bookId === withBookId) throw new BadRequestException('Нельзя сделать книгу копией самой себя');
+    const other = await this.findOne(withBookId);
+    if (other.copyGroupId) {
+      return { ...(await this.moveToCopySet(bookId, other.copyGroupId, adminId)), master: null };
+    }
+    const copyGroupId = randomUUID();
+    await this.booksRepository.update(withBookId, { isCopy: true, isCopyMaster: false, copyGroupId });
+    let moved: Awaited<ReturnType<BooksService['moveToCopySet']>>;
+    try {
+      moved = await this.moveToCopySet(bookId, copyGroupId, adminId);
+    } catch (e) {
+      await this.booksRepository.update(withBookId, { isCopy: false, isCopyMaster: false, copyGroupId: null });
+      this.dropDuplicateCache();
+      throw e;
+    }
+    const master = await this.ensureCopyMaster(copyGroupId);
+    return { ...moved, master, book: await this.findOne(bookId) };
   }
 
   /**

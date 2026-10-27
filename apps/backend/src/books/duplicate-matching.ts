@@ -21,6 +21,13 @@ export const canonicalIsbn = (s?: string | null): string | null => {
   return cleaned && isValidIsbn(cleaned) ? cleaned : null;
 };
 
+// The ISBN as typed, checksum or not ("5-235-01971-4" → "5235019714"); null for an empty field
+// or a placeholder like 978-5-0000-0000-0, shared by thousands of imported books.
+export const rawIsbn = (s?: string | null): string | null => {
+  const raw = (s ?? '').replace(/[-\s]/g, '').toUpperCase();
+  return raw && !/0{5,}/.test(raw) ? raw : null;
+};
+
 // Name parts of an author field, in order: "Пушкин А.С." → ["пушкин", "а", "с"].
 export const authorTokens = (s?: string | null): string[] =>
   normalizeTitle(s).split(/[\s,.;]+/).filter(Boolean);
@@ -504,11 +511,10 @@ export function buildCopySets(rows: Array<MatchRow & { copyGroupId: string | nul
   linkAll((r) => r.copyGroupId);
   linkAll((r) => canonicalIsbn(r.isbn));
   linkAll((r) => {
-    const raw = (r.isbn ?? '').replace(/[-\s]/g, '').toUpperCase();
-    // Skip placeholders like 978-5-0000-0000-0 (shared by thousands of imported books):
-    // with a generic title start ("собрание сочинений в") they would link unrelated sets.
-    if (!raw || /0{5,}/.test(raw)) return null;
-    return `${raw}\n${normalizeTitle(r.title).slice(0, 20)}`;
+    // Placeholders are skipped: with a generic title start ("собрание сочинений в") they would
+    // link unrelated sets.
+    const raw = rawIsbn(r.isbn);
+    return raw ? `${raw}\n${normalizeTitle(r.title).slice(0, 20)}` : null;
   });
 
   const byTitle = new Map<string, Array<{ id: string; isbn: string | null; tokens: string[] }>>();

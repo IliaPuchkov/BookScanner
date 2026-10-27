@@ -21,7 +21,7 @@ import { CreateUserDto } from '../users/dto/create-user.dto';
 import { UpdateUserDto } from '../users/dto/update-user.dto';
 import { PaginationDto } from '../common/dto/pagination.dto';
 import { SearchBooksDto } from './dto/search-books.dto';
-import { MoveToCopySetDto, ResolveDuplicateDto, ResolvePairsDto, UnresolveLastDto } from './dto/resolve-duplicate.dto';
+import { MoveToCopySetDto, StartCopySetDto, ResolveDuplicateDto, ResolvePairsDto, UnresolveLastDto } from './dto/resolve-duplicate.dto';
 import { DuplicateFiltersDto } from './dto/duplicate-filters.dto';
 import { LibraryFiltersDto } from './dto/library-filters.dto';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
@@ -205,8 +205,8 @@ export class AdminController {
   // Adding a book to a copy set by hand
   @Get('books/copy-sets')
   @ApiOperation({
-    summary: 'Наборы копий для ручного добавления книги',
-    description: 'Без search — наборы, похожие на книгу forBookId (тот же ISBN или похожее название того же автора); с search — по названию, автору, ISBN или SKU',
+    summary: 'Наборы копий и книги без набора для ручного добавления книги',
+    description: 'Без search — похожие на книгу forBookId (тот же ISBN, тот же текст ISBN или похожее название того же автора); с search — по названию, автору, ISBN или SKU. books — книги без набора',
   })
   @ApiQuery({ name: 'forBookId', required: false })
   @ApiQuery({ name: 'search', required: false })
@@ -228,6 +228,19 @@ export class AdminController {
     @CurrentUser() user: any,
   ) {
     return this.adminService.moveToCopySet(id, dto.copyGroupId, user.id);
+  }
+
+  @Post('books/:id/copy-set/new')
+  @ApiOperation({
+    summary: 'Начать новый набор копий из книги и книги withBookId',
+    description: 'withBookId должна быть без набора (иначе книга просто добавляется в её набор). Основная копия — опубликованная из двух, иначе более старая; её SKU в master',
+  })
+  startCopySet(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: StartCopySetDto,
+    @CurrentUser() user: any,
+  ) {
+    return this.adminService.startCopySet(id, dto.withBookId, user.id);
   }
 
   // Home library ("Домашняя книга")
