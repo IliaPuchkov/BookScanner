@@ -46,6 +46,16 @@ export interface OzonStoreLimits {
 
 export type HashtagRuleType = 'forbid' | 'replace' | 'add';
 
+/** Mirror of backend `ozon/video-cover/video-cover.service.ts` VideoCoverStatus */
+export interface VideoCoverStatus {
+  enabled: boolean;
+  published: number;
+  withCover: number;
+  synced: number;
+  waitingForOzon: number;
+  queue: { waiting: number; active: number; failed: number };
+}
+
 /** Mirror of backend `settings/hashtag-rules.ts` */
 export interface HashtagRule {
   id: string;
@@ -152,6 +162,17 @@ export const adminService = {
       ...(yearPublished ? { yearPublished } : {}),
     });
     return data.result;
+  },
+
+  /** Ozon video covers: on/off and how many are ready / sent to Ozon */
+  async getVideoCoverStatus(): Promise<VideoCoverStatus> {
+    const { data } = await api.get<VideoCoverStatus>('/ozon/video-covers/status');
+    return data;
+  },
+
+  async setVideoCoverEnabled(enabled: boolean): Promise<VideoCoverStatus> {
+    const { data } = await api.put<VideoCoverStatus>('/ozon/video-covers/enabled', { enabled });
+    return data;
   },
 
   async getBookDatabase(

@@ -146,6 +146,22 @@ export class Book {
   @Column({ type: 'enum', enum: BookStatus, default: BookStatus.PENDING_REVIEW })
   status: BookStatus;
 
+  // Ozon video cover (attribute 21845), see ozon/video-cover. Written with raw SQL so that
+  // background renders don't bump updatedAt.
+  @Column({ type: 'varchar', nullable: true })
+  videoCoverUrl: string | null;
+
+  @Column({ type: 'varchar', nullable: true })
+  videoCoverKey: string | null;
+
+  /** photosHash() of the photos the cover was rendered from; a different hash = outdated cover */
+  @Column({ type: 'varchar', length: 16, nullable: true })
+  videoCoverHash: string | null;
+
+  /** when the cover URL was sent to Ozon; null = waiting for the push cron */
+  @Column({ type: 'timestamp', nullable: true })
+  videoCoverSyncedAt: Date | null;
+
   @CreateDateColumn()
   createdAt: Date;
 

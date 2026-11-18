@@ -197,6 +197,28 @@ export class OzonApiClient {
     return response.result;
   }
 
+  /**
+   * Changes only the given attributes of existing products (other attributes stay as they are).
+   * Counts against the store's daily_update limit. Returns the task id for /v1/product/import/info.
+   */
+  async updateAttributes(
+    items: Array<{
+      offer_id: string;
+      attributes: Array<{ id: number; complex_id: number; values: Array<{ value: string }> }>;
+    }>,
+    storeId?: string,
+  ): Promise<number> {
+    const credentials = storeId
+      ? await this.getCredentialsForStore(storeId)
+      : await this.getCredentials();
+    const response = await this.post<{ task_id: number }>(
+      '/v1/product/attributes/update',
+      { items },
+      credentials,
+    );
+    return response.task_id;
+  }
+
   async getApiKeyExpiry(storeId?: string): Promise<string | null> {
     const credentials = storeId
       ? await this.getCredentialsForStore(storeId)

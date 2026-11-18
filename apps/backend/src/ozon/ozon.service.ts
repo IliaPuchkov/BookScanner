@@ -18,6 +18,7 @@ import { BookStatus, OZON_ATTR_BRAND, OZON_ATTR_AUTHOR, OZON_ATTR_PUBLISHER, DEF
 import type { ResolvedOzonData } from './ozon-payload.builder';
 import { HashtagRulesService } from '../settings/hashtag-rules.service';
 import { applyHashtagRules } from '../settings/hashtag-rules';
+import { VideoCoverService } from './video-cover/video-cover.service';
 
 const IMPORTABLE_STATUSES = ['importing'];
 // Ozon's product list lags behind the import task — a miss right after import is not proof of failure
@@ -91,6 +92,7 @@ export class OzonService {
     private readonly booksService: BooksService,
     private readonly ozonApiClient: OzonApiClient,
     private readonly hashtagRules: HashtagRulesService,
+    private readonly videoCovers: VideoCoverService,
   ) {}
 
   async publish(bookId: string, storeId?: string) {
@@ -390,6 +392,10 @@ export class OzonService {
       status: BookStatus.PUBLISHED,
       publishedToOzon: new Date(),
     });
+    // live on Ozon → render its video cover in the background (no-op while the feature is off)
+    this.videoCovers
+      .enqueue(op.bookId)
+      .catch((err) => this.logger.warn(`Book ${op.bookId}: video cover not queued — ${err}`));
   }
 
   private async markFailed(op: OzonProduct, errorMessage: string) {

@@ -158,6 +158,7 @@ Located in `apps/backend/src/database/migrations/`:
 - `1747800000000-BackfillCopyGroupIds.ts` — data migration: assigns a `copyGroupId` to every legacy copy using `buildCopySets()` (same matching as duplicates + same raw ISBN text with the same 20-char title start); existing set ids are kept; `down()` is a no-op
 - `1747900000000-DedupeDuplicateResolutions.ts` — prod `duplicate_resolutions` had no unique index / order check (table predates 1711200000000), so `orIgnore()` never skipped repeats (8 397 extra rows on 2026-10-18). Keeps the earliest row per pair, sorts pairs, adds `uq_dup_res_pair` + `chk_dup_res_order`; aborts if the set of pairs would change
 - `1748000000000-AddUserMustChangePassword.ts` — adds `"mustChangePassword"` (boolean, default false) to `users` (temporary password set by an admin)
+- `1748100000000-AddBookVideoCover.ts` — adds `"videoCoverUrl"`, `"videoCoverKey"`, `"videoCoverHash"` (varchar 16), `"videoCoverSyncedAt"` to `books` + partial index of covers not yet sent to Ozon
 
 ---
 
@@ -251,6 +252,7 @@ All routes prefixed with `/api`.
 - `POST /publish` — Publish single book to Ozon
 - `POST /publish-bulk` — Bulk publish books to Ozon
 - `GET /status/:bookId` — Get publication status
+- `/ozon/video-covers` (admin): `GET status`, `PUT enabled` `{ enabled }`, `GET pending?limit&after` (published books without a cover + photo URLs + `photosHash`, keyset by id), `POST :bookId` (multipart `file` + `photosHash`; 409 if the photos changed), `POST :bookId/render` (queue a server render), `POST push` (send to Ozon now)
 
 ### Admin (`/api/admin`)
 - `POST /users/:id/password` — `{ password? }`: set a **temporary** password for an **operator** (403 for admins); without `password` the server generates one (`generateTemporaryPassword`, 10 chars, no look-alikes) and returns `generatedPassword` once. Clears the login lock and the stored refresh token, sets `mustChangePassword`, logged as `password_reset` in `activity_logs`. `POST /users` (admin-created user) also sets `mustChangePassword`
@@ -383,6 +385,14 @@ The admin has two dedicated screens for managing books that are potential or con
 - **Import task ≠ source of truth**: Ozon may report `failed` for products it created, and its product list lags behind the task. `resolveImport()` treats `product_id > 0` as published, looks the offer_id up in *all* stores before failing, never fails on a lookup error, and waits `FAILURE_GRACE_MS` (1h). `task_id` is per seller account — `getImportInfo` must use the publishing store's credentials.
 - `reconcileFailedPublications()` (hourly cron + ⋮ "Проверить статус на Ozon" on ErrorsScreen via `POST /ozon/repair-failed-publications`) batch-checks all `PUBLICATION_FAILED` SKUs on Ozon and flips found ones to `PUBLISHED`. Retry (`publish` / `publishBulk`) also checks Ozon first and returns `alreadyPublished` instead of re-importing.
 - Fixed category: Книги → Букинистические издания (1942–2010) → Печатная книга
+
+### Ozon video covers (`ozon/video-cover/`)
+
+- «Озон.Видеообложка: ссылка» = attribute **21845**, `complex_id` **100002**, in both book categories; Ozon accepts MP4/MOV, 8–30 s, ≤ 20 MB, 3:4, no frames/fields. **The client wants exactly 8 s** (8 is also Ozon's minimum — never shorter).
+- `render-video-cover.ts`: 810×1080, 25 fps, 200 frames. Every photo fitted whole over a blurred copy of itself, 5% zoom, 0.5 s crossfades, cover shown 1.15× longer (`segmentTimings`, unit-tested). Frames are drawn one by one with sharp (`affine` with fractional offsets = smooth zoom; `zoompan` jitters) and piped raw to `ffmpeg -threads 1` (~95 MB). Don't move the effects into an ffmpeg filter graph: it buffers later photos and peaked at ~400 MB in the 512 MB container.
+- Server: `markPublished` → BullMQ `video-cover` queue (concurrency 1, only while setting `ozon_video_cover_enabled` is on) → `render-worker.js` in a `nice -n 15` child process → S3 `videos/<bookId>/cover-<photosHash>.mp4`. `VideoCoverCron` (every 10 min) sends unsynced covers via `/v1/product/attributes/update` (only 21845, batches of 100, per publishing store, within `daily_update`). Cover columns are written with raw SQL so `books.updatedAt` doesn't change. `photosHash` = sha1 of photo URLs in display order; a different hash = outdated cover. Covers are not re-rendered automatically when photos change after publication.
+- Backfill of old books runs on a workstation: `apps/backend/scripts/video-cover-backfill.ts` (needs ffmpeg + a **separate** admin account — login replaces the account's refresh token). Resumable.
+- Docker image has `ffmpeg` (`apk add`). Mobile: Settings → «Видеообложки на Ozon» (`components/VideoCoverCard.tsx`).
 - Annotation prefix: "ВНИМАНИЕ! Книга не новая! Состояние - на фото."
 
 ### Authentication Flow

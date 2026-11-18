@@ -13,6 +13,7 @@ import {
   Platform,
 } from "react-native";
 import { AppText } from '../../components/AppText';
+import { VideoCoverCard } from '../../components/VideoCoverCard';
 import { useNavigation } from "@react-navigation/native";
 import { useAuth } from "../../hooks/useAuth";
 import { adminService } from "../../services/admin.service";
@@ -974,6 +975,8 @@ export function SettingsScreen() {
                 <AppText style={{ fontSize: 20, color: "#1976D2" }}>›</AppText>
               </View>
             </TouchableOpacity>
+
+            <VideoCoverCard />
 
             {/* AI prompt setting */}
             <View style={styles.card}>

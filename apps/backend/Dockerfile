@@ -1,6 +1,7 @@
 FROM node:20-alpine
 
-RUN npm install -g pnpm
+# ffmpeg/ffprobe: Ozon video covers (ozon/video-cover)
+RUN apk add --no-cache ffmpeg && npm install -g pnpm
 
 WORKDIR /app
 
