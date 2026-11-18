@@ -30,6 +30,7 @@ import {
   DEFAULT_DIRECTION,
 } from "@bookscanner/shared";
 import { formatDimensions } from "@bookscanner/shared";
+import { applyHashtagRules } from "../settings/hashtag-rules";
 
 interface OzonAttribute {
   complex_id: number;
@@ -64,21 +65,6 @@ function multiAttr(
   };
 }
 
-const FORBIDDEN_HASHTAG_PATTERNS = [
-  /полити/i, /выбор/i, /война/i, /нарко/i, /оруж/i, /терро/i, /экстрем/i,
-  /власт/i, /идеолог/i,
-];
-
-function sanitizeHashtags(tags: string[]): string[] {
-  return tags
-    .map((t) => {
-      const trimmed = t.trim();
-      const withHash = trimmed.startsWith("#") ? trimmed : `#${trimmed}`;
-      return withHash.replace(/\s+/g, "_").replace(/[^#a-zA-Zа-яА-ЯёЁ0-9_]/g, "");
-    })
-    .filter((t) => t.length >= 2 && t.length <= 30)
-    .filter((t) => !FORBIDDEN_HASHTAG_PATTERNS.some((p) => p.test(t)));
-}
 
 const COVER_TYPE_MAP: Record<string, string> = {
   "мягкий переплет": "Мягкая обложка",
@@ -102,6 +88,8 @@ export interface ResolvedOzonData {
   publisherDictValueId?: number;
   resolvedPublisherName?: string;
   authors?: Array<{ value: string; dictValueId?: number }>;
+  /** Hashtags after the hashtag rules (`applyHashtagRules`); without it — book.hashtags, format check only */
+  hashtags?: string[];
 }
 
 export function buildOzonImportPayload(
@@ -187,11 +175,9 @@ export function buildOzonImportPayload(
   const weight = Math.round(book.weightGross || DEFAULT_WEIGHT_G);
   attributes.push(attr(OZON_ATTR_WEIGHT, weight));
 
-  if (book.hashtags && book.hashtags.length > 0) {
-    const cleanTags = sanitizeHashtags(book.hashtags);
-    if (cleanTags.length > 0) {
-      attributes.push(attr(OZON_ATTR_HASHTAGS, cleanTags.join(" ")));
-    }
+  const cleanTags = resolved.hashtags ?? applyHashtagRules(book.hashtags, []);
+  if (cleanTags.length > 0) {
+    attributes.push(attr(OZON_ATTR_HASHTAGS, cleanTags.join(" ")));
   }
 
   const images =

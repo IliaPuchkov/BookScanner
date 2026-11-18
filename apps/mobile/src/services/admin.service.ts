@@ -44,6 +44,22 @@ export interface OzonStoreLimits {
   total: { limit: number; usage: number };
 }
 
+export type HashtagRuleType = 'forbid' | 'replace' | 'add';
+
+/** Mirror of backend `settings/hashtag-rules.ts` */
+export interface HashtagRule {
+  id: string;
+  type: HashtagRuleType;
+  enabled: boolean;
+  /** forbid: word fragment; replace: tag to find; add: tag to add */
+  value: string;
+  /** replace: the tag put instead */
+  replacement?: string | null;
+  /** add: only for books published in [yearFrom, yearTo] */
+  yearFrom?: number | null;
+  yearTo?: number | null;
+}
+
 interface UpsertSettingDto {
   key: string;
   value: string;
@@ -113,6 +129,29 @@ export const adminService = {
   async upsertSetting(dto: UpsertSettingDto): Promise<SystemSetting> {
     const { data } = await api.post<SystemSetting>('/admin/settings', dto);
     return data;
+  },
+
+  async getHashtagRules(): Promise<{ rules: HashtagRule[]; defaults: HashtagRule[] }> {
+    const { data } = await api.get<{ rules: HashtagRule[]; defaults: HashtagRule[] }>(
+      '/admin/settings/hashtag-rules',
+    );
+    return data;
+  },
+
+  /** Replaces the whole list; the server validates each rule (400 with "Правило N: …") */
+  async saveHashtagRules(rules: HashtagRule[]): Promise<HashtagRule[]> {
+    const { data } = await api.put<{ rules: HashtagRule[] }>('/admin/settings/hashtag-rules', { rules });
+    return data.rules;
+  },
+
+  /** What the given (unsaved) rules do to the tags */
+  async previewHashtagRules(tags: string[], rules: HashtagRule[], yearPublished?: number): Promise<string[]> {
+    const { data } = await api.post<{ result: string[] }>('/admin/settings/hashtag-rules/preview', {
+      tags,
+      rules,
+      ...(yearPublished ? { yearPublished } : {}),
+    });
+    return data.result;
   },
 
   async getBookDatabase(

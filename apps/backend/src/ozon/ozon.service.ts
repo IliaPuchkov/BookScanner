@@ -16,6 +16,8 @@ import { buildOzonImportPayload } from './ozon-payload.builder';
 import { mapOzonProductToBook } from './ozon-import.mapper';
 import { BookStatus, OZON_ATTR_BRAND, OZON_ATTR_AUTHOR, OZON_ATTR_PUBLISHER, DEFAULT_PRICE } from '@bookscanner/shared';
 import type { ResolvedOzonData } from './ozon-payload.builder';
+import { HashtagRulesService } from '../settings/hashtag-rules.service';
+import { applyHashtagRules } from '../settings/hashtag-rules';
 
 const IMPORTABLE_STATUSES = ['importing'];
 // Ozon's product list lags behind the import task — a miss right after import is not proof of failure
@@ -88,6 +90,7 @@ export class OzonService {
     private readonly boxRepository: Repository<Box>,
     private readonly booksService: BooksService,
     private readonly ozonApiClient: OzonApiClient,
+    private readonly hashtagRules: HashtagRulesService,
   ) {}
 
   async publish(bookId: string, storeId?: string) {
@@ -168,10 +171,11 @@ export class OzonService {
       this.logger.warn(`Failed to check limits before publish: ${error}`);
     }
 
-    const [brand, publisher, authors] = await Promise.all([
+    const [brand, publisher, authors, hashtags] = await Promise.all([
       resolveBrand(book.publisher, this.ozonApiClient),
       resolvePublisher(book.publisher, this.ozonApiClient),
       resolveAuthors(book.author, this.ozonApiClient),
+      this.hashtagRules.apply(book.hashtags, { yearPublished: book.yearPublished }),
     ]);
 
     this.logger.log(
@@ -184,6 +188,7 @@ export class OzonService {
       publisherDictValueId: publisher?.id,
       resolvedPublisherName: publisher?.name,
       authors,
+      hashtags,
     });
 
     // Create or update OzonProduct entry
@@ -557,6 +562,7 @@ export class OzonService {
     type BatchEntry = { book: (typeof books)[0]; payload: Record<string, unknown>; item: unknown };
     const validEntries: BatchEntry[] = [];
     const failed: { id: string; title?: string; error: string }[] = [];
+    const hashtagRules = await this.hashtagRules.getRules();
 
     for (const book of books) {
       if (book.status === BookStatus.IN_LIBRARY) {
@@ -582,6 +588,7 @@ export class OzonService {
         publisherDictValueId: r?.publisher?.id,
         resolvedPublisherName: r?.publisher?.name,
         authors: r?.authors,
+        hashtags: applyHashtagRules(book.hashtags, hashtagRules, { yearPublished: book.yearPublished }),
       });
       validEntries.push({ book, payload, item: (payload.items as unknown[])[0] });
     }

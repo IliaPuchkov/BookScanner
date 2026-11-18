@@ -279,6 +279,7 @@ All routes prefixed with `/api`.
 ### Settings (`/api/settings`)
 - `GET /` — Get all system settings (includes Ozon store configs)
 - `PUT /` or `POST /` — Upsert setting
+- `GET /admin/settings/hashtag-rules` — `{ rules, defaults }`; `PUT` same path `{ rules }` replaces the whole list (validated per rule, 400 "Правило N: …"); `POST …/hashtag-rules/preview` `{ tags, yearPublished?, rules? }` → `{ result }` (unsaved `rules` or the saved ones)
 
 ### Stats (`/api/stats`)
 - `GET /summary` — Activity summary
@@ -306,6 +307,14 @@ All routes prefixed with `/api`.
 3. `vision.processor.ts` processes jobs using `@bookscanner/ocr-processor` (Gemini Vision)
 4. Results stored in `ocr_results` table, book fields auto-populated
 5. Operator reviews extracted data in `CardDetail` screen and corrects if needed
+
+### Hashtag rules (Настройки → «Правила хэштегов»)
+
+- One JSON setting `hashtag_rules` (`settings/hashtag-rules.ts`, unit-tested; `HashtagRulesService`). Until the admin saves, `DEFAULT_HASHTAG_RULES` = the old hard-coded forbidden fragments (полити, выбор, война, нарко, оруж, терро, экстрем, власт, идеолог).
+- Rule types: `forbid` (tag dropped if it contains the fragment; case- and ё/е-insensitive), `replace` (whole tag → another tag), `add` (mandatory tag, optional `yearFrom`/`yearTo` on `yearPublished`; a book without a year gets only unconditional ones). Each has `enabled`.
+- `applyHashtagRules`: format (`#`, spaces→`_`, ≤30 chars incl. `#`) → replace → forbid → mandatory first (not checked against forbid) → dedupe → max 30.
+- Applied in `VisionService.extractBookData` (saved to the card; `ocr_results` keeps the raw AI tags), to the preview response, and again in `OzonService.publish`/`publishBulk` (passed to the payload builder as `resolved.hashtags`). Existing cards are not rewritten.
+- Mobile `screens/admin/HashtagRulesScreen.tsx`: edits a local draft, «Сохранить» sends the whole list (so deleting needs no undo banner), «Проверить правила» previews the draft, «Вернуть стандартные правила».
 
 ### Book Status Flow
 

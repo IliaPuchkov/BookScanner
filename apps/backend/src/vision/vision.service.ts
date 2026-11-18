@@ -9,6 +9,7 @@ import { OcrResult } from "./entities/ocr-result.entity";
 import { BooksService } from "../books/books.service";
 import { PhotosService } from "../photos/photos.service";
 import { SettingsService } from "../settings/settings.service";
+import { HashtagRulesService } from "../settings/hashtag-rules.service";
 import {
   IStorageProvider,
   STORAGE_PROVIDER,
@@ -66,6 +67,7 @@ export class VisionService {
     private readonly booksService: BooksService,
     private readonly photosService: PhotosService,
     private readonly settingsService: SettingsService,
+    private readonly hashtagRules: HashtagRulesService,
     private readonly configService: ConfigService,
     @Inject(STORAGE_PROVIDER)
     private readonly storage: IStorageProvider,
@@ -143,6 +145,9 @@ export class VisionService {
 
       const calculatedPrice = await this.calculatePrice(extractedData.price ?? undefined);
       const updatePayload = this.buildUpdatePayload(extractedData, calculatedPrice);
+      updatePayload.hashtags = await this.hashtagRules.apply(updatePayload.hashtags, {
+        yearPublished: updatePayload.yearPublished,
+      });
 
       this.logger.log(`[${bookId}] calling updateFromExtraction`);
       await this.booksService.updateFromExtraction(bookId, updatePayload);
@@ -209,7 +214,15 @@ export class VisionService {
       await this.ocrResultRepository.save(ocrResult);
 
       this.logger.log(`[${bookId}] ── extractBookDataPreview DONE`);
-      return { extractedData: extractedData as unknown as Record<string, unknown>, calculatedPrice };
+      // ocr_results keeps the raw AI tags; the admin gets them after the hashtag rules
+      const year = parseInt(String(extractedData.yearPublished ?? ""), 10);
+      const hashtags = await this.hashtagRules.apply(extractedData.hashtags, {
+        yearPublished: isNaN(year) ? null : year,
+      });
+      return {
+        extractedData: { ...extractedData, hashtags } as unknown as Record<string, unknown>,
+        calculatedPrice,
+      };
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error);
       this.logger.error(`[${bookId}] ── extractBookDataPreview FAILED: ${msg}`);

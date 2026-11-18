@@ -957,6 +957,24 @@ export function SettingsScreen() {
               )}
             </View>
 
+            {/* Hashtag rules */}
+            <TouchableOpacity
+              style={styles.card}
+              activeOpacity={0.75}
+              onPress={() => navigation.navigate("HashtagRules")}
+            >
+              <View style={[styles.sectionHeader, { marginBottom: 0 }]}>
+                <View style={{ flex: 1 }}>
+                  <AppText style={styles.sectionTitle}>Правила хэштегов</AppText>
+                  <AppText style={styles.sectionDesc}>
+                    Запрещённые слова, замены и обязательные теги для хэштегов
+                    от ИИ.
+                  </AppText>
+                </View>
+                <AppText style={{ fontSize: 20, color: "#1976D2" }}>›</AppText>
+              </View>
+            </TouchableOpacity>
+
             {/* AI prompt setting */}
             <View style={styles.card}>
               <View style={styles.sectionHeader}>
