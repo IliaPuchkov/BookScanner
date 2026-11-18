@@ -896,54 +896,12 @@ export class OzonService {
     };
   }
 
-  async syncArchivedStatus(): Promise<{ checked: number; archived: number }> {
-    this.logger.log('syncArchivedStatus: started');
-
-    const stores = await this.ozonApiClient.getAllStores();
-    const storeIds: Array<string | null> = stores.length ? stores.map((s) => s.id) : [null];
-
-    const archivedOfferIds = new Set<string>();
-    for (const storeId of storeIds) {
-      let lastId = '';
-      try {
-        do {
-          const result = await this.ozonApiClient.getProductList(storeId ?? undefined, lastId, 1000, 'ARCHIVED');
-          for (const item of result.items) archivedOfferIds.add(item.offer_id);
-          lastId = result.last_id;
-          if (!lastId || result.items.length < 1000) break;
-        } while (true);
-        this.logger.log(`syncArchivedStatus: store=${storeId} — ${archivedOfferIds.size} archived offer_ids total`);
-      } catch (err) {
-        this.logger.error(`syncArchivedStatus: failed to fetch archive for store ${storeId}`, err);
-      }
-    }
-
-    if (!archivedOfferIds.size) {
-      this.logger.log('syncArchivedStatus: no archived products found on Ozon');
-      return { checked: 0, archived: 0 };
-    }
-
-    const published = await this.ozonProductRepository
-      .createQueryBuilder('op')
-      .innerJoinAndSelect('op.book', 'book')
-      .where('op.status = :status', { status: 'published' })
-      .getMany();
-
-    this.logger.log(`syncArchivedStatus: checking ${published.length} published records against ${archivedOfferIds.size} archived offer_ids`);
-
-    let archived = 0;
-    for (const op of published) {
-      if (op.book?.sku && archivedOfferIds.has(op.book.sku)) {
-        op.status = 'archived';
-        await this.ozonProductRepository.save(op);
-        await this.booksService.updateFromExtraction(op.bookId, { status: BookStatus.ARCHIVED });
-        archived++;
-        this.logger.log(`syncArchivedStatus: book ${op.bookId} sku=${op.book.sku} archived`);
-      }
-    }
-
-    this.logger.log(`syncArchivedStatus: checked=${published.length}, archived=${archived}`);
-    return { checked: published.length, archived };
+  /**
+   * Legacy endpoint. It used to archive a book when its SKU was archived in *any* store, even
+   * if the book was re-listed and live in another one — now it is the full two-way sync.
+   */
+  async syncArchivedStatus(): Promise<{ checked: number; archived: number; restored: number }> {
+    return this.syncOzonStatus();
   }
 
   async syncOzonStatus(): Promise<{ checked: number; archived: number; restored: number }> {
@@ -952,8 +910,10 @@ export class OzonService {
     const stores = await this.ozonApiClient.getAllStores();
     const storeIds: Array<string | null> = stores.length ? stores.map((s) => s.id) : [null];
 
-    // Build two sets: all offer_ids present on Ozon, and those that are archived
-    const allOfferIds = new Set<string>();
+    // offer_ids that are live in at least one store, and those archived in at least one store.
+    // The same SKU can be archived in one store and re-listed in another: live anywhere wins.
+    // (The default list, no visibility filter, has no archived products.)
+    const activeOfferIds = new Set<string>();
     const archivedOfferIds = new Set<string>();
 
     for (const storeId of storeIds) {
@@ -963,17 +923,21 @@ export class OzonService {
           do {
             const result = await this.ozonApiClient.getProductList(storeId ?? undefined, lastId, 1000, visibility);
             for (const item of result.items) {
-              allOfferIds.add(item.offer_id);
-              if (visibility === 'ARCHIVED') archivedOfferIds.add(item.offer_id);
+              (visibility === 'ARCHIVED' ? archivedOfferIds : activeOfferIds).add(item.offer_id);
             }
             lastId = result.last_id;
             if (!lastId || result.items.length < 1000) break;
           } while (true);
         } catch (err) {
-          this.logger.error(`syncOzonStatus: failed to fetch store=${storeId} visibility=${visibility ?? 'ALL'}`, err);
+          // A partial list would flip archived books back to published (or miss archivings): change nothing
+          this.logger.error(
+            `syncOzonStatus: failed to fetch store=${storeId} visibility=${visibility ?? 'ALL'} — aborted, no statuses changed`,
+            err,
+          );
+          return { checked: 0, archived: 0, restored: 0 };
         }
       }
-      this.logger.log(`syncOzonStatus: store=${storeId} — total=${allOfferIds.size} archived=${archivedOfferIds.size}`);
+      this.logger.log(`syncOzonStatus: store=${storeId} — active=${activeOfferIds.size} archived=${archivedOfferIds.size}`);
     }
 
     const tracked = await this.ozonProductRepository
@@ -989,15 +953,17 @@ export class OzonService {
 
     for (const op of tracked) {
       const sku = op.book?.sku;
-      if (!sku || !allOfferIds.has(sku)) continue;
+      if (!sku) continue;
+      const isActive = activeOfferIds.has(sku);
+      if (!isActive && !archivedOfferIds.has(sku)) continue; // not on Ozon at all: leave as is
 
-      if (archivedOfferIds.has(sku) && op.status !== 'archived') {
+      if (!isActive && op.status !== 'archived') {
         op.status = 'archived';
         await this.ozonProductRepository.save(op);
         await this.booksService.updateFromExtraction(op.bookId, { status: BookStatus.ARCHIVED });
         archived++;
         this.logger.log(`syncOzonStatus: archived book ${op.bookId} sku=${sku}`);
-      } else if (!archivedOfferIds.has(sku) && op.status === 'archived') {
+      } else if (isActive && op.status === 'archived') {
         op.status = 'published';
         await this.ozonProductRepository.save(op);
         await this.booksService.updateFromExtraction(op.bookId, { status: BookStatus.PUBLISHED });
@@ -1014,6 +980,7 @@ export class OzonService {
     counts: { ozonActive: number; ozonArchived: number; systemPublished: number; systemArchived: number };
     onOzonNotInSystem: Array<{ productId: number; offerId: string; name: string; visibility: string; storeId: string | null }>;
     inSystemNotOnOzon: Array<{ bookId: string; sku: string; title: string; status: string }>;
+    statusMismatch: Array<{ bookId: string; sku: string; title: string; status: string; ozonVisibility: 'ACTIVE' | 'ARCHIVED' }>;
   }> {
     const stores = storeId
       ? [{ id: storeId }]
@@ -1066,10 +1033,25 @@ export class OzonService {
       .filter((b) => !allOzonOfferIds.has(b.sku))
       .map((b) => ({ bookId: b.id, sku: b.sku, title: b.title, status: b.status }));
 
+    // On both sides, but the status differs. Same rule as syncOzonStatus: live in any store = published.
+    // "Published here, archived on Ozon" is only certain when every store was loaded — with one store
+    // picked, the book may be live in another one.
+    const statusMismatch: Array<{ bookId: string; sku: string; title: string; status: string; ozonVisibility: 'ACTIVE' | 'ARCHIVED' }> = [];
+    for (const b of systemBooks) {
+      const live = activeMap.has(b.sku);
+      if (b.status === BookStatus.ARCHIVED && live) {
+        statusMismatch.push({ bookId: b.id, sku: b.sku, title: b.title, status: b.status, ozonVisibility: 'ACTIVE' });
+      } else if (!storeId && b.status === BookStatus.PUBLISHED && !live && archivedMap.has(b.sku)) {
+        statusMismatch.push({ bookId: b.id, sku: b.sku, title: b.title, status: b.status, ozonVisibility: 'ARCHIVED' });
+      }
+    }
+
     return {
+      statusMismatch,
       counts: {
         ozonActive: activeMap.size,
-        ozonArchived: archivedMap.size,
+        // a SKU archived in one store but live in another counts as live
+        ozonArchived: [...archivedMap.keys()].filter((k) => !activeMap.has(k)).length,
         systemPublished: systemBooks.filter((b) => b.status === BookStatus.PUBLISHED).length,
         systemArchived: systemBooks.filter((b) => b.status === BookStatus.ARCHIVED).length,
       },

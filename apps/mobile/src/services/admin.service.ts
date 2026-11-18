@@ -291,6 +291,7 @@ export const adminService = {
     counts: { ozonActive: number; ozonArchived: number; systemPublished: number; systemArchived: number };
     onOzonNotInSystem: Array<{ productId: number; offerId: string; name: string; visibility: string; storeId: string | null }>;
     inSystemNotOnOzon: Array<{ bookId: string; sku: string; title: string; status: string }>;
+    statusMismatch?: Array<{ bookId: string; sku: string; title: string; status: string; ozonVisibility: 'ACTIVE' | 'ARCHIVED' }>;
   }> {
     const { data } = await api.get('/ozon/sync-diff', { params: storeId ? { storeId } : {} });
     return data;

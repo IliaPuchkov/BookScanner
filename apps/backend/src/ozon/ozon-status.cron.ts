@@ -21,9 +21,14 @@ export class OzonStatusCron {
     await this.ozonService.reconcileFailedPublications();
   }
 
-  @Cron(CronExpression.EVERY_DAY_AT_2AM)
-  async handleArchivedSync() {
-    this.logger.debug('Running Ozon archived status sync cron');
-    await this.ozonService.syncArchivedStatus();
+  // Same as Settings → «Синхронизировать с Ozon»: archived ⇄ published, both ways
+  @Cron('0 3 * * *', { timeZone: 'Europe/Moscow' })
+  async handleNightlySync() {
+    this.logger.log('Running nightly Ozon status sync');
+    try {
+      await this.ozonService.syncOzonStatus();
+    } catch (err) {
+      this.logger.error('Nightly Ozon status sync failed', err);
+    }
   }
 }

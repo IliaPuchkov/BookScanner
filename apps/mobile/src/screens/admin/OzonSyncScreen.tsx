@@ -27,13 +27,20 @@ interface SystemItem {
   status: string;
 }
 
+interface MismatchItem extends SystemItem {
+  ozonVisibility: 'ACTIVE' | 'ARCHIVED';
+}
+
 interface SyncDiff {
   counts: { ozonActive: number; ozonArchived: number; systemPublished: number; systemArchived: number };
   onOzonNotInSystem: DiffItem[];
   inSystemNotOnOzon: SystemItem[];
+  statusMismatch?: MismatchItem[]; // absent on an older backend
 }
 
-type Tab = 'ozon' | 'system';
+type Tab = 'ozon' | 'system' | 'status';
+
+const statusLabel = (status: string) => (status === 'published' ? 'опублик.' : 'архив');
 
 const IMPORT_BATCH = 200;
 
@@ -47,6 +54,7 @@ export default function OzonSyncScreen() {
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [importing, setImporting] = useState(false);
   const [importProgress, setImportProgress] = useState<{ done: number; total: number } | null>(null);
+  const [syncing, setSyncing] = useState(false);
   const storeIdRef = useRef<string | undefined>(undefined);
 
   const loadStores = useCallback(async () => {
@@ -203,17 +211,57 @@ export default function OzonSyncScreen() {
         <AppText style={styles.listItemTitle} numberOfLines={2}>{item.title || '—'}</AppText>
         <AppText style={styles.listItemSub}>{item.sku}</AppText>
       </View>
-      <View style={[styles.badge, item.status === 'ARCHIVED' && styles.badgeArchived]}>
-        <AppText style={[styles.badgeText, item.status === 'ARCHIVED' && styles.badgeTextArchived]}>
-          {item.status === 'PUBLISHED' ? 'опублик.' : 'архив'}
+      <View style={[styles.badge, item.status === 'archived' && styles.badgeArchived]}>
+        <AppText style={[styles.badgeText, item.status === 'archived' && styles.badgeTextArchived]}>
+          {statusLabel(item.status)}
         </AppText>
       </View>
     </View>
   );
 
+  const renderMismatchItem = ({ item }: { item: MismatchItem }) => (
+    <View style={styles.listItem}>
+      <View style={styles.listItemContent}>
+        <AppText style={styles.listItemTitle} numberOfLines={2}>{item.title || '—'}</AppText>
+        <AppText style={styles.listItemSub}>{item.sku}</AppText>
+        <AppText style={styles.listItemSub}>
+          В системе: {statusLabel(item.status)} · Ozon: {item.ozonVisibility === 'ACTIVE' ? 'активный' : 'архив'}
+        </AppText>
+      </View>
+    </View>
+  );
+
+  const mismatches = diff?.statusMismatch ?? [];
+
+  const handleFixStatuses = () => {
+    Alert.alert(
+      'Исправить статусы',
+      'Система синхронизирует статусы с Ozon: книга, которая продаётся хотя бы в одном магазине, станет «опубликована», остальные из архива Ozon — «в архиве». Это займёт около минуты.',
+      [
+        { text: 'Отмена', style: 'cancel' },
+        {
+          text: 'Запустить',
+          onPress: async () => {
+            setSyncing(true);
+            try {
+              await adminService.syncOzonStatus();
+              Alert.alert('Запущено', 'Синхронизация идёт в фоне. Обновите экран через минуту.');
+            } catch {
+              Alert.alert('Ошибка', 'Не удалось запустить синхронизацию');
+            } finally {
+              setSyncing(false);
+            }
+          },
+        },
+      ],
+    );
+  };
+
   const listData = tab === 'ozon'
     ? (diff?.onOzonNotInSystem ?? [])
-    : (diff?.inSystemNotOnOzon ?? []);
+    : tab === 'system'
+      ? (diff?.inSystemNotOnOzon ?? [])
+      : mismatches;
 
   return (
     <View style={styles.container}>
@@ -283,6 +331,12 @@ export default function OzonSyncScreen() {
               </AppText>
               <AppText style={styles.summaryLabel}>в системе,{'\n'}нет на Ozon</AppText>
             </View>
+            <View style={[styles.summaryBadge, mismatches.length > 0 && styles.summaryBadgeWarn]}>
+              <AppText style={[styles.summaryNum, mismatches.length > 0 && styles.summaryNumWarn]}>
+                {mismatches.length}
+              </AppText>
+              <AppText style={styles.summaryLabel}>статус{'\n'}не совпадает</AppText>
+            </View>
           </View>
 
           {/* Tabs */}
@@ -303,7 +357,22 @@ export default function OzonSyncScreen() {
                 В системе ({diff.inSystemNotOnOzon.length})
               </AppText>
             </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.tabBtn, tab === 'status' && styles.tabBtnActive]}
+              onPress={() => setTab('status')}
+            >
+              <AppText style={[styles.tabBtnText, tab === 'status' && styles.tabBtnTextActive]}>
+                Статус ({mismatches.length})
+              </AppText>
+            </TouchableOpacity>
           </View>
+
+          {tab === 'status' && activeStoreId && (
+            <AppText style={styles.hint}>
+              Для одного магазина видны только книги, которые в нём продаются, а у нас в архиве.
+              Выберите «Все», чтобы увидеть и обратные случаи.
+            </AppText>
+          )}
 
           {/* Select all row (only for ozon tab) */}
           {tab === 'ozon' && diff.onOzonNotInSystem.length > 0 && (
@@ -328,7 +397,9 @@ export default function OzonSyncScreen() {
             renderItem={
               tab === 'ozon'
                 ? ({ item }) => renderOzonItem({ item: item as DiffItem })
-                : ({ item }) => renderSystemItem({ item: item as SystemItem })
+                : tab === 'system'
+                  ? ({ item }) => renderSystemItem({ item: item as SystemItem })
+                  : ({ item }) => renderMismatchItem({ item: item as MismatchItem })
             }
             refreshControl={
               <RefreshControl
@@ -345,6 +416,21 @@ export default function OzonSyncScreen() {
           />
         </>
       ) : null}
+
+      {/* Fix statuses bar */}
+      {tab === 'status' && mismatches.length > 0 && (
+        <View style={styles.importBar}>
+          <TouchableOpacity
+            style={[styles.importBtn, syncing && styles.importBtnDisabled]}
+            onPress={handleFixStatuses}
+            disabled={syncing}
+          >
+            <AppText style={styles.importBtnText}>
+              {syncing ? 'Запускаем…' : `Исправить статусы (${mismatches.length})`}
+            </AppText>
+          </TouchableOpacity>
+        </View>
+      )}
 
       {/* Import bar */}
       {tab === 'ozon' && selected.size > 0 && (
@@ -460,6 +546,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#e0e0e0',
   },
+  hint: { fontSize: 11, color: '#888', paddingHorizontal: 16, paddingTop: 8, lineHeight: 15 },
   selectAllCount: { fontSize: 12, color: '#666' },
   selectAllBtn: { fontSize: 13, color: '#1976D2', fontWeight: '600' },
   listContent: { paddingBottom: 16 },
