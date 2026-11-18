@@ -1,7 +1,10 @@
 FROM node:20-alpine
 
+# pinned: pnpm 11 refuses to run dependency build scripts (sharp, @nestjs/core) without approval
+RUN npm install -g pnpm@10.34.4
+
 # ffmpeg/ffprobe: Ozon video covers (ozon/video-cover)
-RUN apk add --no-cache ffmpeg && npm install -g pnpm
+RUN apk add --no-cache ffmpeg
 
 WORKDIR /app
 
