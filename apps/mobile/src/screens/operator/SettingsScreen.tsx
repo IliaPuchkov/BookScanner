@@ -14,6 +14,7 @@ import {
 } from "react-native";
 import { AppText } from '../../components/AppText';
 import { VideoCoverCard } from '../../components/VideoCoverCard';
+import { RichContentCard } from '../../components/RichContentCard';
 import { useNavigation } from "@react-navigation/native";
 import { useAuth } from "../../hooks/useAuth";
 import { adminService } from "../../services/admin.service";
@@ -977,6 +978,8 @@ export function SettingsScreen() {
             </TouchableOpacity>
 
             <VideoCoverCard />
+
+            <RichContentCard />
 
             {/* AI prompt setting */}
             <View style={styles.card}>

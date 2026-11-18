@@ -31,6 +31,7 @@ import {
 } from "@bookscanner/shared";
 import { formatDimensions } from "@bookscanner/shared";
 import { applyHashtagRules } from "../settings/hashtag-rules";
+import { OZON_ATTR_RICH_CONTENT } from "./rich-content/rich-content.builder";
 
 interface OzonAttribute {
   complex_id: number;
@@ -90,6 +91,8 @@ export interface ResolvedOzonData {
   authors?: Array<{ value: string; dictValueId?: number }>;
   /** Hashtags after the hashtag rules (`applyHashtagRules`); without it — book.hashtags, format check only */
   hashtags?: string[];
+  /** «Rich-контент JSON» (attribute 11254) from RichContentService.forPublish; null/undefined — not sent */
+  richContent?: string | null;
 }
 
 export function buildOzonImportPayload(
@@ -178,6 +181,10 @@ export function buildOzonImportPayload(
   const cleanTags = resolved.hashtags ?? applyHashtagRules(book.hashtags, []);
   if (cleanTags.length > 0) {
     attributes.push(attr(OZON_ATTR_HASHTAGS, cleanTags.join(" ")));
+  }
+
+  if (resolved.richContent) {
+    attributes.push(attr(OZON_ATTR_RICH_CONTENT, resolved.richContent));
   }
 
   const images =

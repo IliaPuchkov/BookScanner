@@ -219,6 +219,23 @@ export class OzonApiClient {
     return response.task_id;
   }
 
+  /** offer_ids (of the given, up to 1000) whose product already has a non-empty value of `attributeId`. */
+  async offerIdsWithAttribute(offerIds: string[], attributeId: number, storeId?: string): Promise<Set<string>> {
+    const credentials = storeId
+      ? await this.getCredentialsForStore(storeId)
+      : await this.getCredentials();
+    const response = await this.post<{ result: OzonProductAttributes[] }>(
+      '/v4/product/info/attributes',
+      { filter: { offer_id: offerIds, visibility: 'ALL' }, limit: offerIds.length },
+      credentials,
+    );
+    return new Set(
+      (response.result ?? [])
+        .filter((p) => p.attributes?.some((a) => a.id === attributeId && a.values?.some((v) => v.value?.trim())))
+        .map((p) => p.offer_id),
+    );
+  }
+
   async getApiKeyExpiry(storeId?: string): Promise<string | null> {
     const credentials = storeId
       ? await this.getCredentialsForStore(storeId)

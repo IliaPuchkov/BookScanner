@@ -159,6 +159,7 @@ Located in `apps/backend/src/database/migrations/`:
 - `1747900000000-DedupeDuplicateResolutions.ts` — prod `duplicate_resolutions` had no unique index / order check (table predates 1711200000000), so `orIgnore()` never skipped repeats (8 397 extra rows on 2026-10-18). Keeps the earliest row per pair, sorts pairs, adds `uq_dup_res_pair` + `chk_dup_res_order`; aborts if the set of pairs would change
 - `1748000000000-AddUserMustChangePassword.ts` — adds `"mustChangePassword"` (boolean, default false) to `users` (temporary password set by an admin)
 - `1748100000000-AddBookVideoCover.ts` — adds `"videoCoverUrl"`, `"videoCoverKey"`, `"videoCoverHash"` (varchar 16), `"videoCoverSyncedAt"` to `books` + partial index of covers not yet sent to Ozon
+- `1748200000000-AddBookRichContentSyncedAt.ts` — adds `"richContentSyncedAt"` to `books` + partial index of published books without it
 
 ---
 
@@ -253,6 +254,7 @@ All routes prefixed with `/api`.
 - `POST /publish-bulk` — Bulk publish books to Ozon
 - `GET /status/:bookId` — Get publication status
 - `/ozon/video-covers` (admin): `GET status`, `PUT enabled` `{ enabled }`, `GET pending?limit&after` (published books without a cover + photo URLs + `photosHash`, keyset by id), `POST :bookId` (multipart `file` + `photosHash`; 409 if the photos changed), `POST :bookId/render` (queue a server render), `POST push` (send to Ozon now)
+- `/ozon/rich-content` (admin): `GET status`, `PUT enabled` `{ enabled }`, `POST push`
 
 ### Admin (`/api/admin`)
 - `POST /users/:id/password` — `{ password? }`: set a **temporary** password for an **operator** (403 for admins); without `password` the server generates one (`generateTemporaryPassword`, 10 chars, no look-alikes) and returns `generatedPassword` once. Clears the login lock and the stored refresh token, sets `mustChangePassword`, logged as `password_reset` in `activity_logs`. `POST /users` (admin-created user) also sets `mustChangePassword`
@@ -393,6 +395,12 @@ The admin has two dedicated screens for managing books that are potential or con
 - Server: `markPublished` → BullMQ `video-cover` queue (concurrency 1, only while setting `ozon_video_cover_enabled` is on) → `render-worker.js` in a `nice -n 15` child process → S3 `videos/<bookId>/cover-<photosHash>.mp4`. `VideoCoverCron` (every 10 min) sends unsynced covers via `/v1/product/attributes/update` (only 21845, batches of 100, per publishing store, within `daily_update`). Cover columns are written with raw SQL so `books.updatedAt` doesn't change. `photosHash` = sha1 of photo URLs in display order; a different hash = outdated cover. Covers are not re-rendered automatically when photos change after publication.
 - Backfill of old books runs on a workstation: `apps/backend/scripts/video-cover-backfill.ts` (needs ffmpeg + a **separate** admin account — login replaces the account's refresh token). Resumable.
 - Docker image has `ffmpeg` (`apk add`). Mobile: Settings → «Видеообложки на Ozon» (`components/VideoCoverCard.tsx`).
+
+### Ozon rich content (`ozon/rich-content/`)
+
+- «Rich-контент JSON» = attribute **11254** (complex 0). No public schema; what passed on test card 432j_M32HOI: root `{ content, version: 0.3 }` (without `version` → `invalid_rich_content_json`), one `raShowcase` `type: "chess"` widget, rows `{ imgLink: "", img: { src, srcMobile, alt, width, height, widthMobile, heightMobile }, title: { content: [..], size: "size4", align, color: "color1" }, text: { size: "size2", align, color, content: [lines] }, reverse }`. Ozon fits the picture itself, so a 3:4 size is sent for every photo (real sizes aren't stored).
+- `buildRichContent` (unit-tested): «О книге» (annotation without `ANNOTATION_PREFIX`/links, by paragraph) + cover, «Об издании» (filled fields) + photo 2, «Состояние» + photo 3; sides alternate. Chess needs 2–6 rows: < 2 photos → `raTextBlock`s + cover full width. Full-width `roll` images per photo were rejected by the client (huge, one column).
+- Setting `ozon_rich_content_enabled` (off by default). On: `publish`/`publishBulk` add it to the import payload (`ResolvedOzonData.richContent`), `markPublished` sets `richContentSyncedAt` when the payload carried it; `RichContentCron` (every 10 min) sends it to published books without it via `/v1/product/attributes/update` (batches of 100, per publishing store, within `daily_update`), skipping products that **already have 11254 on Ozon** (hand-made content is never overwritten). Edits after publication are not re-sent. Mobile: Settings → «Rich-контент на Ozon» (`components/RichContentCard.tsx`).
 - Annotation prefix: "ВНИМАНИЕ! Книга не новая! Состояние - на фото."
 
 ### Authentication Flow

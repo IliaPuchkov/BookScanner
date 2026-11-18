@@ -19,6 +19,7 @@ import type { ResolvedOzonData } from './ozon-payload.builder';
 import { HashtagRulesService } from '../settings/hashtag-rules.service';
 import { applyHashtagRules } from '../settings/hashtag-rules';
 import { VideoCoverService } from './video-cover/video-cover.service';
+import { RichContentService } from './rich-content/rich-content.service';
 
 const IMPORTABLE_STATUSES = ['importing'];
 // Ozon's product list lags behind the import task — a miss right after import is not proof of failure
@@ -93,6 +94,7 @@ export class OzonService {
     private readonly ozonApiClient: OzonApiClient,
     private readonly hashtagRules: HashtagRulesService,
     private readonly videoCovers: VideoCoverService,
+    private readonly richContent: RichContentService,
   ) {}
 
   async publish(bookId: string, storeId?: string) {
@@ -173,11 +175,12 @@ export class OzonService {
       this.logger.warn(`Failed to check limits before publish: ${error}`);
     }
 
-    const [brand, publisher, authors, hashtags] = await Promise.all([
+    const [brand, publisher, authors, hashtags, richContent] = await Promise.all([
       resolveBrand(book.publisher, this.ozonApiClient),
       resolvePublisher(book.publisher, this.ozonApiClient),
       resolveAuthors(book.author, this.ozonApiClient),
       this.hashtagRules.apply(book.hashtags, { yearPublished: book.yearPublished }),
+      this.richContent.forPublish(book),
     ]);
 
     this.logger.log(
@@ -191,6 +194,7 @@ export class OzonService {
       resolvedPublisherName: publisher?.name,
       authors,
       hashtags,
+      richContent,
     });
 
     // Create or update OzonProduct entry
@@ -392,6 +396,10 @@ export class OzonService {
       status: BookStatus.PUBLISHED,
       publishedToOzon: new Date(),
     });
+    // its import carried rich content → the push cron has nothing to add
+    await this.richContent
+      .markSentWithImport(op.bookId, op.publishPayload)
+      .catch((err) => this.logger.warn(`Book ${op.bookId}: rich content state not saved — ${err}`));
     // live on Ozon → render its video cover in the background (no-op while the feature is off)
     this.videoCovers
       .enqueue(op.bookId)
@@ -569,6 +577,7 @@ export class OzonService {
     const validEntries: BatchEntry[] = [];
     const failed: { id: string; title?: string; error: string }[] = [];
     const hashtagRules = await this.hashtagRules.getRules();
+    const richContentOn = await this.richContent.isEnabled();
 
     for (const book of books) {
       if (book.status === BookStatus.IN_LIBRARY) {
@@ -595,6 +604,7 @@ export class OzonService {
         resolvedPublisherName: r?.publisher?.name,
         authors: r?.authors,
         hashtags: applyHashtagRules(book.hashtags, hashtagRules, { yearPublished: book.yearPublished }),
+        richContent: richContentOn ? this.richContent.build(book) : null,
       });
       validEntries.push({ book, payload, item: (payload.items as unknown[])[0] });
     }

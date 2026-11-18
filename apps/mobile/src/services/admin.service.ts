@@ -56,6 +56,13 @@ export interface VideoCoverStatus {
   queue: { waiting: number; active: number; failed: number };
 }
 
+/** Mirror of backend `ozon/rich-content/rich-content.service.ts` RichContentStatus */
+export interface RichContentStatus {
+  enabled: boolean;
+  published: number;
+  synced: number;
+}
+
 /** Mirror of backend `settings/hashtag-rules.ts` */
 export interface HashtagRule {
   id: string;
@@ -172,6 +179,17 @@ export const adminService = {
 
   async setVideoCoverEnabled(enabled: boolean): Promise<VideoCoverStatus> {
     const { data } = await api.put<VideoCoverStatus>('/ozon/video-covers/enabled', { enabled });
+    return data;
+  },
+
+  /** Ozon rich content: on/off and how many published cards have it */
+  async getRichContentStatus(): Promise<RichContentStatus> {
+    const { data } = await api.get<RichContentStatus>('/ozon/rich-content/status');
+    return data;
+  },
+
+  async setRichContentEnabled(enabled: boolean): Promise<RichContentStatus> {
+    const { data } = await api.put<RichContentStatus>('/ozon/rich-content/enabled', { enabled });
     return data;
   },
 

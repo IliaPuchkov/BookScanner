@@ -162,6 +162,10 @@ export class Book {
   @Column({ type: 'timestamp', nullable: true })
   videoCoverSyncedAt: Date | null;
 
+  /** when Ozon got this book's rich content (attribute 11254); null = not sent yet. See ozon/rich-content */
+  @Column({ type: 'timestamp', nullable: true })
+  richContentSyncedAt: Date | null;
+
   @CreateDateColumn()
   createdAt: Date;
 
