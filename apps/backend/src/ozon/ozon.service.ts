@@ -333,8 +333,10 @@ export class OzonService {
     const importing = { status: 'importing', message: 'Импорт в процессе' };
     const published = { status: 'published', message: 'Загружено в Ozon' };
 
-    // A non-zero product_id means Ozon created the product, even if the task says 'failed'
-    if (item && (item.status === 'imported' || (item.status === 'failed' && item.product_id > 0))) {
+    // A non-zero product_id means the product exists on Ozon, even if the task says 'failed'.
+    // 'skipped' = the offer_id already existed and the import changed nothing (re-publish of a live card).
+    const done = item && item.status !== 'pending';
+    if (item && (item.status === 'imported' || (done && item.product_id > 0))) {
       await this.markPublished(op, item.product_id);
       this.logger.log(`Book ${op.bookId}: imported to Ozon (task status=${item.status}), product_id=${item.product_id}`);
       return published;

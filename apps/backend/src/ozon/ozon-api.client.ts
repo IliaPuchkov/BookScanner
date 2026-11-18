@@ -21,7 +21,7 @@ export interface OzonImportResult {
 export interface OzonImportInfoItem {
   offer_id: string;
   product_id: number;
-  status: string; // 'pending' | 'imported' | 'failed'
+  status: string; // 'pending' | 'imported' | 'skipped' (already existed, no changes) | 'failed'
   errors: Array<{ code: string; message: string }>;
 }
 
