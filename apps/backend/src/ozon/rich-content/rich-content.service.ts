@@ -5,6 +5,7 @@ import { BookStatus } from '@bookscanner/shared';
 import { Book } from '../../books/entities/book.entity';
 import { SettingsService } from '../../settings/settings.service';
 import { OzonApiClient } from '../ozon-api.client';
+import { ContentScopeService } from '../content-scope.service';
 import { buildRichContent, OZON_ATTR_RICH_CONTENT, RichPhoto } from './rich-content.builder';
 
 export const RICH_CONTENT_ENABLED_KEY = 'ozon_rich_content_enabled';
@@ -48,6 +49,7 @@ export class RichContentService {
     private readonly bookRepository: Repository<Book>,
     private readonly settingsService: SettingsService,
     private readonly ozonApiClient: OzonApiClient,
+    private readonly scope: ContentScopeService,
   ) {}
 
   isEnabled(): Promise<boolean> {
@@ -73,9 +75,14 @@ export class RichContentService {
     return buildRichContent(book, photos);
   }
 
-  /** JSON for attribute 11254, or null while the feature is off. Used by publish. */
-  async forPublish(book: Book): Promise<string | null> {
-    return (await this.isEnabled()) ? this.build(book) : null;
+  /** Feature on and the store (empty = active store) in the content scope? */
+  async enabledFor(storeId: string | null | undefined): Promise<boolean> {
+    return (await this.isEnabled()) && (await this.scope.allows(storeId));
+  }
+
+  /** JSON for attribute 11254, or null while the feature is off / the store is out of scope. Used by publish. */
+  async forPublish(book: Book, storeId: string | null | undefined): Promise<string | null> {
+    return (await this.enabledFor(storeId)) ? this.build(book) : null;
   }
 
   /** After a book went live: if its import already carried rich content, nothing is left to send. */
@@ -106,13 +113,15 @@ export class RichContentService {
     let sent = 0;
     let failed = 0;
     try {
+      const params: unknown[] = [BookStatus.PUBLISHED, PUSH_SCAN_LIMIT];
+      const inScope = ContentScopeService.sql(await this.scope.get(), params);
       const books: BookRow[] = await this.bookRepository.query(
         `SELECT b.id, b.sku, b.title, b.author, b.publisher, b."yearPublished", b."coverType", b."paperType",
                 b."pageCount", b."printRun", b.language, b.isbn, b.condition, b.annotation, op."storeId" AS "storeId"
            FROM books b LEFT JOIN ozon_products op ON op.book_id = b.id
-          WHERE b.status = $1 AND b."richContentSyncedAt" IS NULL
+          WHERE b.status = $1 AND b."richContentSyncedAt" IS NULL ${inScope}
           ORDER BY b.id LIMIT $2`,
-        [BookStatus.PUBLISHED, PUSH_SCAN_LIMIT],
+        params,
       );
       if (!books.length) return { sent, failed };
 

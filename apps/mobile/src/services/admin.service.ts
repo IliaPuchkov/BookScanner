@@ -56,6 +56,13 @@ export interface VideoCoverStatus {
   queue: { waiting: number; active: number; failed: number };
 }
 
+/** Mirror of backend `ozon/content-scope.controller.ts` */
+export interface ContentScope {
+  /** [] = every store */
+  storeIds: string[];
+  stores: Array<{ id: string; name: string }>;
+}
+
 /** Mirror of backend `ozon/rich-content/rich-content.service.ts` RichContentStatus */
 export interface RichContentStatus {
   enabled: boolean;
@@ -179,6 +186,17 @@ export const adminService = {
 
   async setVideoCoverEnabled(enabled: boolean): Promise<VideoCoverStatus> {
     const { data } = await api.put<VideoCoverStatus>('/ozon/video-covers/enabled', { enabled });
+    return data;
+  },
+
+  /** Stores where video covers and rich content may be sent ([] = all) */
+  async getContentScope(): Promise<ContentScope> {
+    const { data } = await api.get<ContentScope>('/ozon/content-scope');
+    return data;
+  },
+
+  async setContentScope(storeIds: string[]): Promise<ContentScope> {
+    const { data } = await api.put<ContentScope>('/ozon/content-scope', { storeIds });
     return data;
   },
 

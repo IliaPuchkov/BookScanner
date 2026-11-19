@@ -14,6 +14,7 @@ import {
 } from "react-native";
 import { AppText } from '../../components/AppText';
 import { VideoCoverCard } from '../../components/VideoCoverCard';
+import { ContentStoresCard } from '../../components/ContentStoresCard';
 import { RichContentCard } from '../../components/RichContentCard';
 import { useNavigation } from "@react-navigation/native";
 import { useAuth } from "../../hooks/useAuth";
@@ -976,6 +977,8 @@ export function SettingsScreen() {
                 <AppText style={{ fontSize: 20, color: "#1976D2" }}>›</AppText>
               </View>
             </TouchableOpacity>
+
+            <ContentStoresCard />
 
             <VideoCoverCard />
 

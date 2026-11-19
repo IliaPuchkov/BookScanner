@@ -21,6 +21,7 @@ import { BookPhoto } from '../../photos/entities/book-photo.entity';
 import { IStorageProvider, STORAGE_PROVIDER } from '../../photos/storage/storage.interface';
 import { SettingsService } from '../../settings/settings.service';
 import { OzonApiClient } from '../ozon-api.client';
+import { ContentScopeService } from '../content-scope.service';
 import { VIDEO_COVER } from './render-video-cover';
 import { VIDEO_COVER_JOBS, VIDEO_COVER_QUEUE } from './video-cover.constants';
 
@@ -83,6 +84,7 @@ export class VideoCoverService {
     private readonly storage: IStorageProvider,
     private readonly settingsService: SettingsService,
     private readonly ozonApiClient: OzonApiClient,
+    private readonly scope: ContentScopeService,
   ) {}
 
   isEnabled(): Promise<boolean> {
@@ -104,7 +106,11 @@ export class VideoCoverService {
    * feature is on) and by the admin «пересобрать» endpoint (`force`).
    */
   async enqueue(bookId: string, force = false): Promise<boolean> {
-    if (!force && !(await this.isEnabled())) return false;
+    if (!force) {
+      if (!(await this.isEnabled())) return false;
+      const [op] = await this.bookRepository.query(`SELECT "storeId" FROM ozon_products WHERE book_id = $1`, [bookId]);
+      if (!(await this.scope.allows(op?.storeId))) return false;
+    }
     await this.queue.add(
       VIDEO_COVER_JOBS.RENDER,
       { bookId, force },
@@ -161,6 +167,10 @@ export class VideoCoverService {
     if (book.status !== BookStatus.PUBLISHED) {
       throw new ConflictException('Книга не опубликована на Ozon');
     }
+    const [op] = await this.bookRepository.query(`SELECT "storeId" FROM ozon_products WHERE book_id = $1`, [bookId]);
+    if (!(await this.scope.allows(op?.storeId))) {
+      throw new ConflictException('Магазин книги не входит в список магазинов для видеообложек');
+    }
     const photos = await this.photoRepository.find({ where: { bookId }, order: { sortOrder: 'ASC' } });
     if (photosHash(photos) !== hash) {
       throw new ConflictException('Фото книги изменились — соберите видеообложку заново');
@@ -177,24 +187,28 @@ export class VideoCoverService {
    */
   async listPending(limit: number, after?: string) {
     const take = Math.min(Math.max(limit || 50, 1), 200);
+    const scope = await this.scope.get();
+    // only books of the stores in the content scope
+    const countParams: unknown[] = [BookStatus.PUBLISHED];
+    const where = `b.status = $1 AND b."videoCoverUrl" IS NULL
+          AND EXISTS (SELECT 1 FROM book_photos p WHERE p.book_id = b.id)`;
+    const [{ count }] = await this.bookRepository.query(
+      `SELECT count(*)::int AS count FROM books b LEFT JOIN ozon_products op ON op.book_id = b.id
+        WHERE ${where} ${ContentScopeService.sql(scope, countParams)}`,
+      countParams,
+    );
     const params: unknown[] = [BookStatus.PUBLISHED, take];
+    const inScope = ContentScopeService.sql(scope, params);
     let cursor = '';
     if (after) {
       params.push(after);
-      cursor = 'AND b.id > $3';
+      cursor = `AND b.id > $${params.length}`;
     }
     const books: Array<{ id: string; sku: string }> = await this.bookRepository.query(
-      `SELECT b.id, b.sku FROM books b
-        WHERE b.status = $1 AND b."videoCoverUrl" IS NULL ${cursor}
-          AND EXISTS (SELECT 1 FROM book_photos p WHERE p.book_id = b.id)
+      `SELECT b.id, b.sku FROM books b LEFT JOIN ozon_products op ON op.book_id = b.id
+        WHERE ${where} ${inScope} ${cursor}
         ORDER BY b.id LIMIT $2`,
       params,
-    );
-    const [{ count }] = await this.bookRepository.query(
-      `SELECT count(*)::int AS count FROM books b
-        WHERE b.status = $1 AND b."videoCoverUrl" IS NULL
-          AND EXISTS (SELECT 1 FROM book_photos p WHERE p.book_id = b.id)`,
-      [BookStatus.PUBLISHED],
     );
     if (!books.length) return { remaining: count, items: [] };
 
@@ -251,13 +265,15 @@ export class VideoCoverService {
     let sent = 0;
     let failed = 0;
     try {
+      const params: unknown[] = [BookStatus.PUBLISHED, PUSH_SCAN_LIMIT];
+      const inScope = ContentScopeService.sql(await this.scope.get(), params);
       const rows: Array<{ id: string; sku: string; url: string; storeId: string | null }> =
         await this.bookRepository.query(
           `SELECT b.id, b.sku, b."videoCoverUrl" AS url, op."storeId" AS "storeId"
              FROM books b LEFT JOIN ozon_products op ON op.book_id = b.id
-            WHERE b."videoCoverUrl" IS NOT NULL AND b."videoCoverSyncedAt" IS NULL AND b.status = $1
+            WHERE b."videoCoverUrl" IS NOT NULL AND b."videoCoverSyncedAt" IS NULL AND b.status = $1 ${inScope}
             ORDER BY b.id LIMIT $2`,
-          [BookStatus.PUBLISHED, PUSH_SCAN_LIMIT],
+          params,
         );
       if (!rows.length) return { sent, failed };
 

@@ -255,6 +255,7 @@ All routes prefixed with `/api`.
 - `GET /status/:bookId` — Get publication status
 - `/ozon/video-covers` (admin): `GET status`, `PUT enabled` `{ enabled }`, `GET pending?limit&after` (published books without a cover + photo URLs + `photosHash`, keyset by id), `POST :bookId` (multipart `file` + `photosHash`; 409 if the photos changed), `POST :bookId/render` (queue a server render), `POST push` (send to Ozon now)
 - `/ozon/rich-content` (admin): `GET status`, `PUT enabled` `{ enabled }`, `POST push`
+- `/ozon/content-scope` (admin): `GET` → `{ storeIds, stores }`, `PUT` `{ storeIds }` — stores where video covers and rich content may go (`[]` = all)
 
 ### Admin (`/api/admin`)
 - `POST /users/:id/password` — `{ password? }`: set a **temporary** password for an **operator** (403 for admins); without `password` the server generates one (`generateTemporaryPassword`, 10 chars, no look-alikes) and returns `generatedPassword` once. Clears the login lock and the stored refresh token, sets `mustChangePassword`, logged as `password_reset` in `activity_logs`. `POST /users` (admin-created user) also sets `mustChangePassword`
@@ -401,6 +402,10 @@ The admin has two dedicated screens for managing books that are potential or con
 - «Rich-контент JSON» = attribute **11254** (complex 0). No public schema; what passed on test card 432j_M32HOI: root `{ content, version: 0.3 }` (without `version` → `invalid_rich_content_json`), one `raShowcase` `type: "chess"` widget, rows `{ imgLink: "", img: { src, srcMobile, alt, width, height, widthMobile, heightMobile }, title: { content: [..], size: "size4", align, color: "color1" }, text: { size: "size2", align, color, content: [lines] }, reverse }`. Ozon fits the picture itself, so a 3:4 size is sent for every photo (real sizes aren't stored).
 - `buildRichContent` (unit-tested): «О книге» (annotation without `ANNOTATION_PREFIX`/links, by paragraph) + cover, «Об издании» (filled fields) + photo 2, «Состояние» + photo 3; sides alternate. Chess needs 2–6 rows: < 2 photos → `raTextBlock`s + cover full width. Full-width `roll` images per photo were rejected by the client (huge, one column).
 - Setting `ozon_rich_content_enabled` (off by default). On: `publish`/`publishBulk` add it to the import payload (`ResolvedOzonData.richContent`), `markPublished` sets `richContentSyncedAt` when the payload carried it; `RichContentCron` (every 10 min) sends it to published books without it via `/v1/product/attributes/update` (batches of 100, per publishing store, within `daily_update`), skipping products that **already have 11254 on Ozon** (hand-made content is never overwritten). Edits after publication are not re-sent. Mobile: Settings → «Rich-контент на Ozon» (`components/RichContentCard.tsx`).
+
+### Content scope (`ozon/content-scope.service.ts`)
+
+- Setting `ozon_content_store_ids` (JSON array, `[]` = every store): the stores where video covers and rich content may be sent — to try them on one store first (Ozon fines). Checked by `publish`/`publishBulk` (rich content), `VideoCoverService.enqueue` / `listPending` (so the backfill script only gets those books) / `acceptUpload` (409 outside), and both push crons (`ContentScopeService.sql`). A book with an empty `ozon_products.storeId` counts as the active store. Mobile: Settings → «Магазины для видеообложек и Rich-контента» (`components/ContentStoresCard.tsx`).
 - Annotation prefix: "ВНИМАНИЕ! Книга не новая! Состояние - на фото."
 
 ### Authentication Flow

@@ -180,7 +180,7 @@ export class OzonService {
       resolvePublisher(book.publisher, this.ozonApiClient),
       resolveAuthors(book.author, this.ozonApiClient),
       this.hashtagRules.apply(book.hashtags, { yearPublished: book.yearPublished }),
-      this.richContent.forPublish(book),
+      this.richContent.forPublish(book, storeId),
     ]);
 
     this.logger.log(
@@ -577,7 +577,7 @@ export class OzonService {
     const validEntries: BatchEntry[] = [];
     const failed: { id: string; title?: string; error: string }[] = [];
     const hashtagRules = await this.hashtagRules.getRules();
-    const richContentOn = await this.richContent.isEnabled();
+    const richContentOn = await this.richContent.enabledFor(storeId);
 
     for (const book of books) {
       if (book.status === BookStatus.IN_LIBRARY) {

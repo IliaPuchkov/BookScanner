@@ -10,6 +10,8 @@ import { VIDEO_COVER_QUEUE } from './video-cover/video-cover.constants';
 import { RichContentService } from './rich-content/rich-content.service';
 import { RichContentCron } from './rich-content/rich-content.cron';
 import { RichContentController } from './rich-content/rich-content.controller';
+import { ContentScopeService } from './content-scope.service';
+import { ContentScopeController } from './content-scope.controller';
 import { OzonService } from './ozon.service';
 import { OzonController } from './ozon.controller';
 import { OzonProduct } from './entities/ozon-product.entity';
@@ -30,7 +32,7 @@ import { Box } from '../boxes/entities/box.entity';
     PhotosModule,
     BullModule.registerQueue({ name: VIDEO_COVER_QUEUE }),
   ],
-  controllers: [OzonController, VideoCoverController, RichContentController],
+  controllers: [OzonController, VideoCoverController, RichContentController, ContentScopeController],
   providers: [
     OzonService,
     OzonApiClient,
@@ -41,6 +43,7 @@ import { Box } from '../boxes/entities/box.entity';
     VideoCoverCron,
     RichContentService,
     RichContentCron,
+    ContentScopeService,
   ],
   exports: [OzonService],
 })
