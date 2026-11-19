@@ -15,6 +15,7 @@ import {
   Modal,
   TouchableWithoutFeedback,
 } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 import { AppText } from '../../components/AppText';
 import {
   useRoute,
@@ -300,6 +301,8 @@ export function ProductDetailScreen() {
     null,
   );
   const [previewModalVisible, setPreviewModalVisible] = useState(false);
+  // Keys of changed DIFF_FIELDS the admin unticked — those keep the card's value.
+  const [rejectedFields, setRejectedFields] = useState<Set<string>>(new Set());
   const [stores, setStores] = useState<OzonStore[]>([]);
   const [storeLimits, setStoreLimits] = useState<
     Record<string, OzonStoreLimits | null | undefined>
@@ -594,6 +597,7 @@ export function ProductDetailScreen() {
             setReExtracting(true);
             try {
               const result = await visionService.extractPreview(book.id);
+              setRejectedFields(new Set());
               setPreviewData(result);
               setPreviewModalVisible(true);
             } catch {
@@ -607,46 +611,67 @@ export function ProductDetailScreen() {
     );
   };
 
+  const changedKeys =
+    previewData && book
+      ? DIFF_FIELDS.filter(
+          (f) => f.current(book) !== f.suggested(previewData, book),
+        ).map((f) => f.key)
+      : [];
+  const acceptedCount = changedKeys.filter((k) => !rejectedFields.has(k)).length;
+
+  const toggleField = (key: string) =>
+    setRejectedFields((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+
   const handleAcceptPreview = async () => {
     if (!book || !previewData) return;
     setSaving(true);
     try {
       const d = previewData.extractedData;
       const num = (v: unknown) => (v != null && v !== "" ? Number(v) : null);
+      const take = (key: string) => !rejectedFields.has(key);
       const dto: UpdateBookDto = {
-        ...(d.title != null && { title: d.title }),
-        ...(d.author != null && { author: d.author }),
-        ...(d.isbn != null && { isbn: String(d.isbn) }),
-        ...(d.publisher != null && { publisher: d.publisher }),
-        ...(num(d.yearPublished) != null && { yearPublished: num(d.yearPublished)! }),
-        ...(num(d.pageCount) != null && { pageCount: num(d.pageCount)! }),
-        ...(num(d.printRun) != null && { printRun: num(d.printRun)! }),
-        ...(previewData.calculatedPrice > 0 && {
+        ...(take("title") && d.title != null && { title: d.title }),
+        ...(take("author") && d.author != null && { author: d.author }),
+        ...(take("isbn") && d.isbn != null && { isbn: String(d.isbn) }),
+        ...(take("publisher") && d.publisher != null && { publisher: d.publisher }),
+        ...(take("year") && num(d.yearPublished) != null && { yearPublished: num(d.yearPublished)! }),
+        ...(take("pages") && num(d.pageCount) != null && { pageCount: num(d.pageCount)! }),
+        ...(take("printRun") && num(d.printRun) != null && { printRun: num(d.printRun)! }),
+        ...(take("price") && previewData.calculatedPrice > 0 && {
           price: previewData.calculatedPrice,
         }),
-        ...(num(d.weightGross) != null && { weightGross: num(d.weightGross)! }),
-        ...(d.width != null && {
+        ...(take("weight") && num(d.weightGross) != null && { weightGross: num(d.weightGross)! }),
+        ...(take("dimensions") && d.width != null && {
           dimensions: {
             width: num(d.width) ?? 0,
             height: num(d.height) ?? DEFAULT_THICKNESS_MM,
             depth: num(d.depth) ?? DEFAULT_THICKNESS_MM,
           },
         }),
-        annotation: d.annotation
-          ? ANNOTATION_PREFIX_MOBILE + d.annotation
-          : DEFAULT_ANNOTATION,
-        ...(d.hashtags?.length && { hashtags: d.hashtags }),
-        ...(d.coverType != null && {
+        ...(take("annotation") && {
+          annotation: d.annotation
+            ? ANNOTATION_PREFIX_MOBILE + d.annotation
+            : DEFAULT_ANNOTATION,
+        }),
+        ...(take("hashtags") && d.hashtags?.length && { hashtags: d.hashtags }),
+        ...(take("cover") && d.coverType != null && {
           coverType: normalizeCoverType(d.coverType),
         }),
-        ...(d.paperType != null && {
+        ...(take("paper") && d.paperType != null && {
           paperType: normalizePaperType(d.paperType),
         }),
       };
       const updated = await booksService.updateBook(book.id, dto);
       setBook(updated);
       populateEditFields(updated);
-      setAiPrice(typeof d.price === "number" ? d.price : null);
+      if (take("aiPrice")) {
+        setAiPrice(typeof d.price === "number" ? d.price : null);
+      }
       bookEvents.emitBookUpdated(updated);
       setPreviewModalVisible(false);
       setPreviewData(null);
@@ -878,6 +903,29 @@ export function ProductDetailScreen() {
                 ))}
               </ScrollView>
             )}
+            {changedKeys.length > 0 && (
+              <View style={styles.diffToolbar}>
+                <AppText style={styles.diffHint}>
+                  Отметьте, что сохранить
+                </AppText>
+                <TouchableOpacity
+                  onPress={() =>
+                    setRejectedFields(
+                      acceptedCount === changedKeys.length
+                        ? new Set(changedKeys)
+                        : new Set(),
+                    )
+                  }
+                  hitSlop={8}
+                >
+                  <AppText style={styles.diffToggleAll}>
+                    {acceptedCount === changedKeys.length
+                      ? "Снять все"
+                      : "Выбрать все"}
+                  </AppText>
+                </TouchableOpacity>
+              </View>
+            )}
             <ScrollView
               style={styles.previewScroll}
               showsVerticalScrollIndicator={false}
@@ -888,38 +936,80 @@ export function ProductDetailScreen() {
                   const cur = field.current(book);
                   const sug = field.suggested(previewData, book);
                   const changed = cur !== sug;
+                  const accepted = changed && !rejectedFields.has(field.key);
                   const lines = field.multiline ? undefined : 3;
-                  return (
-                    <View
-                      key={field.key}
-                      style={[styles.diffRow, changed && styles.diffRowChanged]}
-                    >
-                      <AppText style={styles.diffLabel}>{field.label}</AppText>
-                      <View style={styles.diffValues}>
-                        <AppText style={styles.diffCurrent} numberOfLines={lines}>
-                          {cur || "—"}
-                        </AppText>
-                        {changed && (
-                          <>
-                            <AppText style={styles.diffArrow}> → </AppText>
-                            <AppText
-                              style={styles.diffSuggested}
-                              numberOfLines={lines}
-                            >
-                              {sug || "—"}
-                            </AppText>
-                          </>
-                        )}
+                  const content = (
+                    <>
+                      {changed && (
+                        <Ionicons
+                          name={accepted ? "checkbox" : "square-outline"}
+                          size={22}
+                          color={accepted ? "#1976D2" : "#999"}
+                          style={styles.diffCheck}
+                        />
+                      )}
+                      <View style={{ flex: 1 }}>
+                        <AppText style={styles.diffLabel}>{field.label}</AppText>
+                        <View style={styles.diffValues}>
+                          <AppText
+                            style={[
+                              styles.diffCurrent,
+                              changed && !accepted && styles.diffKept,
+                            ]}
+                            numberOfLines={lines}
+                          >
+                            {cur || "—"}
+                          </AppText>
+                          {changed && (
+                            <>
+                              <AppText style={styles.diffArrow}> → </AppText>
+                              <AppText
+                                style={[
+                                  styles.diffSuggested,
+                                  !accepted && styles.diffRejected,
+                                ]}
+                                numberOfLines={lines}
+                              >
+                                {sug || "—"}
+                              </AppText>
+                            </>
+                          )}
+                        </View>
                       </View>
-                    </View>
+                    </>
+                  );
+                  if (!changed) {
+                    return (
+                      <View key={field.key} style={styles.diffRow}>
+                        {content}
+                      </View>
+                    );
+                  }
+                  return (
+                    <TouchableOpacity
+                      key={field.key}
+                      activeOpacity={0.7}
+                      onPress={() => toggleField(field.key)}
+                      style={[
+                        styles.diffRow,
+                        accepted ? styles.diffRowChanged : styles.diffRowRejected,
+                      ]}
+                    >
+                      {content}
+                    </TouchableOpacity>
                   );
                 })}
             </ScrollView>
             <View style={[styles.previewActions, { paddingBottom: insets.bottom }]}>
               <Button
-                title="Принять"
+                title={
+                  changedKeys.length === 0 || acceptedCount === changedKeys.length
+                    ? "Принять"
+                    : `Принять (${acceptedCount} из ${changedKeys.length})`
+                }
                 onPress={handleAcceptPreview}
                 loading={saving}
+                disabled={changedKeys.length > 0 && acceptedCount === 0}
                 style={{ flex: 1, marginRight: 8 }}
               />
               <Button
@@ -1589,9 +1679,45 @@ const styles = StyleSheet.create({
     flexGrow: 0,
   },
   diffRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
     paddingVertical: 8,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: "#eee",
+  },
+  diffRowRejected: {
+    backgroundColor: "#F5F5F5",
+    borderRadius: 6,
+    paddingHorizontal: 6,
+    marginHorizontal: -6,
+  },
+  diffCheck: {
+    marginRight: 8,
+    marginTop: 2,
+  },
+  diffKept: {
+    color: "#222",
+    fontWeight: "600",
+  },
+  diffRejected: {
+    color: "#999",
+    fontWeight: "400",
+    textDecorationLine: "line-through",
+  },
+  diffToolbar: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 6,
+  },
+  diffHint: {
+    fontSize: 12,
+    color: "#888",
+  },
+  diffToggleAll: {
+    fontSize: 13,
+    color: "#1976D2",
+    fontWeight: "600",
   },
   diffRowChanged: {
     backgroundColor: "#FFF9C4",
