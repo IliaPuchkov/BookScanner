@@ -15,7 +15,8 @@ import { OcrResult } from "./entities/ocr-result.entity";
 import { BooksService } from "../books/books.service";
 import { PhotosService } from "../photos/photos.service";
 import { SettingsService } from "../settings/settings.service";
-import { HashtagRulesService } from "../settings/hashtag-rules.service";
+import { CardDefaultsService } from "../card/card-defaults.service";
+import { fillDefaults, type CardDefaultableValues } from "../card/card-defaults";
 import {
   IStorageProvider,
   STORAGE_PROVIDER,
@@ -23,13 +24,11 @@ import {
 import {
   GeminiVisionExtractor,
   DEFAULT_VISION_MODEL,
-  applyDefaults,
   isPlausibleWeight,
 } from "@bookscanner/ocr-processor";
 import {
   PaperType,
   CoverType,
-  ANNOTATION_PREFIX,
   DEFAULT_PRICE,
   DEFAULT_LOWER_PRICE,
   type IExtractionResult,
@@ -74,7 +73,7 @@ export class VisionService {
     private readonly booksService: BooksService,
     private readonly photosService: PhotosService,
     private readonly settingsService: SettingsService,
-    private readonly hashtagRules: HashtagRulesService,
+    private readonly cardDefaults: CardDefaultsService,
     private readonly configService: ConfigService,
     @Inject(STORAGE_PROVIDER)
     private readonly storage: IStorageProvider,
@@ -160,14 +159,14 @@ export class VisionService {
         fallbackModel,
       );
 
+      // 1a: the AI's answer, normalized; 1b: price formula + card defaults (marked as such)
       const calculatedPrice = await this.calculatePrice(extractedData.price ?? undefined);
-      const updatePayload = this.buildUpdatePayload(extractedData, calculatedPrice);
-      updatePayload.hashtags = await this.hashtagRules.apply(updatePayload.hashtags, {
-        yearPublished: updatePayload.yearPublished,
-      });
-
-      this.logger.log(`[${bookId}] calling updateFromExtraction`);
-      await this.booksService.updateFromExtraction(bookId, updatePayload);
+      const raw = this.buildUpdatePayload(extractedData, calculatedPrice);
+      const { values, defaulted } = fillDefaults(
+        raw as CardDefaultableValues,
+        await this.cardDefaults.get(),
+      );
+      await this.booksService.applyExtraction(bookId, { ...raw, ...values }, defaulted);
 
       ocrResult.photo01Extraction = (availablePhotos[0] ? result : null) as unknown as Record<string, unknown>;
       ocrResult.photo02Extraction = null as unknown as Record<string, unknown>;
@@ -233,13 +232,9 @@ export class VisionService {
       await this.ocrResultRepository.save(ocrResult);
 
       this.logger.log(`[${bookId}] ── extractBookDataPreview DONE`);
-      // ocr_results keeps the raw AI tags; the admin gets them after the hashtag rules
-      const year = parseInt(String(extractedData.yearPublished ?? ""), 10);
-      const hashtags = await this.hashtagRules.apply(extractedData.hashtags, {
-        yearPublished: isNaN(year) ? null : year,
-      });
+      // Raw tags: the hashtag rules belong to the Ozon payload, not to the card
       return {
-        extractedData: { ...extractedData, hashtags } as unknown as Record<string, unknown>,
+        extractedData: extractedData as unknown as Record<string, unknown>,
         calculatedPrice,
       };
     } catch (error) {
@@ -398,19 +393,14 @@ export class VisionService {
       }
     }
 
-    if (result!.weightGross != null && !isPlausibleWeight(result!.weightGross)) {
+    // No defaults here: ocr_results keeps what the AI said, only an impossible weight is dropped
+    const extractedData: IExtractionResult = { ...result! };
+    if (extractedData.weightGross != null && !isPlausibleWeight(extractedData.weightGross)) {
       this.logger.warn(
-        `[${bookId}] implausible AI weightGross=${result!.weightGross}g — replacing with default`,
+        `[${bookId}] implausible AI weightGross=${extractedData.weightGross}g — dropped`,
       );
+      extractedData.weightGross = undefined;
     }
-    const extractedData = applyDefaults(result!);
-    this.logger.log(
-      `[${bookId}] after applyDefaults: ` +
-      `title=${JSON.stringify(extractedData.title)}, ` +
-      `author=${JSON.stringify(extractedData.author)}, ` +
-      `weightGross=${extractedData.weightGross}, ` +
-      `paperType=${extractedData.paperType}`,
-    );
 
     return { result: result!, extractedData };
   }
@@ -431,13 +421,11 @@ export class VisionService {
       isbn: extractedData.isbn,
       publisher: extractedData.publisher,
       yearPublished: parseIntSafe(extractedData.yearPublished),
-      ...(extractedData.width != null && {
-        dimensions: {
-          width: extractedData.width,
-          height: extractedData.height ?? 0,
-          depth: extractedData.depth ?? 0,
-        },
-      }),
+      dimensions: {
+        width: Number(extractedData.width) || 0,
+        height: Number(extractedData.height) || 0,
+        depth: Number(extractedData.depth) || 0,
+      },
       weightGross: extractedData.weightGross,
       weightNet: extractedData.weightNet,
       paperType: normalizePaperType(extractedData.paperType),
@@ -445,9 +433,8 @@ export class VisionService {
       pageCount: parseIntSafe(extractedData.pageCount),
       printRun: parseIntSafe(extractedData.printRun),
       price: calculatedPrice,
-      annotation: extractedData.annotation
-        ? `${ANNOTATION_PREFIX}${extractedData.annotation}`
-        : ANNOTATION_PREFIX.trim(),
+      // The «book is not new» prefix is added by the Ozon payload (ozon_payload_config)
+      annotation: extractedData.annotation || undefined,
       language: extractedData.language,
       hashtags: extractedData.hashtags,
     };

@@ -28,6 +28,7 @@ import {
   DEFAULT_WEIGHT_G,
   DEFAULT_BOOK_TYPE,
   DEFAULT_DIRECTION,
+  ANNOTATION_PREFIX,
 } from "@bookscanner/shared";
 import { formatDimensions } from "@bookscanner/shared";
 import { applyHashtagRules } from "../settings/hashtag-rules";
@@ -107,7 +108,12 @@ export function buildOzonImportPayload(
     height: Math.round(raw.height || DEFAULT_LENGTH_MM), // длина
     depth: Math.round(raw.depth || DEFAULT_THICKNESS_MM), // толщина
   };
-  const annotation = (book.annotation || '')
+  // The card keeps the annotation without the «book is not new» prefix (older cards have it already)
+  const text = (book.annotation || '').trim();
+  const withPrefix = text.startsWith(ANNOTATION_PREFIX.trim().slice(0, 30))
+    ? text
+    : `${ANNOTATION_PREFIX}${text}`;
+  const annotation = withPrefix
     .replace(/(https?:\/\/\S+|www\.\S+)/gi, '')
     .replace(/\s{2,}/g, ' ')
     .trim();

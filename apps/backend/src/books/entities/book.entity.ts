@@ -181,6 +181,10 @@ export class Book {
   @Column({ type: 'timestamp', nullable: true })
   extraPhotosSyncedAt: Date | null;
 
+  /** Fields holding a card default, not a value from the AI or a person (`card/card-defaults.ts`) */
+  @Column({ type: 'text', array: true, default: () => "'{}'" })
+  defaultedFields: string[];
+
   @CreateDateColumn()
   createdAt: Date;
 

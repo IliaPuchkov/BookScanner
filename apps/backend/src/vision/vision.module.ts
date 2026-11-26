@@ -8,6 +8,7 @@ import { OcrResult } from './entities/ocr-result.entity';
 import { BooksModule } from '../books/books.module';
 import { PhotosModule } from '../photos/photos.module';
 import { SettingsModule } from '../settings/settings.module';
+import { CardModule } from '../card/card.module';
 import { VISION_QUEUE } from './vision.constants';
 
 @Module({
@@ -16,6 +17,7 @@ import { VISION_QUEUE } from './vision.constants';
     BooksModule,
     PhotosModule,
     SettingsModule,
+    CardModule,
     BullModule.registerQueue({ name: VISION_QUEUE }),
   ],
   controllers: [VisionController],

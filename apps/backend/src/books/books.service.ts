@@ -31,15 +31,15 @@ import { StatsService } from '../stats/stats.service';
 import { PhotosService } from '../photos/photos.service';
 import { SettingsService } from '../settings/settings.service';
 import { UserRole, BookStatus } from '@bookscanner/shared';
+import { DEFAULT_PRICE } from '@bookscanner/shared';
+import { CardDefaultsService } from '../card/card-defaults.service';
 import {
-  DEFAULT_HEIGHT_MM,
-  DEFAULT_WEIGHT_G,
-  DEFAULT_LANGUAGE,
-  DEFAULT_CONDITION,
-  DEFAULT_BOOK_TYPE,
-  DEFAULT_DIRECTION,
-  DEFAULT_PRICE,
-} from '@bookscanner/shared';
+  DIMENSION_AXES,
+  changedDefaultableFields,
+  fillDefaults,
+  type CardDefaultableValues,
+  type DefaultableField,
+} from '../card/card-defaults';
 
 type DuplicateRow = StateRow;
 type DuplicateRows = { list: DuplicateRow[]; byId: Map<string, DuplicateRow> };
@@ -79,24 +79,25 @@ export class BooksService {
     private readonly statsService: StatsService,
     private readonly photosService: PhotosService,
     private readonly settingsService: SettingsService,
+    private readonly cardDefaults: CardDefaultsService,
   ) {}
 
   async create(dto: CreateBookDto, userId: string): Promise<Book> {
     const box = await this.boxesService.findOne(dto.boxId);
     const sku = this.generateSku(box.boxNumber);
 
+    const { values, defaulted } = fillDefaults(
+      dto as CardDefaultableValues,
+      await this.cardDefaults.get(),
+    );
     const book = this.booksRepository.create({
       ...dto,
+      ...values,
       sku,
       createdById: userId,
-      language: dto.language || DEFAULT_LANGUAGE,
-      condition: DEFAULT_CONDITION,
-      bookType: DEFAULT_BOOK_TYPE,
-      direction: DEFAULT_DIRECTION,
       price: dto.price ?? DEFAULT_PRICE,
-      dimensions: dto.dimensions || { width: 0, height: DEFAULT_HEIGHT_MM, depth: 0 },
-      weightGross: dto.weightGross ?? DEFAULT_WEIGHT_G,
       workSessionId: dto.workSessionId || undefined,
+      defaultedFields: defaulted,
     });
 
     const saved = await this.booksRepository.save(book);
@@ -874,8 +875,68 @@ export class BooksService {
     if (dto.price !== undefined && Number(dto.price) !== Number(book.price)) {
       (clean as any).priceReviewed = true;
     }
+    // A field changed by hand is no longer a placeholder
+    const edited = new Set<string>(
+      changedDefaultableFields(book as CardDefaultableValues, dto as CardDefaultableValues),
+    );
+    if (edited.size > 0 && book.defaultedFields?.some((f) => edited.has(f))) {
+      (clean as any).defaultedFields = book.defaultedFields.filter((f) => !edited.has(f));
+    }
     Object.assign(book, clean);
     return this.booksRepository.save(book);
+  }
+
+  /**
+   * Writes the result of a vision extraction. `data` holds what the AI gave plus the defaults;
+   * `defaulted` names the fields filled from the defaults. A default never replaces a real value
+   * (the AI's or a person's) already on the card; a field the AI gave stops being a placeholder.
+   */
+  async applyExtraction(id: string, data: Partial<Book>, defaulted: DefaultableField[]): Promise<void> {
+    const book = await this.booksRepository.findOne({ where: { id } });
+    if (!book) {
+      this.logger.error(`applyExtraction: book ${id} not found`);
+      return;
+    }
+    const wasDefault = new Set(book.defaultedFields ?? []);
+    const isDefault = new Set<string>(defaulted);
+    const marks = new Set<string>();
+    const write: Record<string, unknown> = {};
+
+    for (const [key, value] of Object.entries(data)) {
+      if (value === null || value === undefined || key === 'dimensions') continue;
+      if (isDefault.has(key)) {
+        const current = (book as any)[key];
+        const hasReal = current != null && current !== '' && !wasDefault.has(key);
+        if (hasReal) continue;
+        marks.add(key);
+      }
+      write[key] = value;
+    }
+
+    if (data.dimensions) {
+      const dims = { ...(book.dimensions ?? { width: 0, height: 0, depth: 0 }) };
+      for (const axis of DIMENSION_AXES) {
+        if (isDefault.has(axis)) {
+          const current = Number(book.dimensions?.[axis] ?? 0);
+          if (current > 0 && !wasDefault.has(axis)) continue;
+          marks.add(axis);
+        }
+        dims[axis] = data.dimensions[axis];
+      }
+      write.dimensions = dims;
+    }
+
+    // Fields this extraction touched get their mark from it; the rest keep theirs
+    const touched = new Set([...Object.keys(write).filter((k) => k !== 'dimensions'),
+      ...(write.dimensions ? DIMENSION_AXES.filter((a) => !isDefault.has(a) || marks.has(a)) : [])]);
+    const kept = [...wasDefault].filter((f) => !touched.has(f));
+    write.defaultedFields = [...new Set([...kept, ...marks])];
+
+    this.logger.log(
+      `applyExtraction: writing [${Object.keys(write).join(', ')}] to book ${id}; defaults: [${[...marks].join(', ')}]`,
+    );
+    Object.assign(book, write);
+    await this.booksRepository.save(book);
   }
 
   async updateFromExtraction(id: string, data: Partial<Book>): Promise<void> {

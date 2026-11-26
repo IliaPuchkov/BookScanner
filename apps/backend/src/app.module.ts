@@ -15,6 +15,7 @@ import { AdminModule } from './admin/admin.module';
 import { ExportModule } from './export/export.module';
 import { StatsModule } from './stats/stats.module';
 import { SettingsModule } from './settings/settings.module';
+import { CardModule } from './card/card.module';
 import { WorkSessionsModule } from './work-sessions/work-sessions.module';
 import { MaintenanceModule } from './maintenance/maintenance.module';
 
@@ -56,6 +57,7 @@ import { MaintenanceModule } from './maintenance/maintenance.module';
     ExportModule,
     StatsModule,
     SettingsModule,
+    CardModule,
     WorkSessionsModule,
     MaintenanceModule,
   ],

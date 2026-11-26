@@ -7,9 +7,10 @@ import { BoxesModule } from '../boxes/boxes.module';
 import { StatsModule } from '../stats/stats.module';
 import { PhotosModule } from '../photos/photos.module';
 import { SettingsModule } from '../settings/settings.module';
+import { CardModule } from '../card/card.module';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Book]), BoxesModule, StatsModule, PhotosModule, SettingsModule],
+  imports: [TypeOrmModule.forFeature([Book]), BoxesModule, StatsModule, PhotosModule, SettingsModule, CardModule],
   controllers: [BooksController],
   providers: [BooksService],
   exports: [BooksService],
