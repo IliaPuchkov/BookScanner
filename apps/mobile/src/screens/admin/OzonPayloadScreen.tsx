@@ -27,6 +27,7 @@ import {
   type OzonPayloadConfig,
   type OzonPayloadPreview,
   configCategories,
+  withCategory,
 } from "../../services/cardPipeline.service";
 import { CategoryRuleEditor } from "../../components/OzonCategoryEditor";
 import { settingsStyles as s } from "./settingsStyles";
@@ -73,8 +74,8 @@ export function OzonPayloadScreen() {
   const load = useCallback(async () => {
     try {
       const res = await cardPipelineService.getOzonPayloadConfig();
-      applyLoaded(res.config);
-      setStandard(res.standard);
+      applyLoaded(withCategory(res.config));
+      setStandard(withCategory(res.standard));
       setDicts({ fields: res.fields, builtins: res.builtins, ops: res.ops ?? {} });
     } catch {
       Alert.alert("Ошибка", "Не удалось загрузить настройку сборки карточки");
@@ -104,7 +105,7 @@ export function OzonPayloadScreen() {
     if (!c) return;
     setSaving(true);
     try {
-      applyLoaded(await cardPipelineService.saveOzonPayloadConfig(c));
+      applyLoaded(withCategory(await cardPipelineService.saveOzonPayloadConfig(c)));
       Alert.alert("Готово", "Настройка сохранена. Новые публикации пойдут по ней.");
     } catch (e: any) {
       Alert.alert("Не сохранено", e?.response?.data?.message ?? "Не удалось сохранить");

@@ -230,3 +230,38 @@ export function configCategories(c: OzonPayloadConfig): OzonCategoryValue[] {
     return true;
   });
 }
+
+/**
+ * A config from a server older than the category row (2026-11-26) has year ranges in `categories`
+ * instead of `category` — converted the way the server does it (categoryFromLegacy), so the
+ * screen never sees a config without a category.
+ */
+export function withCategory(raw: OzonPayloadConfig): OzonPayloadConfig {
+  const c = raw as OzonPayloadConfig & {
+    categories?: Array<{ label: string; yearFrom: number | null; yearTo: number | null; descriptionCategoryId: number; typeId: number }>;
+  };
+  if (c.category?.default || !Array.isArray(c.categories) || c.categories.length === 0) return raw;
+  const rules = c.categories;
+  const value = (r: (typeof rules)[0]): OzonCategoryValue => ({
+    label: r.label,
+    descriptionCategoryId: r.descriptionCategoryId,
+    typeId: r.typeId,
+  });
+  const year = { kind: 'field' as const, field: 'yearPublished' };
+  const conditions: OzonCategoryCondition[] = [];
+  let fallback = rules[0];
+  for (const r of rules) {
+    const checks: OzonCondCheck[] = [];
+    if (r.yearFrom != null) checks.push({ operand: year, op: 'gte', value: String(r.yearFrom) });
+    if (r.yearTo != null) checks.push({ operand: year, op: 'lte', value: String(r.yearTo) });
+    if (checks.length === 0) {
+      fallback = r;
+      break;
+    }
+    conditions.push({ checks, category: value(r) });
+  }
+  const zero = rules.find((r) => (r.yearFrom == null || r.yearFrom <= 0) && (r.yearTo == null || r.yearTo >= 0));
+  if (zero && zero !== fallback) conditions.unshift({ checks: [{ operand: year, op: 'empty' }], category: value(zero) });
+  const { categories: _old, ...rest } = c;
+  return { ...rest, category: { default: value(fallback), ...(conditions.length ? { conditions } : {}) } };
+}
