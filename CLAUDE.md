@@ -289,7 +289,7 @@ All routes prefixed with `/api`.
 - `GET /count?from&to&dateField` — books in the period
 - `POST /` `{ from?, to?, dateField, fields[], sheets[], tzOffset }` — builds the xlsx (exceljs `WorkbookWriter` into a temp file, 1 000 books per query), stores it at `exports/<uuid>.xlsx` (S3 or local) and returns the saved export. `dateField` = created/published/updated, period `[from, to)`; dates shifted to the phone's wall clock (`tzOffset` = `getTimezoneOffset()`). Sheets `operators`/`stores`/`days` are totals over the same rows (`export-summary.ts`). Logged as `excel_export`
 - `GET /files`, `GET /files/:id` (the xlsx), `DELETE /files/:id` — **only the admin's own** exports (`export_files.userId`; another admin's id answers 404). Kept `EXPORT_TTL_DAYS` = 14; `ExportFilesService.cleanupExpired` (hourly) deletes the file and the row. `userId` is SET NULL on user deletion so the cron still cleans up. Storage keys are never sent to the client
-- Mobile: Settings → «Выгрузка в Excel» (`screens/admin/ExportScreen.tsx`, choice kept in AsyncStorage `export.prefs`, list «Мои выгрузки»); downloaded with `expo-file-system/legacy`, Android saves to a folder via SAF, iOS opens the share sheet
+- Mobile: Settings → «Выгрузка в Excel» (`screens/admin/ExportScreen.tsx`, choice kept in AsyncStorage `export.prefs`, list «Мои выгрузки»); «Сформировать выгрузку» only builds the file, it is downloaded by its button in the list, with `expo-file-system/legacy`, Android saves to a folder via SAF, iOS opens the share sheet
 
 ### Settings (`/api/settings`)
 - `GET /` — Get all system settings (includes Ozon store configs)

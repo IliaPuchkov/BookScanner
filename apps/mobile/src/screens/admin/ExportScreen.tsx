@@ -151,6 +151,7 @@ export function ExportScreen() {
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const undoable = useUndoable();
   const ready = useRef(false);
+  const scrollRef = useRef<ScrollView>(null);
 
   const loadFiles = useCallback(async () => {
     try {
@@ -311,23 +312,20 @@ export function ExportScreen() {
       file = await exportService.create({ ...period, fields: orderedFields, sheets: orderedSheets });
       setFiles((prev) => [file, ...(prev ?? []).filter((f) => f.id !== file.id)]);
     } catch (e: any) {
-      setBusy(false);
       Alert.alert(
         "Не удалось выгрузить",
         e?.response?.data?.message ?? e?.message ?? "Попробуйте ещё раз",
       );
       return;
-    }
-    try {
-      await deliver(file);
-    } catch (e: any) {
-      Alert.alert(
-        "Файл сохранён на сервере",
-        `Скачать сейчас не получилось (${e?.message ?? "ошибка"}). Он есть в «Мои выгрузки» ниже.`,
-      );
     } finally {
       setBusy(false);
     }
+    // the file is only downloaded by its button in «Мои выгрузки»; scroll there so it's visible
+    scrollRef.current?.scrollToEnd({ animated: true });
+    Alert.alert(
+      "Выгрузка готова",
+      `${file.bookCount.toLocaleString("ru-RU")} карт. Файл в «Мои выгрузки» — скачайте его кнопкой со стрелкой.`,
+    );
   };
 
   const handleDownload = async (file: ExportFileInfo) => {
@@ -391,7 +389,7 @@ export function ExportScreen() {
 
   return (
     <View style={styles.flex}>
-      <ScrollView contentContainerStyle={styles.container}>
+      <ScrollView ref={scrollRef} contentContainerStyle={styles.container}>
         {/* Period */}
         <View style={styles.card}>
           <AppText style={styles.sectionTitle}>Период</AppText>
@@ -583,16 +581,16 @@ export function ExportScreen() {
             <ActivityIndicator color="#fff" />
           ) : (
             <>
-              <Ionicons name="download-outline" size={20} color="#fff" />
+              <Ionicons name="document-text-outline" size={20} color="#fff" />
               <AppText style={styles.exportBtnText}>
-                {count === 0 ? "Нет карточек за период" : "Выгрузить в Excel"}
+                {count === 0 ? "Нет карточек за период" : "Сформировать выгрузку"}
               </AppText>
             </>
           )}
         </TouchableOpacity>
         {busy && (
           <AppText style={styles.footerHint}>
-            Готовим файл и сохраняем на сервере, на больших периодах это до минуты…
+            Готовим файл на сервере, на больших периодах это до минуты…
           </AppText>
         )}
       </View>
