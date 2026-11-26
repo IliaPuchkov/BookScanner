@@ -36,6 +36,11 @@ import type { AdminCardCreationParamList } from "../../navigation/AdminNavigator
 import { formatPrice, formatDate, formatPrintRun, libraryLabel, isParkedCopy, PARKED_COPY_LABEL } from "../../utils/format";
 import { bookEvents } from "../../utils/bookEvents";
 import { useUndoable } from "../../context/UndoContext";
+import {
+  cardPipelineService,
+  DEFAULTED_FIELD_LABELS,
+  type OzonPayloadPreview,
+} from "../../services/cardPipeline.service";
 
 type Route = RouteProp<AdminCardCreationParamList, "ProductDetail">;
 type Nav = NativeStackNavigationProp<
@@ -64,11 +69,6 @@ function normalizePaperType(
   if (v.includes("матов")) return PaperType.MATTE;
   return PaperType.OFFSET;
 }
-
-// Mirrored from @bookscanner/shared ANNOTATION_PREFIX
-const ANNOTATION_PREFIX_MOBILE =
-  "ВНИМАНИЕ! Книга не новая! Состояние - на фото.\n\nПри необходимости мы можем добавить больше фотографий для оценки состояния экземпляра.\n\n";
-const DEFAULT_ANNOTATION = ANNOTATION_PREFIX_MOBILE.trim();
 
 interface DiffField {
   key: string;
@@ -150,11 +150,10 @@ const DIFF_FIELDS: DiffField[] = [
         : "",
     suggested: (p, b) => {
       const d = p.extractedData;
-      if (d.width != null)
-        return `${d.height ?? DEFAULT_THICKNESS_MM}×${d.width}×${d.depth ?? DEFAULT_THICKNESS_MM}`;
-      return b.dimensions
-        ? `${b.dimensions.height}×${b.dimensions.width}×${b.dimensions.depth}`
-        : "";
+      const cur = b.dimensions;
+      if (d.width != null || d.height != null || d.depth != null)
+        return `${d.height ?? cur?.height ?? 0}×${d.width ?? cur?.width ?? 0}×${d.depth ?? cur?.depth ?? 0}`;
+      return cur ? `${cur.height}×${cur.width}×${cur.depth}` : "";
     },
   },
   {
@@ -173,10 +172,8 @@ const DIFF_FIELDS: DiffField[] = [
     key: "annotation",
     label: "Аннотация",
     current: (b) => b.annotation ?? "",
-    suggested: (p) =>
-      p.extractedData.annotation
-        ? ANNOTATION_PREFIX_MOBILE + p.extractedData.annotation
-        : DEFAULT_ANNOTATION,
+    // The card keeps the AI text; the «book is not new» prefix is added for Ozon
+    suggested: (p, b) => p.extractedData.annotation || (b.annotation ?? ""),
     multiline: true,
   },
   {
@@ -187,58 +184,6 @@ const DIFF_FIELDS: DiffField[] = [
     multiline: true,
   },
 ];
-
-// Ozon defaults (mirrored from @bookscanner/shared ozon.constants)
-const DEFAULT_WIDTH_MM = 100;
-const DEFAULT_LENGTH_MM = 100;
-const DEFAULT_THICKNESS_MM = 35;
-const DEFAULT_WEIGHT_G = 450;
-const DEFAULT_BOOK_TYPE = "Печатная книга";
-const DEFAULT_DIRECTION = "Проза";
-const DEFAULT_CONDITION = "Хорошая";
-
-interface OzonPreview {
-  name: string;
-  authorOnCover: string;
-  brand: string;
-  bookType: string;
-  direction: string;
-  condition: string;
-  annotation: string;
-  hashtags: string;
-  dimWidth: number;
-  dimLength: number;
-  dimThickness: number;
-  dimString: string;
-  weight: number;
-  price: number;
-  offerId: string;
-}
-
-function computeOzonPreview(book: Book): OzonPreview {
-  const raw = book.dimensions || { width: 0, height: 0, depth: 0 };
-  const dimWidth = raw.width || DEFAULT_WIDTH_MM;
-  const dimLength = raw.height || DEFAULT_LENGTH_MM;
-  const dimThickness = raw.depth || DEFAULT_THICKNESS_MM;
-
-  return {
-    name: book.title,
-    authorOnCover: book.author || "Не указан",
-    brand: book.publisher || "Нет бренда",
-    bookType: book.bookType || DEFAULT_BOOK_TYPE,
-    direction: book.direction || DEFAULT_DIRECTION,
-    condition: book.condition || DEFAULT_CONDITION,
-    annotation: book.annotation || "",
-    hashtags: (book.hashtags || []).join(" "),
-    dimWidth,
-    dimLength,
-    dimThickness,
-    dimString: `${dimLength}x${dimWidth}x${dimThickness} мм`,
-    weight: book.weightGross || DEFAULT_WEIGHT_G,
-    price: book.price || 0,
-    offerId: book.sku,
-  };
-}
 
 const STATUS_CONFIG: Record<
   string,
@@ -301,6 +246,8 @@ export function ProductDetailScreen() {
     null,
   );
   const [previewModalVisible, setPreviewModalVisible] = useState(false);
+  const [ozonPreview, setOzonPreview] = useState<OzonPayloadPreview | null>(null);
+  const [ozonPreviewLoading, setOzonPreviewLoading] = useState(false);
   // Keys of changed DIFF_FIELDS the admin unticked — those keep the card's value.
   const [rejectedFields, setRejectedFields] = useState<Set<string>>(new Set());
   const [stores, setStores] = useState<OzonStore[]>([]);
@@ -584,6 +531,19 @@ export function ProductDetailScreen() {
     }
   };
 
+  /** What the server would send to Ozon now (payload settings + card defaults), nothing is sent */
+  const handleOzonPreview = async () => {
+    if (!book) return;
+    setOzonPreviewLoading(true);
+    try {
+      setOzonPreview(await cardPipelineService.previewOzonPayload({ bookId: book.id }));
+    } catch (e: any) {
+      Alert.alert("Не удалось собрать карточку Ozon", e?.response?.data?.message ?? "Попробуйте ещё раз");
+    } finally {
+      setOzonPreviewLoading(false);
+    }
+  };
+
   const handleReExtract = async () => {
     if (!book) return;
     Alert.alert(
@@ -654,18 +614,14 @@ export function ProductDetailScreen() {
           price: previewData.calculatedPrice,
         }),
         ...(take("weight") && num(d.weightGross) != null && { weightGross: num(d.weightGross)! }),
-        ...(take("dimensions") && d.width != null && {
+        ...(take("dimensions") && (d.width != null || d.height != null || d.depth != null) && {
           dimensions: {
-            width: num(d.width) ?? 0,
-            height: num(d.height) ?? DEFAULT_THICKNESS_MM,
-            depth: num(d.depth) ?? DEFAULT_THICKNESS_MM,
+            width: num(d.width) ?? book.dimensions?.width ?? 0,
+            height: num(d.height) ?? book.dimensions?.height ?? 0,
+            depth: num(d.depth) ?? book.dimensions?.depth ?? 0,
           },
         }),
-        ...(take("annotation") && {
-          annotation: d.annotation
-            ? ANNOTATION_PREFIX_MOBILE + d.annotation
-            : DEFAULT_ANNOTATION,
-        }),
+        ...(take("annotation") && d.annotation && { annotation: d.annotation }),
         ...(take("hashtags") && d.hashtags?.length && { hashtags: d.hashtags }),
         ...(take("cover") && d.coverType != null && {
           coverType: normalizeCoverType(d.coverType),
@@ -760,7 +716,9 @@ export function ProductDetailScreen() {
     );
   }
 
-  const ozon = computeOzonPreview(book);
+  const defaulted = new Set(book.defaultedFields ?? []);
+  const dflt = (...fields: string[]) => fields.some((f) => defaulted.has(f));
+  const dims = book.dimensions;
   const sortedPhotos = [...(book.photos ?? [])].sort(
     (a, b) => a.sortOrder - b.sortOrder,
   );
@@ -876,6 +834,29 @@ export function ProductDetailScreen() {
             </TouchableWithoutFeedback>
           </View>
         </TouchableWithoutFeedback>
+      </Modal>
+      <Modal
+        visible={!!ozonPreview}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setOzonPreview(null)}
+      >
+        <View style={styles.previewOverlay}>
+          <View style={styles.previewContainer}>
+            <AppText style={styles.previewTitle}>Карточка для Ozon</AppText>
+            <ScrollView style={styles.previewScroll}>
+              {ozonPreview?.warnings.map((w, i) => (
+                <AppText key={i} style={[styles.ozonWarning, w.startsWith("Ошибка") && styles.ozonError]}>
+                  ⚠ {w}
+                </AppText>
+              ))}
+              {ozonPreview?.rows.map((r) => (
+                <InfoRow key={r.id} label={r.label} value={r.value} />
+              ))}
+            </ScrollView>
+            <Button title="Закрыть" onPress={() => setOzonPreview(null)} variant="secondary" />
+          </View>
+        </View>
       </Modal>
       <Modal
         visible={previewModalVisible}
@@ -1209,9 +1190,9 @@ export function ProductDetailScreen() {
             ) : (
               <>
                 {/* Header */}
-                <AppText style={styles.title}>{ozon.name}</AppText>
+                <AppText style={styles.title}>{book.title}</AppText>
                 <View style={styles.headerMeta}>
-                  <AppText style={styles.sku}>SKU: {ozon.offerId}</AppText>
+                  <AppText style={styles.sku}>SKU: {book.sku}</AppText>
                   <View
                     style={[styles.badge, { backgroundColor: statusCfg.bg }]}
                   >
@@ -1223,54 +1204,73 @@ export function ProductDetailScreen() {
                   </View>
                 </View>
 
-                {/* Ozon card attributes */}
+                {/* Card fields; «по умолчанию» = filled from the card defaults, not by the AI or a person */}
                 <View style={styles.section}>
-                  <AppText style={styles.sectionTitle}>Карточка Озон</AppText>
-                  <InfoRow label="Название" value={ozon.name} />
-                  <InfoRow
-                    label="Автор на обложке"
-                    value={ozon.authorOnCover}
-                  />
-                  <InfoRow label="Бренд" value={ozon.brand} />
-                  <InfoRow label="Тип" value={ozon.bookType} />
-                  <InfoRow label="Направление" value={ozon.direction} />
-                  <InfoRow label="Состояние" value={ozon.condition} />
+                  <AppText style={styles.sectionTitle}>Карточка</AppText>
+                  <InfoRow label="Название" value={book.title} />
+                  <InfoRow label="Автор" value={book.author} />
                   <InfoRow label="ISBN" value={book.isbn} />
                   <InfoRow label="Издательство" value={book.publisher} />
                   <InfoRow label="Год" value={book.yearPublished?.toString()} />
-                  <InfoRow
-                    label="Тираж"
-                    value={formatPrintRun(book.printRun)}
-                  />
-                  <InfoRow label="Тип обложки" value={book.coverType} />
-                  <InfoRow label="Тип бумаги" value={book.paperType} />
+                  <InfoRow label="Тираж" value={formatPrintRun(book.printRun)} />
+                  <InfoRow label="Тип обложки" value={book.coverType} defaulted={dflt("coverType")} />
+                  <InfoRow label="Тип бумаги" value={book.paperType} defaulted={dflt("paperType")} />
                   <InfoRow label="Страниц" value={book.pageCount?.toString()} />
-                  <InfoRow label="Язык" value={book.language} />
-                  <InfoRow label="Размеры (ДxШxВ)" value={ozon.dimString} />
-                  <InfoRow label="Вес" value={`${ozon.weight} г`} />
+                  <InfoRow label="Язык" value={book.language} defaulted={dflt("language")} />
+                  <InfoRow label="Сохранность" value={book.condition} defaulted={dflt("condition")} />
+                  <InfoRow label="Тип книги" value={book.bookType} defaulted={dflt("bookType")} />
+                  <InfoRow label="Направление" value={book.direction} defaulted={dflt("direction")} />
+                  <InfoRow
+                    label="Размеры (ДxШxВ), мм"
+                    value={dims ? `${dims.height}x${dims.width}x${dims.depth}` : undefined}
+                    defaulted={dflt("width", "height", "depth")}
+                  />
+                  <InfoRow
+                    label="Вес"
+                    value={book.weightGross ? `${Math.round(Number(book.weightGross))} г` : undefined}
+                    defaulted={dflt("weightGross")}
+                  />
                   <InfoRow
                     label="Рекомендованная цена от ИИ"
                     value={aiPrice != null ? formatPrice(aiPrice) : undefined}
                   />
                   <InfoRow
                     label="Цена"
-                    value={ozon.price > 0 ? formatPrice(ozon.price) : undefined}
+                    value={book.price > 0 ? formatPrice(book.price) : undefined}
                   />
+                  {defaulted.size > 0 && (
+                    <AppText style={styles.defaultedNote}>
+                      «по умолчанию» — ИИ не определил поле, подставлено значение из настроек:{" "}
+                      {[...defaulted].map((f) => DEFAULTED_FIELD_LABELS[f] ?? f).join(", ")}
+                    </AppText>
+                  )}
+                  <TouchableOpacity
+                    style={styles.ozonPreviewBtn}
+                    onPress={handleOzonPreview}
+                    disabled={ozonPreviewLoading}
+                    activeOpacity={0.7}
+                  >
+                    {ozonPreviewLoading ? (
+                      <ActivityIndicator size="small" color="#1976D2" />
+                    ) : (
+                      <AppText style={styles.ozonPreviewBtnText}>Как уйдёт на Ozon</AppText>
+                    )}
+                  </TouchableOpacity>
                 </View>
 
-                {/* Annotation with prefix */}
+                {/* Annotation (the card's text; Ozon gets it with the prefix from the payload settings) */}
                 <View style={styles.section}>
-                  <AppText style={styles.sectionTitle}>Аннотация (Озон)</AppText>
+                  <AppText style={styles.sectionTitle}>Аннотация</AppText>
                   <View style={styles.annotationBox}>
-                    <AppText style={styles.annotationText}>{ozon.annotation}</AppText>
+                    <AppText style={styles.annotationText}>{book.annotation || "—"}</AppText>
                   </View>
                 </View>
 
-                {/* Hashtags */}
-                {ozon.hashtags.length > 0 && (
+                {/* Hashtags (as the AI gave them; the hashtag rules apply when sent to Ozon) */}
+                {(book.hashtags?.length ?? 0) > 0 && (
                   <View style={styles.section}>
                     <AppText style={styles.sectionTitle}>Хэштеги</AppText>
-                    <AppText style={styles.hashtagsText}>{ozon.hashtags}</AppText>
+                    <AppText style={styles.hashtagsText}>{book.hashtags!.join(" ")}</AppText>
                   </View>
                 )}
 
@@ -1372,12 +1372,13 @@ export function ProductDetailScreen() {
   );
 }
 
-function InfoRow({ label, value }: { label: string; value?: string }) {
+function InfoRow({ label, value, defaulted }: { label: string; value?: string; defaulted?: boolean }) {
   return (
     <View style={styles.row}>
       <AppText style={styles.rowLabel}>{label}</AppText>
       <AppText style={[styles.rowValue, !value && styles.rowValueEmpty]}>
         {value || "—"}
+        {defaulted && value ? <AppText style={styles.defaultedMark}>{"  по умолчанию"}</AppText> : null}
       </AppText>
     </View>
   );
@@ -1530,6 +1531,38 @@ const styles = StyleSheet.create({
     fontWeight: "500",
     maxWidth: "60%",
     textAlign: "right",
+  },
+  defaultedMark: {
+    fontSize: 11,
+    color: "#9E9E9E",
+    fontStyle: "italic",
+  },
+  defaultedNote: {
+    fontSize: 12,
+    color: "#9E9E9E",
+    marginTop: 8,
+  },
+  ozonPreviewBtn: {
+    marginTop: 12,
+    paddingVertical: 10,
+    borderRadius: 8,
+    borderWidth: 1.5,
+    borderColor: "#1976D2",
+    alignItems: "center",
+  },
+  ozonPreviewBtnText: {
+    color: "#1976D2",
+    fontWeight: "600",
+    fontSize: 14,
+  },
+  ozonWarning: {
+    fontSize: 13,
+    color: "#E65100",
+    marginBottom: 6,
+  },
+  ozonError: {
+    color: "#C62828",
+    fontWeight: "600",
   },
   rowValueEmpty: {
     color: "#bbb",

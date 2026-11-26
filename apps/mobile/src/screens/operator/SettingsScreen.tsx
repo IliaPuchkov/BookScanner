@@ -71,6 +71,26 @@ export function SettingsScreen() {
 
   return (
     <ScrollView style={styles.scroll} contentContainerStyle={styles.container}>
+      <SettingsSection title="Карточка">
+        <NavCard
+          title="Значения по умолчанию"
+          desc="Вес, размеры, бумага, обложка и другие поля, если ИИ их не определил. Для всех маркетплейсов."
+          onPress={() => navigation.navigate("CardDefaults")}
+        />
+
+        <NavCard
+          title="AI-промпт для распознавания"
+          desc="Промпт, который передаётся в ИИ при извлечении данных из фотографий книг."
+          onPress={() => navigation.navigate("AiPrompt")}
+        />
+
+        <NavCard
+          title="Формула расчёта цены"
+          desc="Параметры, по которым считается итоговая цена на основе цены от ИИ."
+          onPress={() => navigation.navigate("PriceFormula")}
+        />
+      </SettingsSection>
+
       <SettingsSection title="Ozon">
         <NavCard
           title="Магазины Ozon"
@@ -315,29 +335,21 @@ export function SettingsScreen() {
         </TouchableOpacity>
 
         <NavCard
-          title="Доп. контент на Ozon"
-          desc="Видеообложки, Rich-контент, доп. фото и магазины, куда они отправляются."
-          onPress={() => navigation.navigate("OzonContent")}
-        />
-      </SettingsSection>
-
-      <SettingsSection title="ИИ и карточки">
-        <NavCard
-          title="AI-промпт для распознавания"
-          desc="Промпт, который передаётся в ИИ при извлечении данных из фотографий книг."
-          onPress={() => navigation.navigate("AiPrompt")}
-        />
-
-        <NavCard
-          title="Формула расчёта цены"
-          desc="Параметры, по которым считается итоговая цена на основе цены от ИИ."
-          onPress={() => navigation.navigate("PriceFormula")}
+          title="Сборка карточки Ozon"
+          desc="Категории, атрибуты и их значения, префикс аннотации. Проверка на книге."
+          onPress={() => navigation.navigate("OzonPayload")}
         />
 
         <NavCard
           title="Правила хэштегов"
           desc="Запрещённые слова, замены и обязательные теги для хэштегов от ИИ."
           onPress={() => navigation.navigate("HashtagRules")}
+        />
+
+        <NavCard
+          title="Доп. контент на Ozon"
+          desc="Видеообложки, Rich-контент, доп. фото и магазины, куда они отправляются."
+          onPress={() => navigation.navigate("OzonContent")}
         />
       </SettingsSection>
 

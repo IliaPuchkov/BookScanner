@@ -162,6 +162,7 @@ Located in `apps/backend/src/database/migrations/`:
 - `1748200000000-AddBookRichContentSyncedAt.ts` — adds `"richContentSyncedAt"` to `books` + partial index of published books without it
 - `1748400000000-AddExportFiles.ts` — `export_files` (saved Excel exports: userId FK SET NULL, fileKey, fileName, sizeBytes, bookCount, params jsonb, createdAt, expiresAt)
 - `1748300000000-AddBookExtraPhotos.ts` — adds `"extraPhotosUrls"` (jsonb), `"extraPhotosHash"` (varchar 16), `"extraPhotosSyncedAt"` to `books` + partial index of published books without them
+- `1748500000000-AddBookDefaultedFields.ts` — adds `"defaultedFields"` (text[], default `'{}'`) to `books`: which fields hold a card default (see «Card pipeline»)
 
 ---
 
@@ -291,6 +292,10 @@ All routes prefixed with `/api`.
 - `GET /files`, `GET /files/:id` (the xlsx), `DELETE /files/:id` — **only the admin's own** exports (`export_files.userId`; another admin's id answers 404). Kept `EXPORT_TTL_DAYS` = 14; `ExportFilesService.cleanupExpired` (hourly) deletes the file and the row. `userId` is SET NULL on user deletion so the cron still cleans up. Storage keys are never sent to the client
 - Mobile: Settings → «Выгрузка в Excel» (`screens/admin/ExportScreen.tsx`, choice kept in AsyncStorage `export.prefs`, list «Мои выгрузки»); «Сформировать выгрузку» only builds the file, it is downloaded by its button in the list, with `expo-file-system/legacy`, Android saves to a folder via SAF, iOS opens the share sheet
 
+### Card pipeline (`/api/admin/settings/card-defaults`, `/api/ozon/payload-config`, admin)
+- `GET` / `PUT /admin/settings/card-defaults` → `{ defaults, standard }`; `GET …/apply` → `{ count }`, `POST …/apply` → `{ updated }`
+- `GET /ozon/payload-config` → `{ config, standard, fields, builtins }`; `PUT` `{ config }` (400 «Атрибут N: …»); `POST /ozon/payload-config/preview { bookId? | sku?, config? }` → `{ payload, rows, warnings, defaultedFields, sku, title }` (nothing is sent)
+
 ### Settings (`/api/settings`)
 - `GET /` — Get all system settings (includes Ozon store configs)
 - `PUT /` or `POST /` — Upsert setting
@@ -320,7 +325,7 @@ All routes prefixed with `/api`.
 1. Photos uploaded via `POST /api/photos/upload` or `POST /api/books/create-with-photos`
 2. Vision extraction queued via BullMQ (`POST /api/vision/extract` or `/extract-bulk`)
 3. `vision.processor.ts` processes jobs using `@bookscanner/ocr-processor` (Gemini Vision)
-4. Results stored in `ocr_results` table, book fields auto-populated
+4. Results stored in `ocr_results` table (`extractedData` = the normalized AI answer, no defaults), book fields auto-populated via `BooksService.applyExtraction` (see «Card pipeline»)
 5. Operator reviews extracted data in `CardDetail` screen and corrects if needed
 
 AI calls go to Polza.AI (`google/gemini-2.5-flash-lite`, served from Google AI Studio's "flex" tier → 429/503 happen). Retries live only in `runAiWithRetry` (SDK `maxRetries: 0`), driven by `vision/ai-retry.ts` (unit-tested): 408/429/5xx/network/empty JSON and 400 "…when fetching image" are retried with 1-2-4-8 s or `Retry-After`; other 4xx are not. Budget: preview 5 attempts, no new one after 80 s (the app waits 120 s; ≤ 1.14.0 waits 60 s), queue 6 / 150 s. **Fallback model** = setting `vision_ai_fallback_model` (code default `qwen/qwen3-vl-235b-a22b-instruct`; prod uses `openai/gpt-6-luna` — 12–14 s vs Qwen's 53 s, ~0.5 ₽ vs Gemini's 0.05 ₽ per request; `openai/*` get `reasoning_effort: "none"`; `""` = off): used at once when the model aborts the answer (503 "Провайдер прервал генерацию" — book-specific, e.g. 619_KNLU0W failed 6/6), after 2 overloads, or a `Retry-After` > 5 s. When attempts run out the error is an `HttpException` with a Russian text (shown by ProductDetail, saved to `ocr_results.errorMessage`).
@@ -330,8 +335,23 @@ AI calls go to Polza.AI (`google/gemini-2.5-flash-lite`, served from Google AI S
 - One JSON setting `hashtag_rules` (`settings/hashtag-rules.ts`, unit-tested; `HashtagRulesService`). Until the admin saves, `DEFAULT_HASHTAG_RULES` = the old hard-coded forbidden fragments (полити, выбор, война, нарко, оруж, терро, экстрем, власт, идеолог).
 - Rule types: `forbid` (tag dropped if it contains the fragment; case- and ё/е-insensitive), `replace` (whole tag → another tag), `add` (mandatory tag, optional `yearFrom`/`yearTo` on `yearPublished`; a book without a year gets only unconditional ones). Each has `enabled`.
 - `applyHashtagRules`: format (`#`, spaces→`_`, ≤30 chars incl. `#`) → replace → forbid → mandatory first (not checked against forbid) → dedupe → max 30.
-- Applied in `VisionService.extractBookData` (saved to the card; `ocr_results` keeps the raw AI tags), to the preview response, and again in `OzonService.publish`/`publishBulk` (passed to the payload builder as `resolved.hashtags`). Existing cards are not rewritten.
+- Applied only when the Ozon payload is built (`OzonService.buildPayloadForBook` → `resolved.hashtags`): the card keeps the AI's tags as they came (cards made before 2026-11-26 hold already-filtered tags; applying the rules again is harmless).
 - Mobile `screens/admin/HashtagRulesScreen.tsx`: edits a local draft, «Сохранить» sends the whole list (so deleting needs no undo banner), «Проверить правила» previews the draft, «Вернуть стандартные правила».
+
+### Card pipeline (AI → card → Ozon payload)
+
+```
+AI ─► 1a normalize (VisionService.buildUpdatePayload: case of title/author, numbers, paper/cover enum, price formula)
+   ─► 1b card defaults (setting card_defaults) for empty fields, listed in books."defaultedFields"
+   ─► 2  Ozon payload (setting ozon_payload_config: categories, attribute table, annotation prefix) + hashtag rules
+```
+- `card/card-defaults.ts` (unit-tested): `CardDefaults` (weight, width/length/thickness, paper, cover, language, condition, bookType, direction), `fillDefaults` (empty or ≤ 0 = missing; returns `defaulted`), `changedDefaultableFields`. Names in `defaultedFields`: `weightGross`, `width`/`height`/`depth` (axes of `dimensions`; `height` = length), `paperType`, `coverType`, `language`, `condition`, `bookType`, `direction`.
+- Marks: `BooksService.create` fills + marks; `applyExtraction` (vision job) writes the AI fields (drops their marks) and fills only fields without a real value (a default never replaces the AI's or a person's value); `update` drops the mark of a field whose value **changed** (old apps send the whole form). Cards made before the migration have no marks — their values count as real.
+- `CardDefaultsService.apply` rewrites only marked fields of `pending_review` / `publication_failed` / `in_library` books (raw SQL per field, logged `card_defaults_apply`). Mobile: Settings → «Карточка» → «Значения по умолчанию» (`CardDefaultsScreen`) offers it after saving.
+- The card's annotation has **no** `ANNOTATION_PREFIX`; the payload adds `config.annotation.prefix` unless the text already starts with it (older cards). AI preview (`extract-preview`) returns the raw tags and annotation.
+- `ozon/payload/ozon-payload-config.ts` (unit-tested): `OzonAttrRule` = Ozon `id`, `label`, `source` (`field` of the card / `const` value + optional `dictionaryValueId` / `builtin`: brand, publisher, authors, authorCover, annotation, hashtags, richContent, dimensions), `valueMap` (whole value, case-insensitive, optional dictionary id), `skipIfEmpty`; `system` attributes (4180, 4182, 85, 8229, 23273, 22232) can't be removed or switched off. `DEFAULT_OZON_PAYLOAD_CONFIG` = the old hard-coded payload — **golden snapshots** in `ozon-payload.builder.spec.ts` (recorded from the old builder) must keep passing; change them only on purpose.
+- `ozon-payload.builder.ts` interprets the config (`buildOzonPayloadReport` → `{ payload, rows, warnings }`); item-level fields (SKU, price, weight, dimension axes) stay in code; empty fields of old cards get the card defaults there too. `OzonService.buildPayloadForBook` (shared by publish, publishBulk, preview) runs dictionary lookups only for the builtins the config uses. Broken JSON in either setting → the standard values.
+- Mobile: Settings → «Ozon» → «Сборка карточки Ozon» (`OzonPayloadScreen`: categories, general, attribute list + editor modal, «Проверить на книге» by SKU with the unsaved draft); ProductDetail shows the card with «по умолчанию» marks and «Как уйдёт на Ozon» (server preview). No defaults are mirrored in the app any more.
 
 ### Book Status Flow
 
@@ -394,7 +414,7 @@ The admin has two dedicated screens for managing books that are potential or con
 ### Ozon Integration
 
 - `ozon-api.client.ts` — raw Ozon API calls
-- `ozon-payload.builder.ts` — builds Ozon product payload from book entity
+- `ozon-payload.builder.ts` — builds the Ozon product payload from the card by `ozon_payload_config` (see «Card pipeline»)
 - `ozon-status.cron.ts` — periodic cron to check publication task statuses
 - Multiple Ozon stores configurable via `system_settings` (key pattern: `ozon_store_*`)
 - **Import task ≠ source of truth**: Ozon may report `failed` for products it created, and its product list lags behind the task. `resolveImport()` treats `product_id > 0` as published, looks the offer_id up in *all* stores before failing, never fails on a lookup error, and waits `FAILURE_GRACE_MS` (1h). `task_id` is per seller account — `getImportInfo` must use the publishing store's credentials.
@@ -475,7 +495,7 @@ Admin screens in `apps/mobile/src/screens/admin/`:
 - `DuplicatesScreen.tsx` — "На проверке: Копии": criterion picker (ISBN / автор+название / похожие названия), groups with copy sets, undecided and folded books
 - `CopiesScreen.tsx` — confirmed copies (`isCopy=true`), grouped by ISBN/title, with store name display
 
-Settings tab (`screens/operator/SettingsScreen.tsx`) is a list of navigation cards only, grouped by `SettingsSection` into «Ozon», «ИИ и карточки», «Пользователи и отчёты», «Сервер»; each setting has its own screen in `screens/admin/`: `PriceFormulaScreen`, `AiPromptScreen`, `MaintenanceScreen`, `OzonContentScreen` (content stores + video covers + rich content + extra photos), plus the older OzonStores / OzonSync / HashtagRules / Export / UserManagement. Shared look: `screens/admin/settingsStyles.ts`.
+Settings tab (`screens/operator/SettingsScreen.tsx`) is a list of navigation cards only, grouped by `SettingsSection` into «Карточка», «Ozon», «Пользователи и отчёты», «Сервер»; each setting has its own screen in `screens/admin/`: `CardDefaultsScreen`, `PriceFormulaScreen`, `AiPromptScreen`, `OzonPayloadScreen`, `MaintenanceScreen`, `OzonContentScreen` (content stores + video covers + rich content + extra photos), plus the older OzonStores / OzonSync / HashtagRules / Export / UserManagement. Shared look: `screens/admin/settingsStyles.ts`.
 
 ---
 
@@ -538,7 +558,7 @@ Build order in Dockerfile: `shared` → `ocr-processor` → `backend`
 
 1. **Photo Limits**: Max 10MB per photo, JPEG/PNG, up to 10 photos per book (`MAX_PHOTOS_PER_BOOK`, fixed — the old `max_photo_count` setting is no longer read or shown)
 2. **SKU Format**: `BoxNumber_UniqueCode` (auto-generated)
-3. **Default values if not detected**: height = 35mm, weight = 450g
+3. **Default values if not detected**: setting `card_defaults` (standard: 450 g, 100×100×35 mm, офсетная, твёрдый переплёт, Русский, Хорошая, Печатная книга, Проза), marked in `books."defaultedFields"` — see «Card pipeline»
 4. **boxNumber uniqueness**: scoped per user (not globally unique)
 5. **Admin approval**: new users require `isApproved = true` before they can use the app
 6. **Swagger docs**: available at `http://localhost:3000/api/docs` in development

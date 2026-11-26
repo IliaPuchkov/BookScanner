@@ -29,6 +29,8 @@ import { PriceFormulaScreen } from "../screens/admin/PriceFormulaScreen";
 import { AiPromptScreen } from "../screens/admin/AiPromptScreen";
 import { MaintenanceScreen } from "../screens/admin/MaintenanceScreen";
 import { OzonContentScreen } from "../screens/admin/OzonContentScreen";
+import { CardDefaultsScreen } from "../screens/admin/CardDefaultsScreen";
+import { OzonPayloadScreen } from "../screens/admin/OzonPayloadScreen";
 
 export type AdminMainStackParamList = {
   Dashboard: undefined;
@@ -278,6 +280,16 @@ function SettingsStackScreen() {
         name="OzonContent"
         component={OzonContentScreen}
         options={{ title: "Доп. контент на Ozon" }}
+      />
+      <SettingsStack.Screen
+        name="CardDefaults"
+        component={CardDefaultsScreen}
+        options={{ title: "Значения по умолчанию" }}
+      />
+      <SettingsStack.Screen
+        name="OzonPayload"
+        component={OzonPayloadScreen}
+        options={{ title: "Сборка карточки Ozon" }}
       />
     </SettingsStack.Navigator>
   );

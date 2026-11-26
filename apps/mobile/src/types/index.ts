@@ -100,6 +100,8 @@ export interface Book {
   libraryOwner?: { id: string; fullName: string } | null;
   addedToLibraryAt?: string | null;
   ocrResult?: { status: string; errorMessage?: string };
+  /** Fields holding a card default, not a value from the AI or a person (see DEFAULTED_FIELD_LABELS) */
+  defaultedFields?: string[];
   createdAt: string;
   updatedAt: string;
 }
