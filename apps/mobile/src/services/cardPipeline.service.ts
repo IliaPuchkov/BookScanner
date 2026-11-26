@@ -34,7 +34,28 @@ export const DEFAULTED_FIELD_LABELS: Record<string, string> = {
 export type OzonAttrSource =
   | { kind: 'field'; field: string }
   | { kind: 'const'; value: string; dictionaryValueId?: number | null }
+  /** a value from the attribute's Ozon dictionary */
+  | { kind: 'dictionary'; value: string; dictionaryValueId: number }
   | { kind: 'builtin'; builtin: string };
+
+/** What a matched condition does */
+export type OzonCondAction = OzonAttrSource | { kind: 'skip' };
+
+export type OzonCondOperand = { kind: 'field'; field: string } | { kind: 'attr'; attrId: number };
+
+export interface OzonCondCheck {
+  operand: OzonCondOperand;
+  /** eq, ne, lt, lte, gt, gte, contains, notContains, empty, notEmpty */
+  op: string;
+  value?: string;
+}
+
+export interface OzonAttrCondition {
+  checks: OzonCondCheck[];
+  action: OzonCondAction;
+}
+
+export const OZON_UNARY_OPS = ['empty', 'notEmpty'];
 
 export interface OzonValueMapEntry {
   from: string;
@@ -51,6 +72,8 @@ export interface OzonAttrRule {
   source: OzonAttrSource;
   valueMap?: OzonValueMapEntry[];
   skipIfEmpty: boolean;
+  /** checked top-down; the first match decides, none — the source */
+  conditions?: OzonAttrCondition[];
 }
 
 export interface OzonCategoryRule {
@@ -76,6 +99,8 @@ export interface OzonPayloadConfigResponse {
   fields: Record<string, string>;
   /** built-in logic → description */
   builtins: Record<string, string>;
+  /** condition operator → sign */
+  ops: Record<string, string>;
 }
 
 export interface OzonPayloadPreview {
@@ -83,8 +108,10 @@ export interface OzonPayloadPreview {
   sku: string;
   title: string;
   payload: { items: Array<Record<string, unknown>> };
-  rows: Array<{ id: number; label: string; value: string }>;
+  rows: Array<{ id: number; label: string; value: string; note?: string }>;
   warnings: string[];
+  /** attributes left out by a condition */
+  notes?: string[];
   defaultedFields: string[];
 }
 

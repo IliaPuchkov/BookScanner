@@ -6,7 +6,6 @@ import {
   TextInput,
   ScrollView,
   Switch,
-  Modal,
   ActivityIndicator,
   RefreshControl,
   TouchableOpacity,
@@ -14,349 +13,22 @@ import {
   Platform,
 } from "react-native";
 import { AppText } from "../../components/AppText";
-import { OzonAttributePicker, OzonValuePicker } from "../../components/OzonPickers";
+import {
+  AttributeEditor,
+  clone,
+  sourceSummary,
+  toInt,
+  type Catalog,
+  type Dicts,
+} from "../../components/OzonAttributeEditor";
 import {
   cardPipelineService,
   type OzonAttrRule,
-  type OzonAttrSource,
   type OzonCategoryRule,
   type OzonPayloadConfig,
   type OzonPayloadPreview,
-  type OzonCatalogAttribute,
 } from "../../services/cardPipeline.service";
 import { settingsStyles as s } from "./settingsStyles";
-
-type Dicts = { fields: Record<string, string>; builtins: Record<string, string> };
-
-/** Ozon's attribute catalogue, loaded on first use */
-type Catalog = { attributes: OzonCatalogAttribute[]; categories: string[] };
-
-type Picking = { kind: "attr" } | { kind: "const" } | { kind: "map"; index: number } | null;
-
-const clone = <T,>(v: T): T => JSON.parse(JSON.stringify(v));
-
-const toInt = (t: string): number | null => {
-  const n = parseInt(t.replace(/\s/g, ""), 10);
-  return Number.isNaN(n) ? null : n;
-};
-
-function sourceSummary(src: OzonAttrSource, dicts: Dicts): string {
-  if (src.kind === "field") return `Поле: ${dicts.fields[src.field] ?? src.field}`;
-  if (src.kind === "const") return `Значение: ${src.value}${src.dictionaryValueId ? ` [${src.dictionaryValueId}]` : ""}`;
-  return `Встроенное: ${dicts.builtins[src.builtin]?.split(" (")[0] ?? src.builtin}`;
-}
-
-function Segmented<T extends string>({
-  options,
-  value,
-  onChange,
-}: {
-  options: Array<{ value: T; label: string }>;
-  value: T;
-  onChange: (v: T) => void;
-}) {
-  return (
-    <View style={styles.segmented}>
-      {options.map((o) => (
-        <TouchableOpacity
-          key={o.value}
-          style={[styles.segment, o.value === value && styles.segmentActive]}
-          onPress={() => onChange(o.value)}
-          activeOpacity={0.7}
-        >
-          <AppText style={[styles.segmentText, o.value === value && styles.segmentTextActive]}>{o.label}</AppText>
-        </TouchableOpacity>
-      ))}
-    </View>
-  );
-}
-
-// ─── Attribute editor (modal) ────────────────────────────────────────────────
-
-function AttributeEditor({
-  rule,
-  isNew,
-  dicts,
-  catalog,
-  loadCatalog,
-  onDone,
-  onDelete,
-  onCancel,
-}: {
-  rule: OzonAttrRule;
-  isNew: boolean;
-  dicts: Dicts;
-  catalog: Catalog | null;
-  /** loads the catalogue (once); resolves false when Ozon could not be reached */
-  loadCatalog: () => Promise<boolean>;
-  onDone: (r: OzonAttrRule) => void;
-  onDelete: () => void;
-  onCancel: () => void;
-}) {
-  const [picking, setPicking] = useState<Picking>(null);
-  const [loadingCatalog, setLoadingCatalog] = useState(false);
-  const [r, setR] = useState<OzonAttrRule>(clone(rule));
-  const [idText, setIdText] = useState(rule.id ? String(rule.id) : "");
-  const [dictText, setDictText] = useState(
-    rule.source.kind === "const" && rule.source.dictionaryValueId ? String(rule.source.dictionaryValueId) : "",
-  );
-
-  const setKind = (kind: OzonAttrSource["kind"]) => {
-    if (kind === r.source.kind) return;
-    const source: OzonAttrSource =
-      kind === "field"
-        ? { kind, field: Object.keys(dicts.fields)[0] }
-        : kind === "const"
-          ? { kind, value: "" }
-          : { kind, builtin: Object.keys(dicts.builtins)[0] };
-    setR({ ...r, source });
-  };
-
-  const done = () => {
-    const id = toInt(idText);
-    if (!id || id <= 0) {
-      Alert.alert("Ошибка", "ID атрибута — целое число из справочника Ozon");
-      return;
-    }
-    if (!r.label.trim()) {
-      Alert.alert("Ошибка", "Укажите название");
-      return;
-    }
-    let source = r.source;
-    if (source.kind === "const") {
-      if (!source.value.trim()) {
-        Alert.alert("Ошибка", "Укажите значение");
-        return;
-      }
-      source = { ...source, dictionaryValueId: toInt(dictText) };
-    }
-    onDone({ ...r, id, label: r.label.trim(), source, valueMap: (r.valueMap ?? []).filter((m) => m.from.trim()) });
-  };
-
-  const meta = catalog?.attributes.find((a) => a.id === toInt(idText));
-  const isDictionary = !!meta && meta.dictionaryId > 0;
-
-  useEffect(() => {
-    // the catalogue tells whether the attribute has a dictionary
-    if (!catalog && idText) loadCatalog();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  const openAttributePicker = async () => {
-    if (!catalog) {
-      setLoadingCatalog(true);
-      const ok = await loadCatalog();
-      setLoadingCatalog(false);
-      if (!ok) return;
-    }
-    setPicking({ kind: "attr" });
-  };
-
-  const pickAttribute = (a: OzonCatalogAttribute) => {
-    setIdText(String(a.id));
-    if (isNew || !r.label.trim()) setR((cur) => ({ ...cur, label: a.name }));
-    setPicking(null);
-  };
-
-  const valueMap = r.valueMap ?? [];
-  const setMap = (i: number, patch: Partial<(typeof valueMap)[0]>) =>
-    setR({ ...r, valueMap: valueMap.map((m, j) => (j === i ? { ...m, ...patch } : m)) });
-
-  return (
-    <Modal visible animationType="slide" onRequestClose={onCancel}>
-      <KeyboardAvoidingView style={s.flex} behavior={Platform.OS === "ios" ? "padding" : "height"}>
-        <ScrollView contentContainerStyle={s.container} keyboardShouldPersistTaps="handled">
-          <View style={s.card}>
-            <AppText style={s.sectionTitle}>{isNew ? "Новый атрибут" : r.label}</AppText>
-            {r.system && (
-              <AppText style={s.sectionDesc}>Обязательный атрибут: его можно изменить, но не удалить и не выключить.</AppText>
-            )}
-            <AppText style={styles.fieldLabel}>Название (для себя)</AppText>
-            <TextInput style={styles.input} value={r.label} onChangeText={(label) => setR({ ...r, label })} maxLength={100} />
-            <AppText style={styles.fieldLabel}>ID атрибута Ozon</AppText>
-            <TextInput style={styles.input} value={idText} onChangeText={setIdText} keyboardType="number-pad" />
-            <TouchableOpacity style={styles.pickBtn} onPress={openAttributePicker} disabled={loadingCatalog}>
-              {loadingCatalog ? (
-                <ActivityIndicator size="small" color="#1976D2" />
-              ) : (
-                <AppText style={styles.pickBtnText}>Выбрать из списка Ozon</AppText>
-              )}
-            </TouchableOpacity>
-            {meta ? (
-              <AppText style={styles.metaLine}>
-                Ozon: {meta.name}
-                {meta.isRequired ? " · обязательный" : ""}
-                {isDictionary ? " · значения из словаря" : " · свободный текст"}
-                {meta.isCollection ? " · можно несколько" : ""}
-                {meta.categories.length < (catalog?.categories.length ?? 0) ? ` · только в: ${meta.categories.join(", ")}` : ""}
-              </AppText>
-            ) : catalog && toInt(idText) ? (
-              <AppText style={[styles.metaLine, { color: "#C62828" }]}>
-                ⚠ Такого атрибута нет в категориях из настройки — Ozon может отклонить товар
-              </AppText>
-            ) : null}
-            {meta?.complex && (
-              <AppText style={[styles.metaLine, { color: "#C62828" }]}>
-                ⚠ Это часть сложного атрибута — так его отправить нельзя
-              </AppText>
-            )}
-          </View>
-
-          <View style={s.card}>
-            <AppText style={s.sectionTitle}>Откуда значение</AppText>
-            <Segmented
-              options={[
-                { value: "field", label: "Поле карточки" },
-                { value: "const", label: "Значение" },
-                { value: "builtin", label: "Встроенное" },
-              ]}
-              value={r.source.kind}
-              onChange={setKind}
-            />
-            {r.source.kind === "field" && (
-              <View style={styles.optionList}>
-                {Object.entries(dicts.fields).map(([key, label]) => {
-                  const active = r.source.kind === "field" && r.source.field === key;
-                  return (
-                    <TouchableOpacity
-                      key={key}
-                      style={[styles.option, active && styles.optionActive]}
-                      onPress={() => setR({ ...r, source: { kind: "field", field: key } })}
-                    >
-                      <AppText style={[styles.optionText, active && styles.optionTextActive]}>{label}</AppText>
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-            )}
-            {r.source.kind === "const" && (
-              <>
-                <AppText style={styles.fieldLabel}>Значение</AppText>
-                <TextInput
-                  style={[styles.input, { minHeight: 60, textAlignVertical: "top" }]}
-                  value={r.source.value}
-                  onChangeText={(value) => setR({ ...r, source: { ...(r.source as any), kind: "const", value } })}
-                  multiline
-                />
-                <AppText style={styles.fieldLabel}>ID значения в словаре Ozon (если атрибут словарный)</AppText>
-                <TextInput style={styles.input} value={dictText} onChangeText={setDictText} keyboardType="number-pad" />
-                {isDictionary && (
-                  <TouchableOpacity style={styles.pickBtn} onPress={() => setPicking({ kind: "const" })}>
-                    <AppText style={styles.pickBtnText}>Выбрать значение из словаря Ozon</AppText>
-                  </TouchableOpacity>
-                )}
-              </>
-            )}
-            {r.source.kind === "builtin" && (
-              <View style={styles.optionList}>
-                {Object.entries(dicts.builtins).map(([key, desc]) => {
-                  const active = r.source.kind === "builtin" && r.source.builtin === key;
-                  return (
-                    <TouchableOpacity
-                      key={key}
-                      style={[styles.option, active && styles.optionActive]}
-                      onPress={() => setR({ ...r, source: { kind: "builtin", builtin: key } })}
-                    >
-                      <AppText style={[styles.optionText, active && styles.optionTextActive]}>{desc}</AppText>
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-            )}
-          </View>
-
-          <View style={s.card}>
-            <AppText style={s.sectionTitle}>Замены значений</AppText>
-            <AppText style={s.sectionDesc}>
-              Значение целиком (без учёта регистра) заменяется на другое. Например «мягкий переплет» → «Мягкая обложка».
-            </AppText>
-            {valueMap.map((m, i) => (
-              <View key={i} style={styles.mapRow}>
-                <TextInput style={[styles.input, styles.mapInput]} value={m.from} placeholder="было" onChangeText={(from) => setMap(i, { from })} />
-                <AppText style={styles.arrow}>→</AppText>
-                <TextInput style={[styles.input, styles.mapInput]} value={m.to} placeholder="стало" onChangeText={(to) => setMap(i, { to })} />
-                <TextInput
-                  style={[styles.input, styles.mapDict]}
-                  value={m.dictionaryValueId ? String(m.dictionaryValueId) : ""}
-                  placeholder="ID"
-                  keyboardType="number-pad"
-                  onChangeText={(t) => setMap(i, { dictionaryValueId: toInt(t) })}
-                />
-                {isDictionary && (
-                  <TouchableOpacity onPress={() => setPicking({ kind: "map", index: i })} hitSlop={8}>
-                    <AppText style={styles.dictIcon}>📖</AppText>
-                  </TouchableOpacity>
-                )}
-                <TouchableOpacity onPress={() => setR({ ...r, valueMap: valueMap.filter((_, j) => j !== i) })} hitSlop={8}>
-                  <AppText style={styles.remove}>✕</AppText>
-                </TouchableOpacity>
-              </View>
-            ))}
-            <TouchableOpacity onPress={() => setR({ ...r, valueMap: [...valueMap, { from: "", to: "" }] })}>
-              <AppText style={styles.link}>+ Замена</AppText>
-            </TouchableOpacity>
-          </View>
-
-          <View style={s.card}>
-            <View style={styles.switchRow}>
-              <AppText style={styles.switchLabel}>Не отправлять, если пусто</AppText>
-              <Switch value={r.skipIfEmpty} onValueChange={(skipIfEmpty) => setR({ ...r, skipIfEmpty })} />
-            </View>
-            {!r.system && (
-              <View style={styles.switchRow}>
-                <AppText style={styles.switchLabel}>Отправлять атрибут</AppText>
-                <Switch value={r.enabled} onValueChange={(enabled) => setR({ ...r, enabled })} />
-              </View>
-            )}
-          </View>
-
-          <TouchableOpacity style={s.saveBtn} onPress={done} activeOpacity={0.8}>
-            <AppText style={s.saveBtnText}>Готово</AppText>
-          </TouchableOpacity>
-          <TouchableOpacity style={s.secondaryBtn} onPress={onCancel} activeOpacity={0.8}>
-            <AppText style={s.secondaryBtnText}>Отмена</AppText>
-          </TouchableOpacity>
-          {!r.system && !isNew && (
-            <TouchableOpacity style={[s.secondaryBtn, { borderColor: "#E53935" }]} onPress={onDelete} activeOpacity={0.8}>
-              <AppText style={[s.secondaryBtnText, { color: "#E53935" }]}>Удалить атрибут</AppText>
-            </TouchableOpacity>
-          )}
-          <AppText style={styles.hint}>Изменения попадут на сервер после «Сохранить» на основном экране.</AppText>
-        </ScrollView>
-      </KeyboardAvoidingView>
-
-      {picking?.kind === "attr" && catalog && (
-        <OzonAttributePicker
-          attributes={catalog.attributes}
-          categories={catalog.categories}
-          currentId={rule.id || undefined}
-          onPick={pickAttribute}
-          onClose={() => setPicking(null)}
-        />
-      )}
-      {(picking?.kind === "const" || picking?.kind === "map") && meta && (
-        <OzonValuePicker
-          attributeId={meta.id}
-          attributeName={meta.name}
-          onClose={() => setPicking(null)}
-          onPick={(v) => {
-            if (picking.kind === "const") {
-              setR((cur) => ({ ...cur, source: { kind: "const", value: v.value, dictionaryValueId: v.id } }));
-              setDictText(String(v.id));
-            } else {
-              const i = picking.index;
-              setR((cur) => ({
-                ...cur,
-                valueMap: (cur.valueMap ?? []).map((m, j) => (j === i ? { ...m, to: v.value, dictionaryValueId: v.id } : m)),
-              }));
-            }
-            setPicking(null);
-          }}
-        />
-      )}
-    </Modal>
-  );
-}
 
 // ─── Category row ────────────────────────────────────────────────────────────
 
@@ -414,7 +86,7 @@ export function OzonPayloadScreen() {
   const [saved, setSaved] = useState<OzonPayloadConfig | null>(null);
   const [standard, setStandard] = useState<OzonPayloadConfig | null>(null);
   const [draft, setDraft] = useState<OzonPayloadConfig | null>(null);
-  const [dicts, setDicts] = useState<Dicts>({ fields: {}, builtins: {} });
+  const [dicts, setDicts] = useState<Dicts>({ fields: {}, builtins: {}, ops: {} });
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -451,7 +123,7 @@ export function OzonPayloadScreen() {
       const res = await cardPipelineService.getOzonPayloadConfig();
       applyLoaded(res.config);
       setStandard(res.standard);
-      setDicts({ fields: res.fields, builtins: res.builtins });
+      setDicts({ fields: res.fields, builtins: res.builtins, ops: res.ops ?? {} });
     } catch {
       Alert.alert("Ошибка", "Не удалось загрузить настройку сборки карточки");
     }
@@ -606,6 +278,7 @@ export function OzonPayloadScreen() {
                 </AppText>
                 <AppText style={styles.attrSource} numberOfLines={1}>
                   {sourceSummary(a.source, dicts)}
+                  {a.conditions?.length ? ` · условий: ${a.conditions.length}` : ""}
                   {a.valueMap?.length ? ` · замен: ${a.valueMap.length}` : ""}
                 </AppText>
               </View>
@@ -702,10 +375,16 @@ export function OzonPayloadScreen() {
                   ⚠ {w}
                 </AppText>
               ))}
+              {preview.notes?.map((n, i) => (
+                <AppText key={`n${i}`} style={styles.previewMeta}>
+                  ⓘ {n}
+                </AppText>
+              ))}
               {preview.rows.map((r) => (
                 <View key={r.id} style={styles.previewRow}>
                   <AppText style={styles.previewLabel}>
                     {r.label} · {r.id}
+                    {r.note ? ` · ${r.note}` : ""}
                   </AppText>
                   <AppText style={styles.previewValue} numberOfLines={4}>
                     {r.value || "—"}
@@ -732,6 +411,7 @@ export function OzonPayloadScreen() {
           rule={editing.rule}
           isNew={editing.index < 0}
           dicts={dicts}
+          allAttributes={draft.attributes}
           catalog={catalog}
           loadCatalog={loadCatalog}
           onCancel={() => setEditing(null)}

@@ -28,8 +28,21 @@ export class OzonPayloadConfigService {
       c.attributes = c.attributes.map((a) => {
         const out = { ...a, label: a.label?.trim(), system: SYSTEM_ATTR_KEYS.includes(a.key) || undefined };
         if (!out.system) delete out.system;
-        if (out.source?.kind === 'const') out.source = { ...out.source, value: out.source.value?.trim() };
+        if (out.source?.kind === 'const' || out.source?.kind === 'dictionary') {
+          out.source = { ...out.source, value: out.source.value?.trim() };
+        }
         if (out.valueMap) out.valueMap = out.valueMap.filter((m) => m.from?.trim());
+        if (Array.isArray(out.conditions)) {
+          out.conditions = out.conditions.map((c) => ({
+            ...c,
+            checks: (c.checks ?? []).map((ch) => ({ ...ch, value: ch.value?.trim() })),
+            action:
+              c.action?.kind === 'const' || c.action?.kind === 'dictionary'
+                ? { ...c.action, value: c.action.value?.trim() }
+                : c.action,
+          }));
+          if (out.conditions.length === 0) delete out.conditions;
+        }
         return out;
       });
     }

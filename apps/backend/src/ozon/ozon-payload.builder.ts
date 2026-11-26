@@ -4,7 +4,9 @@ import { applyHashtagRules } from "../settings/hashtag-rules";
 import { fillDefaults, type CardDefaults, type CardDefaultableValues } from "../card/card-defaults";
 import type {
   OzonAttrRule,
+  OzonAttrSource,
   OzonCardField,
+  OzonCondCheck,
   OzonPayloadConfig,
   OzonBuiltin,
 } from "./payload/ozon-payload-config";
@@ -41,14 +43,54 @@ export interface OzonPayloadReport {
   payload: Record<string, unknown>;
   /** Attributes left out or sent empty, for the «Проверить на книге» screen */
   warnings: string[];
-  /** The sent attributes in a readable form (label from the config) */
-  rows: Array<{ id: number; label: string; value: string }>;
+  /** The sent attributes in a readable form (label from the config); `note` — which condition decided */
+  rows: Array<{ id: number; label: string; value: string; note?: string }>;
+  /** Attributes a condition left out, and other remarks that are not problems */
+  notes: string[];
 }
 
 function value(v: string, dictId?: number | null): AttrValue {
   const out: AttrValue = { value: v };
   if (dictId) out.dictionary_value_id = dictId;
   return out;
+}
+
+const asNumber = (s: string): number | null => {
+  const t = s.trim().replace(",", ".");
+  return t !== "" && /^-?\d+(\.\d+)?$/.test(t) ? Number(t) : null;
+};
+
+/** One check of a condition against the value it looks at (several values are joined with «; »). */
+export function checkHolds(check: OzonCondCheck, actual: string | null): boolean {
+  const a = (actual ?? "").trim();
+  const b = (check.value ?? "").trim();
+  switch (check.op) {
+    case "empty":
+      return a === "";
+    case "notEmpty":
+      return a !== "";
+    case "contains":
+      return a.toLowerCase().includes(b.toLowerCase());
+    case "notContains":
+      return !a.toLowerCase().includes(b.toLowerCase());
+    case "eq":
+    case "ne": {
+      const na = asNumber(a);
+      const nb = asNumber(b);
+      const same = na != null && nb != null ? na === nb : a.toLowerCase() === b.toLowerCase();
+      return check.op === "eq" ? same : !same;
+    }
+    default: {
+      // <, ≤, >, ≥ compare numbers; an empty or non-numeric value never matches
+      const na = asNumber(a);
+      const nb = asNumber(b);
+      if (na == null || nb == null) return false;
+      if (check.op === "lt") return na < nb;
+      if (check.op === "lte") return na <= nb;
+      if (check.op === "gt") return na > nb;
+      return na >= nb;
+    }
+  }
 }
 
 function mapValue(rule: OzonAttrRule, v: AttrValue): AttrValue {
@@ -137,19 +179,46 @@ export function buildOzonPayloadReport(
 
   const attributes: OzonAttribute[] = [];
   const warnings: string[] = [];
+  const notes: string[] = [];
   const rows: OzonPayloadReport["rows"] = [];
 
-  for (const rule of config.attributes) {
-    if (!rule.enabled) continue;
-    const s = rule.source;
+  const sourceValues = (rule: OzonAttrRule, s: OzonAttrSource): AttrValue[] => {
     let values: AttrValue[];
-    if (s.kind === "const") values = [value(s.value, s.dictionaryValueId)];
+    if (s.kind === "const" || s.kind === "dictionary") values = [value(s.value, s.dictionaryValueId)];
     else if (s.kind === "builtin") values = builtinValues(s.builtin);
     else {
       const v = fieldValue(s.field);
       values = v == null ? [] : [value(v)];
     }
-    values = values.map((v) => mapValue(rule, v)).filter((v) => v.value !== "" || !rule.skipIfEmpty);
+    return values.map((v) => mapValue(rule, v));
+  };
+
+  // Pass 1: every attribute's value from its source + replacements, without conditions —
+  // what conditions of other attributes look at (no loops, the order of attributes doesn't matter)
+  const base = new Map<number, string>();
+  for (const rule of config.attributes) {
+    base.set(rule.id, sourceValues(rule, rule.source).map((v) => v.value).join("; "));
+  }
+  const operandValue = (check: OzonCondCheck): string | null =>
+    check.operand.kind === "field" ? fieldValue(check.operand.field) : (base.get(check.operand.attrId) ?? null);
+
+  // Pass 2: conditions (the first matching one wins), then what is sent
+  for (const rule of config.attributes) {
+    if (!rule.enabled) continue;
+    let values: AttrValue[] | null = null;
+    let note: string | undefined;
+    const conditions = rule.conditions ?? [];
+    const hit = conditions.findIndex((c) => c.checks.every((ch) => checkHolds(ch, operandValue(ch))));
+    if (hit >= 0) {
+      const action = conditions[hit].action;
+      if (action.kind === "skip") {
+        notes.push(`«${rule.label}» (${rule.id}) не отправлен — условие ${hit + 1}`);
+        continue;
+      }
+      values = sourceValues(rule, action);
+      note = `условие ${hit + 1}`;
+    }
+    values = (values ?? sourceValues(rule, rule.source)).filter((v) => v.value !== "" || !rule.skipIfEmpty);
 
     if (values.length === 0) {
       if (rule.skipIfEmpty) {
@@ -170,6 +239,7 @@ export function buildOzonPayloadReport(
       value: values
         .map((v) => (v.dictionary_value_id ? `${v.value} [${v.dictionary_value_id}]` : v.value))
         .join("; "),
+      ...(note && { note }),
     });
   }
 
@@ -209,6 +279,7 @@ export function buildOzonPayloadReport(
     },
     warnings,
     rows,
+    notes,
   };
 }
 

@@ -23,6 +23,7 @@ import {
   DEFAULT_OZON_PAYLOAD_CONFIG,
   OZON_BUILTINS,
   OZON_CARD_FIELDS,
+  OZON_COND_OPS,
   type OzonPayloadConfig,
 } from './ozon-payload-config';
 
@@ -80,6 +81,7 @@ export class OzonPayloadConfigController {
       standard: DEFAULT_OZON_PAYLOAD_CONFIG,
       fields: OZON_CARD_FIELDS,
       builtins: OZON_BUILTINS,
+      ops: OZON_COND_OPS,
     };
   }
 

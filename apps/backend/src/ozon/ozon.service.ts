@@ -130,11 +130,14 @@ export class OzonService {
    * publishBulk and the «Проверить на книге» preview.
    */
   async buildPayloadForBook(book: Book, ctx: PayloadContext): Promise<OzonPayloadReport> {
-    const on = new Set<OzonBuiltin>(
-      ctx.config.attributes
-        .filter((a) => a.enabled && a.source.kind === 'builtin')
-        .map((a) => (a.source as { builtin: OzonBuiltin }).builtin),
-    );
+    // builtins used by a source or by a condition's action (attributes that are off may still be
+    // looked at by conditions, but dictionary lookups are only worth it for what can be sent)
+    const on = new Set<OzonBuiltin>();
+    for (const a of ctx.config.attributes) {
+      for (const s of [a.source, ...(a.conditions ?? []).map((c) => c.action)]) {
+        if (s.kind === 'builtin') on.add(s.builtin);
+      }
+    }
     const [brand, publisher, authors, extraImages] = await Promise.all([
       on.has('brand') ? resolveBrand(book.publisher, this.ozonApiClient) : undefined,
       on.has('publisher') ? resolvePublisher(book.publisher, this.ozonApiClient) : undefined,

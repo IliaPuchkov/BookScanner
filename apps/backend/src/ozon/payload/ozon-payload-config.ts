@@ -70,7 +70,47 @@ export type OzonBuiltin = keyof typeof OZON_BUILTINS;
 export type OzonAttrSource =
   | { kind: 'field'; field: OzonCardField }
   | { kind: 'const'; value: string; dictionaryValueId?: number | null }
+  /** a value picked from the attribute's Ozon dictionary (text + its id) */
+  | { kind: 'dictionary'; value: string; dictionaryValueId: number }
   | { kind: 'builtin'; builtin: OzonBuiltin };
+
+/** What a matched condition does: take the value from a source, or leave the attribute out */
+export type OzonCondAction = OzonAttrSource | { kind: 'skip' };
+
+export const OZON_COND_OPS = {
+  eq: '=',
+  ne: '≠',
+  lt: '<',
+  lte: '≤',
+  gt: '>',
+  gte: '≥',
+  contains: 'содержит',
+  notContains: 'не содержит',
+  empty: 'пусто',
+  notEmpty: 'не пусто',
+} as const;
+export type OzonCondOp = keyof typeof OZON_COND_OPS;
+/** operators that need no value */
+export const OZON_UNARY_OPS: OzonCondOp[] = ['empty', 'notEmpty'];
+
+/**
+ * What a check looks at: a card field (after the card defaults) or another attribute's value
+ * as it would be sent — source + replacements, but before that attribute's own conditions
+ * (so attributes may depend on each other without loops and their order does not matter).
+ */
+export type OzonCondOperand = { kind: 'field'; field: OzonCardField } | { kind: 'attr'; attrId: number };
+
+export interface OzonCondCheck {
+  operand: OzonCondOperand;
+  op: OzonCondOp;
+  value?: string;
+}
+
+/** «If every check holds → action». The first matching condition of an attribute wins. */
+export interface OzonAttrCondition {
+  checks: OzonCondCheck[];
+  action: OzonCondAction;
+}
 
 export interface OzonValueMapEntry {
   from: string;
@@ -91,6 +131,8 @@ export interface OzonAttrRule {
   valueMap?: OzonValueMapEntry[];
   /** true — an empty value is not sent; false — sent as "" */
   skipIfEmpty: boolean;
+  /** checked top-down before the source; none matches — the source as usual */
+  conditions?: OzonAttrCondition[];
 }
 
 export interface OzonCategoryRule {
@@ -199,6 +241,31 @@ export const SYSTEM_ATTR_KEYS = DEFAULT_OZON_PAYLOAD_CONFIG.attributes.filter((a
 
 export const MAX_OZON_ATTRIBUTES = 80;
 const MAX_VALUE_MAP = 100;
+const MAX_CONDITIONS = 30;
+const MAX_CHECKS = 10;
+
+/** Why a source (of an attribute or of a condition's action) is invalid, or null. */
+function sourceError(s: OzonCondAction | undefined, allowSkip: boolean): string | null {
+  if (!s) return 'не указан источник';
+  switch (s.kind) {
+    case 'skip':
+      return allowSkip ? null : 'неизвестный источник';
+    case 'field':
+      return s.field in OZON_CARD_FIELDS ? null : 'неизвестное поле карточки';
+    case 'const':
+      if (typeof s.value !== 'string' || !s.value.trim()) return 'пустое значение';
+      if (s.value.length > 5000) return 'значение длиннее 5000 символов';
+      if (s.dictionaryValueId != null && !isPositiveInt(s.dictionaryValueId)) return 'ID значения словаря — целое число';
+      return null;
+    case 'dictionary':
+      if (typeof s.value !== 'string' || !s.value.trim()) return 'не выбрано значение из словаря';
+      return isPositiveInt(s.dictionaryValueId) ? null : 'нет ID значения словаря';
+    case 'builtin':
+      return s.builtin in OZON_BUILTINS ? null : 'неизвестная встроенная логика';
+    default:
+      return 'неизвестный источник';
+  }
+}
 
 function isPositiveInt(v: unknown): v is number {
   return typeof v === 'number' && Number.isInteger(v) && v > 0;
@@ -234,19 +301,8 @@ export function ozonPayloadConfigError(c: OzonPayloadConfig): string | null {
     if (ids.has(a.id)) return `${n}: ID ${a.id} уже есть в списке`;
     ids.add(a.id);
     if (!a.label?.trim() || a.label.length > 100) return `${n}: название от 1 до 100 символов`;
-    const s = a.source;
-    if (!s) return `${n}: не указан источник`;
-    if (s.kind === 'field') {
-      if (!(s.field in OZON_CARD_FIELDS)) return `${n}: неизвестное поле карточки`;
-    } else if (s.kind === 'const') {
-      if (typeof s.value !== 'string' || !s.value.trim()) return `${n}: пустое значение`;
-      if (s.value.length > 5000) return `${n}: значение длиннее 5000 символов`;
-      if (s.dictionaryValueId != null && !isPositiveInt(s.dictionaryValueId)) return `${n}: ID значения словаря — целое число`;
-    } else if (s.kind === 'builtin') {
-      if (!(s.builtin in OZON_BUILTINS)) return `${n}: неизвестная встроенная логика`;
-    } else {
-      return `${n}: неизвестный источник`;
-    }
+    const srcErr = sourceError(a.source, false);
+    if (srcErr) return `${n}: ${srcErr}`;
     if (a.valueMap) {
       if (!Array.isArray(a.valueMap) || a.valueMap.length > MAX_VALUE_MAP) return `${n}: не больше ${MAX_VALUE_MAP} замен`;
       for (const [j, m] of a.valueMap.entries()) {
@@ -255,6 +311,38 @@ export function ozonPayloadConfigError(c: OzonPayloadConfig): string | null {
       }
     }
   }
+  const attrIds = new Set(c.attributes.map((a) => a.id));
+  for (const [i, a] of c.attributes.entries()) {
+    if (a.conditions == null) continue;
+    if (!Array.isArray(a.conditions) || a.conditions.length > MAX_CONDITIONS) {
+      return `Атрибут ${i + 1}: не больше ${MAX_CONDITIONS} условий`;
+    }
+    for (const [j, cond] of a.conditions.entries()) {
+      const n = `Атрибут ${i + 1} «${a.label}», условие ${j + 1}`;
+      if (!Array.isArray(cond.checks) || cond.checks.length === 0) return `${n}: нет ни одной проверки`;
+      if (cond.checks.length > MAX_CHECKS) return `${n}: не больше ${MAX_CHECKS} проверок`;
+      for (const ch of cond.checks) {
+        const o = ch.operand;
+        if (o?.kind === 'field') {
+          if (!(o.field in OZON_CARD_FIELDS)) return `${n}: неизвестное поле карточки`;
+        } else if (o?.kind === 'attr') {
+          if (!attrIds.has(o.attrId)) return `${n}: атрибута ${o.attrId} нет в списке`;
+          if (o.attrId === a.id) return `${n}: условие не может проверять сам атрибут`;
+        } else {
+          return `${n}: не выбрано, что проверять`;
+        }
+        if (!(ch.op in OZON_COND_OPS)) return `${n}: неизвестное сравнение`;
+        if (!OZON_UNARY_OPS.includes(ch.op) && (typeof ch.value !== 'string' || !ch.value.trim())) {
+          return `${n}: не указано, с чем сравнивать`;
+        }
+        if (typeof ch.value === 'string' && ch.value.length > 500) return `${n}: значение длиннее 500 символов`;
+      }
+      const actErr = sourceError(cond.action, true);
+      if (actErr) return `${n}: ${actErr}`;
+      if (a.system && cond.action.kind === 'skip') return `${n}: обязательный атрибут нельзя не отправлять`;
+    }
+  }
+
   for (const key of SYSTEM_ATTR_KEYS) {
     const a = c.attributes.find((x) => x.key === key);
     const std = DEFAULT_OZON_PAYLOAD_CONFIG.attributes.find((x) => x.key === key)!;
