@@ -8,6 +8,22 @@ import type { OzonStoreRecord } from './dto/ozon-store.dto';
 const OZON_STORES_KEY = 'ozon_stores';
 const ACTIVE_STORE_KEY = 'active_ozon_store_id';
 
+/** One attribute of a category in Ozon's catalogue (/v1/description-category/attribute) */
+export interface OzonCategoryAttribute {
+  id: number;
+  name: string;
+  description?: string;
+  type?: string;
+  is_required?: boolean;
+  is_collection?: boolean;
+  /** 0 — free text, otherwise the value must come from the dictionary */
+  dictionary_id?: number;
+  group_name?: string;
+  /** ≠ 0 — part of a complex attribute (sent with that complex_id; the payload config sends complex 0 only) */
+  attribute_complex_id?: number;
+  max_value_count?: number;
+}
+
 export interface OzonProductLimits {
   daily_create: { limit: number; reset_at: string; usage: number };
   daily_update: { limit: number; reset_at: string; usage: number };
@@ -460,6 +476,49 @@ export class OzonApiClient {
         requestBody: body,
       };
     }
+  }
+
+  /** Attributes of a category/type from Ozon's catalogue (cached for an hour — they change rarely). */
+  async getCategoryAttributes(descriptionCategoryId: number, typeId: number): Promise<OzonCategoryAttribute[]> {
+    const key = `${descriptionCategoryId}:${typeId}`;
+    const hit = this.attrCache.get(key);
+    if (hit && Date.now() - hit.at < 60 * 60 * 1000) return hit.list;
+    const res = await this.post<{ result: OzonCategoryAttribute[] }>('/v1/description-category/attribute', {
+      description_category_id: descriptionCategoryId,
+      type_id: typeId,
+      language: 'DEFAULT',
+    });
+    const list = res.result ?? [];
+    this.attrCache.set(key, { at: Date.now(), list });
+    return list;
+  }
+
+  private readonly attrCache = new Map<string, { at: number; list: OzonCategoryAttribute[] }>();
+
+  /**
+   * Values of a dictionary attribute: a search by text (Ozon needs ≥ 2 characters) or,
+   * without a query, the first page of the dictionary.
+   */
+  async searchAttributeValues(
+    attributeId: number,
+    descriptionCategoryId: number,
+    typeId: number,
+    query: string,
+    limit = 50,
+  ): Promise<{ values: Array<{ id: number; value: string; info?: string }>; hasNext: boolean }> {
+    const base = { attribute_id: attributeId, description_category_id: descriptionCategoryId, type_id: typeId };
+    if (query.trim().length >= 2) {
+      const res = await this.post<{ result: Array<{ id: number; value: string; info?: string }> }>(
+        '/v1/description-category/attribute/values/search',
+        { ...base, value: query.trim(), limit },
+      );
+      return { values: res.result ?? [], hasNext: false };
+    }
+    const res = await this.post<{ result: Array<{ id: number; value: string; info?: string }>; has_next?: boolean }>(
+      '/v1/description-category/attribute/values',
+      { ...base, language: 'DEFAULT', last_value_id: 0, limit },
+    );
+    return { values: res.result ?? [], hasNext: !!res.has_next };
   }
 
   // Rate limiter: не более 1 запроса каждые 300ms (Ozon limit ~3 req/sec)

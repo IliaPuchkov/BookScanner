@@ -14,6 +14,7 @@ import {
   Platform,
 } from "react-native";
 import { AppText } from "../../components/AppText";
+import { OzonAttributePicker, OzonValuePicker } from "../../components/OzonPickers";
 import {
   cardPipelineService,
   type OzonAttrRule,
@@ -21,10 +22,16 @@ import {
   type OzonCategoryRule,
   type OzonPayloadConfig,
   type OzonPayloadPreview,
+  type OzonCatalogAttribute,
 } from "../../services/cardPipeline.service";
 import { settingsStyles as s } from "./settingsStyles";
 
 type Dicts = { fields: Record<string, string>; builtins: Record<string, string> };
+
+/** Ozon's attribute catalogue, loaded on first use */
+type Catalog = { attributes: OzonCatalogAttribute[]; categories: string[] };
+
+type Picking = { kind: "attr" } | { kind: "const" } | { kind: "map"; index: number } | null;
 
 const clone = <T,>(v: T): T => JSON.parse(JSON.stringify(v));
 
@@ -70,6 +77,8 @@ function AttributeEditor({
   rule,
   isNew,
   dicts,
+  catalog,
+  loadCatalog,
   onDone,
   onDelete,
   onCancel,
@@ -77,10 +86,15 @@ function AttributeEditor({
   rule: OzonAttrRule;
   isNew: boolean;
   dicts: Dicts;
+  catalog: Catalog | null;
+  /** loads the catalogue (once); resolves false when Ozon could not be reached */
+  loadCatalog: () => Promise<boolean>;
   onDone: (r: OzonAttrRule) => void;
   onDelete: () => void;
   onCancel: () => void;
 }) {
+  const [picking, setPicking] = useState<Picking>(null);
+  const [loadingCatalog, setLoadingCatalog] = useState(false);
   const [r, setR] = useState<OzonAttrRule>(clone(rule));
   const [idText, setIdText] = useState(rule.id ? String(rule.id) : "");
   const [dictText, setDictText] = useState(
@@ -119,6 +133,31 @@ function AttributeEditor({
     onDone({ ...r, id, label: r.label.trim(), source, valueMap: (r.valueMap ?? []).filter((m) => m.from.trim()) });
   };
 
+  const meta = catalog?.attributes.find((a) => a.id === toInt(idText));
+  const isDictionary = !!meta && meta.dictionaryId > 0;
+
+  useEffect(() => {
+    // the catalogue tells whether the attribute has a dictionary
+    if (!catalog && idText) loadCatalog();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const openAttributePicker = async () => {
+    if (!catalog) {
+      setLoadingCatalog(true);
+      const ok = await loadCatalog();
+      setLoadingCatalog(false);
+      if (!ok) return;
+    }
+    setPicking({ kind: "attr" });
+  };
+
+  const pickAttribute = (a: OzonCatalogAttribute) => {
+    setIdText(String(a.id));
+    if (isNew || !r.label.trim()) setR((cur) => ({ ...cur, label: a.name }));
+    setPicking(null);
+  };
+
   const valueMap = r.valueMap ?? [];
   const setMap = (i: number, patch: Partial<(typeof valueMap)[0]>) =>
     setR({ ...r, valueMap: valueMap.map((m, j) => (j === i ? { ...m, ...patch } : m)) });
@@ -136,6 +175,31 @@ function AttributeEditor({
             <TextInput style={styles.input} value={r.label} onChangeText={(label) => setR({ ...r, label })} maxLength={100} />
             <AppText style={styles.fieldLabel}>ID атрибута Ozon</AppText>
             <TextInput style={styles.input} value={idText} onChangeText={setIdText} keyboardType="number-pad" />
+            <TouchableOpacity style={styles.pickBtn} onPress={openAttributePicker} disabled={loadingCatalog}>
+              {loadingCatalog ? (
+                <ActivityIndicator size="small" color="#1976D2" />
+              ) : (
+                <AppText style={styles.pickBtnText}>Выбрать из списка Ozon</AppText>
+              )}
+            </TouchableOpacity>
+            {meta ? (
+              <AppText style={styles.metaLine}>
+                Ozon: {meta.name}
+                {meta.isRequired ? " · обязательный" : ""}
+                {isDictionary ? " · значения из словаря" : " · свободный текст"}
+                {meta.isCollection ? " · можно несколько" : ""}
+                {meta.categories.length < (catalog?.categories.length ?? 0) ? ` · только в: ${meta.categories.join(", ")}` : ""}
+              </AppText>
+            ) : catalog && toInt(idText) ? (
+              <AppText style={[styles.metaLine, { color: "#C62828" }]}>
+                ⚠ Такого атрибута нет в категориях из настройки — Ozon может отклонить товар
+              </AppText>
+            ) : null}
+            {meta?.complex && (
+              <AppText style={[styles.metaLine, { color: "#C62828" }]}>
+                ⚠ Это часть сложного атрибута — так его отправить нельзя
+              </AppText>
+            )}
           </View>
 
           <View style={s.card}>
@@ -176,6 +240,11 @@ function AttributeEditor({
                 />
                 <AppText style={styles.fieldLabel}>ID значения в словаре Ozon (если атрибут словарный)</AppText>
                 <TextInput style={styles.input} value={dictText} onChangeText={setDictText} keyboardType="number-pad" />
+                {isDictionary && (
+                  <TouchableOpacity style={styles.pickBtn} onPress={() => setPicking({ kind: "const" })}>
+                    <AppText style={styles.pickBtnText}>Выбрать значение из словаря Ozon</AppText>
+                  </TouchableOpacity>
+                )}
               </>
             )}
             {r.source.kind === "builtin" && (
@@ -213,6 +282,11 @@ function AttributeEditor({
                   keyboardType="number-pad"
                   onChangeText={(t) => setMap(i, { dictionaryValueId: toInt(t) })}
                 />
+                {isDictionary && (
+                  <TouchableOpacity onPress={() => setPicking({ kind: "map", index: i })} hitSlop={8}>
+                    <AppText style={styles.dictIcon}>📖</AppText>
+                  </TouchableOpacity>
+                )}
                 <TouchableOpacity onPress={() => setR({ ...r, valueMap: valueMap.filter((_, j) => j !== i) })} hitSlop={8}>
                   <AppText style={styles.remove}>✕</AppText>
                 </TouchableOpacity>
@@ -250,6 +324,36 @@ function AttributeEditor({
           <AppText style={styles.hint}>Изменения попадут на сервер после «Сохранить» на основном экране.</AppText>
         </ScrollView>
       </KeyboardAvoidingView>
+
+      {picking?.kind === "attr" && catalog && (
+        <OzonAttributePicker
+          attributes={catalog.attributes}
+          categories={catalog.categories}
+          currentId={rule.id || undefined}
+          onPick={pickAttribute}
+          onClose={() => setPicking(null)}
+        />
+      )}
+      {(picking?.kind === "const" || picking?.kind === "map") && meta && (
+        <OzonValuePicker
+          attributeId={meta.id}
+          attributeName={meta.name}
+          onClose={() => setPicking(null)}
+          onPick={(v) => {
+            if (picking.kind === "const") {
+              setR((cur) => ({ ...cur, source: { kind: "const", value: v.value, dictionaryValueId: v.id } }));
+              setDictText(String(v.id));
+            } else {
+              const i = picking.index;
+              setR((cur) => ({
+                ...cur,
+                valueMap: (cur.valueMap ?? []).map((m, j) => (j === i ? { ...m, to: v.value, dictionaryValueId: v.id } : m)),
+              }));
+            }
+            setPicking(null);
+          }}
+        />
+      )}
     </Modal>
   );
 }
@@ -317,6 +421,18 @@ export function OzonPayloadScreen() {
   const [editing, setEditing] = useState<{ index: number; rule: OzonAttrRule } | null>(null);
   const [vatText, setVatText] = useState("");
   const [maxImagesText, setMaxImagesText] = useState("");
+
+  const [catalog, setCatalog] = useState<Catalog | null>(null);
+  const loadCatalog = useCallback(async (): Promise<boolean> => {
+    if (catalog) return true;
+    try {
+      setCatalog(await cardPipelineService.getOzonAttributes());
+      return true;
+    } catch (e: any) {
+      Alert.alert("Атрибуты Ozon", e?.response?.data?.message ?? "Не удалось получить список атрибутов от Ozon");
+      return false;
+    }
+  }, [catalog]);
 
   const [sku, setSku] = useState("");
   const [checking, setChecking] = useState(false);
@@ -616,6 +732,8 @@ export function OzonPayloadScreen() {
           rule={editing.rule}
           isNew={editing.index < 0}
           dicts={dicts}
+          catalog={catalog}
+          loadCatalog={loadCatalog}
           onCancel={() => setEditing(null)}
           onDone={(rule) => {
             const attrs = [...draft.attributes];
@@ -649,6 +767,17 @@ const styles = StyleSheet.create({
   link: { color: "#1976D2", fontSize: 14, fontWeight: "600", marginTop: 12 },
   remove: { color: "#E53935", fontSize: 18, fontWeight: "700" },
   hint: { fontSize: 12, color: "#999", textAlign: "center" },
+  pickBtn: {
+    marginTop: 10,
+    paddingVertical: 9,
+    borderRadius: 8,
+    borderWidth: 1.5,
+    borderColor: "#1976D2",
+    alignItems: "center",
+  },
+  pickBtnText: { color: "#1976D2", fontWeight: "600", fontSize: 14 },
+  metaLine: { fontSize: 12, color: "#2E7D32", marginTop: 8 },
+  dictIcon: { fontSize: 18 },
   grid: { flexDirection: "row", gap: 10 },
   gridCell: { flex: 1 },
   category: { borderTopWidth: 1, borderTopColor: "#eee", paddingTop: 10, marginTop: 10 },

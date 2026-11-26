@@ -88,7 +88,48 @@ export interface OzonPayloadPreview {
   defaultedFields: string[];
 }
 
+/** An attribute from Ozon's catalogue, merged over the categories of the payload config */
+export interface OzonCatalogAttribute {
+  id: number;
+  name: string;
+  description: string;
+  type: string;
+  isRequired: boolean;
+  isCollection: boolean;
+  /** 0 — free text, otherwise a value from the dictionary */
+  dictionaryId: number;
+  groupName: string;
+  /** part of a complex attribute — can't be sent from this screen */
+  complex: boolean;
+  categories: string[];
+  requiredIn: string[];
+  /** key of the attribute in our config that already sends it */
+  usedBy: string | null;
+}
+
+export interface OzonDictionaryValue {
+  id: number;
+  value: string;
+  info?: string;
+}
+
 export const cardPipelineService = {
+  async getOzonAttributes(): Promise<{ categories: string[]; attributes: OzonCatalogAttribute[] }> {
+    const { data } = await api.get('/ozon/payload-config/ozon-attributes');
+    return data;
+  },
+
+  /** Dictionary values (search from 2 characters; empty query — the first page) */
+  async searchOzonValues(
+    attributeId: number,
+    q: string,
+  ): Promise<{ values: OzonDictionaryValue[]; hasNext: boolean; category: string }> {
+    const { data } = await api.get(`/ozon/payload-config/ozon-attributes/${attributeId}/values`, {
+      params: { q },
+    });
+    return data;
+  },
+
   async getCardDefaults(): Promise<{ defaults: CardDefaults; standard: CardDefaults }> {
     const { data } = await api.get('/admin/settings/card-defaults');
     return data;

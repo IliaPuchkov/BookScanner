@@ -25,6 +25,7 @@ import { SettingsModule } from '../settings/settings.module';
 import { CardModule } from '../card/card.module';
 import { OzonPayloadConfigService } from './payload/ozon-payload-config.service';
 import { OzonPayloadConfigController } from './payload/ozon-payload-config.controller';
+import { OzonAttributeCatalogService } from './payload/ozon-attribute-catalog.service';
 import { EncryptionService } from '../common/encryption.service';
 import { Book } from '../books/entities/book.entity';
 import { BookPhoto } from '../photos/entities/book-photo.entity';
@@ -54,6 +55,7 @@ import { Box } from '../boxes/entities/box.entity';
     ExtraPhotosCron,
     ContentScopeService,
     OzonPayloadConfigService,
+    OzonAttributeCatalogService,
   ],
   exports: [OzonService],
 })

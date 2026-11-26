@@ -295,6 +295,7 @@ All routes prefixed with `/api`.
 ### Card pipeline (`/api/admin/settings/card-defaults`, `/api/ozon/payload-config`, admin)
 - `GET` / `PUT /admin/settings/card-defaults` → `{ defaults, standard }`; `GET …/apply` → `{ count }`, `POST …/apply` → `{ updated }`
 - `GET /ozon/payload-config` → `{ config, standard, fields, builtins }`; `PUT` `{ config }` (400 «Атрибут N: …»); `POST /ozon/payload-config/preview { bookId? | sku?, config? }` → `{ payload, rows, warnings, defaultedFields, sku, title }` (nothing is sent)
+- `GET /ozon/payload-config/ozon-attributes` → `{ categories, attributes }`: Ozon's catalogue (`/v1/description-category/attribute`, cached 1 h) for every category of the config, merged by id with `isRequired`/`requiredIn`, `dictionaryId`, `isCollection`, `complex`, `categories`, `usedBy`; `GET …/ozon-attributes/:id/values?q=` → dictionary values (search from 2 chars, else the first page) in the first config category that has the attribute; 400 for a free-text attribute
 
 ### Settings (`/api/settings`)
 - `GET /` — Get all system settings (includes Ozon store configs)
@@ -351,7 +352,7 @@ AI ─► 1a normalize (VisionService.buildUpdatePayload: case of title/author, 
 - The card's annotation has **no** `ANNOTATION_PREFIX`; the payload adds `config.annotation.prefix` unless the text already starts with it (older cards). AI preview (`extract-preview`) returns the raw tags and annotation.
 - `ozon/payload/ozon-payload-config.ts` (unit-tested): `OzonAttrRule` = Ozon `id`, `label`, `source` (`field` of the card / `const` value + optional `dictionaryValueId` / `builtin`: brand, publisher, authors, authorCover, annotation, hashtags, richContent, dimensions), `valueMap` (whole value, case-insensitive, optional dictionary id), `skipIfEmpty`; `system` attributes (4180, 4182, 85, 8229, 23273, 22232) can't be removed or switched off. `DEFAULT_OZON_PAYLOAD_CONFIG` = the old hard-coded payload — **golden snapshots** in `ozon-payload.builder.spec.ts` (recorded from the old builder) must keep passing; change them only on purpose.
 - `ozon-payload.builder.ts` interprets the config (`buildOzonPayloadReport` → `{ payload, rows, warnings }`); item-level fields (SKU, price, weight, dimension axes) stay in code; empty fields of old cards get the card defaults there too. `OzonService.buildPayloadForBook` (shared by publish, publishBulk, preview) runs dictionary lookups only for the builtins the config uses. Broken JSON in either setting → the standard values.
-- Mobile: Settings → «Ozon» → «Сборка карточки Ozon» (`OzonPayloadScreen`: categories, general, attribute list + editor modal, «Проверить на книге» by SKU with the unsaved draft); ProductDetail shows the card with «по умолчанию» marks and «Как уйдёт на Ozon» (server preview). No defaults are mirrored in the app any more.
+- Mobile: Settings → «Ozon» → «Сборка карточки Ozon» (`OzonPayloadScreen`: categories, general, attribute list + editor modal with «Выбрать из списка Ozon» / «Выбрать значение из словаря» (`components/OzonPickers.tsx`; complex attributes and ones already in the config can't be picked), «Проверить на книге» by SKU with the unsaved draft); ProductDetail shows the card with «по умолчанию» marks and «Как уйдёт на Ozon» (server preview). No defaults are mirrored in the app any more.
 
 ### Book Status Flow
 

@@ -1,4 +1,15 @@
-import { BadRequestException, Body, Controller, Get, Post, Put, UseGuards } from '@nestjs/common';
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Get,
+  Param,
+  ParseIntPipe,
+  Post,
+  Put,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { IsObject, IsOptional, IsString, IsUUID, MaxLength } from 'class-validator';
 import { UserRole } from '@bookscanner/shared';
@@ -7,6 +18,7 @@ import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { OzonService } from '../ozon.service';
 import { OzonPayloadConfigService } from './ozon-payload-config.service';
+import { OzonAttributeCatalogService } from './ozon-attribute-catalog.service';
 import {
   DEFAULT_OZON_PAYLOAD_CONFIG,
   OZON_BUILTINS,
@@ -45,7 +57,20 @@ export class OzonPayloadConfigController {
   constructor(
     private readonly configService: OzonPayloadConfigService,
     private readonly ozonService: OzonService,
+    private readonly catalog: OzonAttributeCatalogService,
   ) {}
+
+  @Get('ozon-attributes')
+  @ApiOperation({ summary: 'Атрибуты Ozon для категорий из настройки (для выбора в редакторе)' })
+  ozonAttributes() {
+    return this.catalog.listAttributes();
+  }
+
+  @Get('ozon-attributes/:id/values')
+  @ApiOperation({ summary: 'Значения словаря атрибута Ozon (поиск от 2 символов)' })
+  ozonAttributeValues(@Param('id', ParseIntPipe) id: number, @Query('q') q?: string) {
+    return this.catalog.searchValues(id, (q ?? '').slice(0, 100));
+  }
 
   @Get()
   @ApiOperation({ summary: 'Сборка карточки Ozon: текущая настройка, стандартная и справочники для редактора' })
