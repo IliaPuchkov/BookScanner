@@ -64,10 +64,11 @@ export interface ExportRow {
   ozonTaskId: string | number | null;
   ozonStatus: string | null;
   ozonError: string | null;
-  ozonMarketPrice: string | number | null;
   ozonSentAt: Date | null;
   ozonUpdatedAt: Date | null;
 
+  /** ocr_results.extractedData.price: what the AI answered, before the price formula */
+  aiPrice: unknown;
   ocrStatus: string | null;
   ocrError: string | null;
   ocrAt: Date | null;
@@ -137,6 +138,15 @@ function num(v: string | number | null | undefined): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
+/** The AI returns the price as a number or a string like "350", "1 200", "450.00 руб." */
+export function aiPrice(v: unknown): number | null {
+  if (typeof v === 'number') return Number.isFinite(v) && v > 0 ? v : null;
+  if (typeof v !== 'string') return null;
+  const m = v.replace(/[\s\u00a0]/g, '').replace(',', '.').match(/\d+(\.\d+)?/);
+  const n = m ? Number(m[0]) : NaN;
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
 function text(v: string | null | undefined): string | null {
   return v === null || v === undefined || v === '' ? null : v;
 }
@@ -186,6 +196,7 @@ export const EXPORT_GROUPS: ExportGroup[] = [
       { key: 'bookType', label: 'Тип книги', width: 16, value: (r) => text(r.bookType) },
       { key: 'direction', label: 'Направление', width: 16, value: (r) => text(r.direction) },
       { key: 'price', label: 'Цена, ₽', default: true, width: 12, numFmt: MONEY_FMT, value: (r) => num(r.price) },
+      { key: 'aiPrice', label: 'Цена от ИИ (до формулы), ₽', width: 12, numFmt: MONEY_FMT, value: (r) => aiPrice(r.aiPrice) },
       { key: 'priceReviewed', label: 'Цена проверена', width: 10, value: (r) => yesNo(r.priceReviewed) },
       { key: 'weightGross', label: 'Вес брутто, г', width: 10, value: (r) => num(r.weightGross) },
       { key: 'weightNet', label: 'Вес нетто, г', width: 10, value: (r) => num(r.weightNet) },
@@ -213,7 +224,6 @@ export const EXPORT_GROUPS: ExportGroup[] = [
       { key: 'ozonSentAt', label: 'Первая отправка на Ozon', width: 17, numFmt: DATE_FMT, value: date((r) => r.ozonSentAt) },
       { key: 'ozonUpdatedAt', label: 'Последнее обновление на Ozon', width: 17, numFmt: DATE_FMT, value: date((r) => r.ozonUpdatedAt) },
       { key: 'ozonTaskId', label: 'ID задачи импорта', width: 14, value: (r) => (r.ozonTaskId == null ? null : String(r.ozonTaskId)) },
-      { key: 'ozonMarketPrice', label: 'Средняя рыночная цена, ₽', width: 12, numFmt: MONEY_FMT, value: (r) => num(r.ozonMarketPrice) },
       { key: 'ozonError', label: 'Ошибка Ozon', width: 40, value: (r) => text(r.ozonError) },
       { key: 'videoCover', label: 'Видеообложка', width: 40, value: (r) => text(r.videoCoverUrl) },
       { key: 'videoCoverSyncedAt', label: 'Видеообложка отправлена', width: 17, numFmt: DATE_FMT, value: date((r) => r.videoCoverSyncedAt) },

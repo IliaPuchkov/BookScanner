@@ -1,7 +1,7 @@
 import { PassThrough } from 'stream';
 import * as ExcelJS from 'exceljs';
 import { ExportService } from './export.service';
-import { describeExport, EXPORT_GROUPS, ExportRow } from './export-fields';
+import { aiPrice, describeExport, EXPORT_GROUPS, ExportRow } from './export-fields';
 
 function row(over: Partial<ExportRow>): ExportRow {
   return {
@@ -59,9 +59,9 @@ function row(over: Partial<ExportRow>): ExportRow {
     ozonTaskId: '987',
     ozonStatus: 'published',
     ozonError: null,
-    ozonMarketPrice: null,
     ozonSentAt: new Date('2026-11-03T08:00:00Z'),
     ozonUpdatedAt: new Date('2026-11-03T09:00:00Z'),
+    aiPrice: 50,
     ocrStatus: 'completed',
     ocrError: null,
     ocrAt: new Date('2026-11-01T21:31:00Z'),
@@ -141,6 +141,15 @@ describe('ExportService', () => {
     const d1 = (days.getRow(2).values as unknown[]).slice(1);
     expect((d1[0] as Date).toISOString()).toBe('2026-11-02T00:00:00.000Z');
     expect(d1[1]).toBe(2);
+  });
+
+  it('reads the AI price whatever shape it came in', () => {
+    expect(aiPrice(50)).toBe(50);
+    expect(aiPrice('1 200')).toBe(1200);
+    expect(aiPrice('450,50 руб.')).toBe(450.5);
+    expect(aiPrice('не найдено')).toBeNull();
+    expect(aiPrice(0)).toBeNull();
+    expect(aiPrice(null)).toBeNull();
   });
 
   it('refuses an export without fields', async () => {

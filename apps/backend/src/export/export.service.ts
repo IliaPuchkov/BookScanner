@@ -104,8 +104,9 @@ export class ExportService {
               lo."fullName" AS "libraryOwnerName",
               op."storeId" AS "ozonStoreId", op."ozonProductId", op."taskId" AS "ozonTaskId",
               op.status AS "ozonStatus", op."errorMessage" AS "ozonError",
-              op."averageMarketPrice" AS "ozonMarketPrice", op."createdAt" AS "ozonSentAt",
+              op."createdAt" AS "ozonSentAt",
               op."updatedAt" AS "ozonUpdatedAt",
+              o."extractedData" -> 'price' AS "aiPrice",
               o.status AS "ocrStatus", o."errorMessage" AS "ocrError", o."updatedAt" AS "ocrAt"
          FROM books b
          LEFT JOIN users u ON u.id = b.created_by
