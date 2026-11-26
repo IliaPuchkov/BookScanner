@@ -41,6 +41,8 @@ export interface OzonPayloadReport {
   payload: Record<string, unknown>;
   /** Attributes left out or sent empty, for the «Проверить на книге» screen */
   warnings: string[];
+  /** The sent attributes in a readable form (label from the config) */
+  rows: Array<{ id: number; label: string; value: string }>;
 }
 
 function value(v: string, dictId?: number | null): AttrValue {
@@ -135,6 +137,7 @@ export function buildOzonPayloadReport(
 
   const attributes: OzonAttribute[] = [];
   const warnings: string[] = [];
+  const rows: OzonPayloadReport["rows"] = [];
 
   for (const rule of config.attributes) {
     if (!rule.enabled) continue;
@@ -161,6 +164,13 @@ export function buildOzonPayloadReport(
       warnings.push(`${rule.system ? "Ошибка: обязательный " : ""}«${rule.label}» (${rule.id}) отправлен пустым`);
     }
     attributes.push({ complex_id: 0, id: rule.id, values });
+    rows.push({
+      id: rule.id,
+      label: rule.label,
+      value: values
+        .map((v) => (v.dictionary_value_id ? `${v.value} [${v.dictionary_value_id}]` : v.value))
+        .join("; "),
+    });
   }
 
   const year = book.yearPublished ?? 0;
@@ -198,6 +208,7 @@ export function buildOzonPayloadReport(
       ],
     },
     warnings,
+    rows,
   };
 }
 
