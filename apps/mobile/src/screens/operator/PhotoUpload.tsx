@@ -15,14 +15,13 @@ import { PhotoGrid } from "../../components/PhotoGrid";
 import { LoadingOverlay } from "../../components/LoadingOverlay";
 import { booksService } from "../../services/books.service";
 import { photosService } from "../../services/photos.service";
-import { adminService } from "../../services/admin.service";
 import type { OperatorStackParamList } from "../../navigation/OperatorNavigator";
 import { useUndoable } from "../../context/UndoContext";
 
 type Route = RouteProp<OperatorStackParamList, "PhotoUpload">;
 
-const DEFAULT_MAX_PHOTOS = 10;
-const MAX_PHOTOS_KEY = "max_photo_count";
+/** Same as MAX_PHOTOS_PER_BOOK in @bookscanner/shared (the server enforces it). */
+const MAX_PHOTOS = 10;
 const OZON_MIN_PX = 200;
 
 function warnIfSmallPhotos(items: Array<{ width: number; height: number }>) {
@@ -46,26 +45,16 @@ export function PhotoUploadScreen() {
   const [photos, setPhotos] = useState<Array<{ uri: string; id?: string; isSmall?: boolean }>>([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
-  const [maxPhotos, setMaxPhotos] = useState(DEFAULT_MAX_PHOTOS);
 
   useEffect(() => {
     const init = async () => {
       try {
-        const [book, settings] = await Promise.all([
-          booksService.getBook(bookId),
-          adminService.getSettings().catch(() => []),
-        ]);
+        const book = await booksService.getBook(bookId);
 
         const sorted = [...(book.photos ?? [])].sort(
           (a, b) => a.sortOrder - b.sortOrder,
         );
         setPhotos(sorted.map((p) => ({ uri: p.fileUrl, id: p.id })));
-
-        const maxSetting = settings.find((s) => s.key === MAX_PHOTOS_KEY);
-        if (maxSetting) {
-          const parsed = parseInt(maxSetting.value, 10);
-          if (!isNaN(parsed) && parsed > 0) setMaxPhotos(parsed);
-        }
       } catch {
         Alert.alert("Ошибка", "Не удалось загрузить данные");
       } finally {
@@ -101,7 +90,7 @@ export function PhotoUploadScreen() {
   };
 
   const pickFromLibrary = async () => {
-    const remaining = maxPhotos - photos.length;
+    const remaining = MAX_PHOTOS - photos.length;
     try {
       const results = await ImageCropPicker.openPicker({
         multiple: true,
@@ -388,7 +377,7 @@ export function PhotoUploadScreen() {
           onReorder={handleReorder}
           onRotate={handleRotate}
           onPress={handlePhotoPress}
-          maxPhotos={maxPhotos}
+          maxPhotos={MAX_PHOTOS}
         />
       </View>
     </View>

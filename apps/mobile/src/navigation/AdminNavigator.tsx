@@ -25,6 +25,10 @@ import { CopiesScreen } from "../screens/admin/CopiesScreen";
 import { LibraryScreen } from "../screens/admin/LibraryScreen";
 import { HashtagRulesScreen } from "../screens/admin/HashtagRulesScreen";
 import { ExportScreen } from "../screens/admin/ExportScreen";
+import { PriceFormulaScreen } from "../screens/admin/PriceFormulaScreen";
+import { AiPromptScreen } from "../screens/admin/AiPromptScreen";
+import { MaintenanceScreen } from "../screens/admin/MaintenanceScreen";
+import { OzonContentScreen } from "../screens/admin/OzonContentScreen";
 
 export type AdminMainStackParamList = {
   Dashboard: undefined;
@@ -254,6 +258,26 @@ function SettingsStackScreen() {
         name="OzonSync"
         component={OzonSyncScreen}
         options={{ title: "Сверка с Озоном" }}
+      />
+      <SettingsStack.Screen
+        name="PriceFormula"
+        component={PriceFormulaScreen}
+        options={{ title: "Формула цены" }}
+      />
+      <SettingsStack.Screen
+        name="AiPrompt"
+        component={AiPromptScreen}
+        options={{ title: "AI-промпт" }}
+      />
+      <SettingsStack.Screen
+        name="Maintenance"
+        component={MaintenanceScreen}
+        options={{ title: "Технические работы" }}
+      />
+      <SettingsStack.Screen
+        name="OzonContent"
+        component={OzonContentScreen}
+        options={{ title: "Доп. контент на Ozon" }}
       />
     </SettingsStack.Navigator>
   );

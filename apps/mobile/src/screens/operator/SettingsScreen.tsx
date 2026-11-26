@@ -1,1245 +1,352 @@
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useState } from "react";
 import {
   View,
   StyleSheet,
   Alert,
-  TextInput,
   ScrollView,
-  Switch,
   ActivityIndicator,
-  RefreshControl,
   TouchableOpacity,
-  KeyboardAvoidingView,
-  Platform,
 } from "react-native";
 import { AppText } from '../../components/AppText';
-import { VideoCoverCard } from '../../components/VideoCoverCard';
-import { ContentStoresCard } from '../../components/ContentStoresCard';
-import { RichContentCard } from '../../components/RichContentCard';
-import { ExtraPhotosCard } from '../../components/ExtraPhotosCard';
 import { useNavigation } from "@react-navigation/native";
 import { useAuth } from "../../hooks/useAuth";
 import { adminService } from "../../services/admin.service";
 import { useMaintenanceContext } from "../../context/MaintenanceContext";
 
-const AI_PROMPT_KEY = "vision_ai_prompt";
-const MAX_PHOTOS_KEY = "max_photo_count";
-
-const MAINTENANCE_ENABLED_KEY = "maintenance_enabled";
-const MAINTENANCE_START_AT_KEY = "maintenance_start_at";
-const MAINTENANCE_END_AT_KEY = "maintenance_end_at";
-const MAINTENANCE_MESSAGE_KEY = "maintenance_message";
-const MAINTENANCE_INSTRUCTIONS_KEY = "maintenance_instructions";
-const MAINTENANCE_WARNING_MINUTES_KEY = "maintenance_warning_minutes";
-
-function parseRuDateTime(s: string): string | null {
-  const trimmed = s.trim();
-  if (!trimmed) return null;
-  const [datePart, timePart] = trimmed.split(" ");
-  if (!datePart) return null;
-  const [dd, mm, yyyy] = datePart.split(".");
-  const [hh, min] = (timePart || "00:00").split(":");
-  const d = new Date(
-    parseInt(yyyy, 10),
-    parseInt(mm, 10) - 1,
-    parseInt(dd, 10),
-    parseInt(hh || "0", 10),
-    parseInt(min || "0", 10),
+function NavCard({
+  title,
+  desc,
+  status,
+  onPress,
+}: {
+  title: string;
+  desc: string;
+  /** Highlighted line under the description (e.g. maintenance is on). */
+  status?: string | null;
+  onPress: () => void;
+}) {
+  return (
+    <TouchableOpacity style={styles.card} activeOpacity={0.75} onPress={onPress}>
+      <View style={[styles.sectionHeader, { marginBottom: 0 }]}>
+        <View style={{ flex: 1 }}>
+          <AppText style={styles.sectionTitle}>{title}</AppText>
+          <AppText style={styles.sectionDesc}>{desc}</AppText>
+          {status ? <AppText style={styles.statusText}>{status}</AppText> : null}
+        </View>
+        <AppText style={styles.arrow}>›</AppText>
+      </View>
+    </TouchableOpacity>
   );
-  if (isNaN(d.getTime())) return null;
-  return d.toISOString();
 }
-
-function isoToRu(iso: string | null | undefined): string {
-  if (!iso) return "";
-  const d = new Date(iso);
-  if (isNaN(d.getTime())) return iso;
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${pad(d.getDate())}.${pad(d.getMonth() + 1)}.${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
-}
-const DEFAULT_MAX_PHOTOS = 10;
-
-const PRICE_DEFAULT_KEY = "price_default";
-const PRICE_MIN_KEY = "price_min";
-const PRICE_DISCOUNT_THRESHOLD_KEY = "price_discount_threshold";
-const PRICE_DISCOUNT_PERCENT_KEY = "price_discount_percent";
-const PRICE_AI_MULTIPLIER_KEY = "price_ai_multiplier";
 
 export function SettingsScreen() {
   const { user } = useAuth();
   const navigation = useNavigation<any>();
   const isAdmin = user?.role === "admin";
+  const maintenance = useMaintenanceContext();
 
-  // AI prompt
-  const [aiPrompt, setAiPrompt] = useState("");
-  const [editingPrompt, setEditingPrompt] = useState(false);
-  const [draftPrompt, setDraftPrompt] = useState("");
-  const [savingPrompt, setSavingPrompt] = useState(false);
-
-  // Max photos
-  const [maxPhotos, setMaxPhotos] = useState<number>(DEFAULT_MAX_PHOTOS);
-  const [editingMaxPhotos, setEditingMaxPhotos] = useState(false);
-  const [draftMaxPhotos, setDraftMaxPhotos] = useState("");
-  const [savingMaxPhotos, setSavingMaxPhotos] = useState(false);
-
-  // Price formula
-  const [priceDefault, setPriceDefault] = useState("20000");
-  const [priceMin, setPriceMin] = useState("1000");
-  const [priceDiscountThreshold, setPriceDiscountThreshold] = useState("1200");
-  const [priceDiscountPercent, setPriceDiscountPercent] = useState("15");
-  const [priceAiMultiplier, setPriceAiMultiplier] = useState("9");
-  const [editingPrice, setEditingPrice] = useState(false);
-  const [draftPriceDefault, setDraftPriceDefault] = useState("");
-  const [draftPriceMin, setDraftPriceMin] = useState("");
-  const [draftPriceDiscountThreshold, setDraftPriceDiscountThreshold] =
-    useState("");
-  const [draftPriceDiscountPercent, setDraftPriceDiscountPercent] =
-    useState("");
-  const [draftPriceAiMultiplier, setDraftPriceAiMultiplier] = useState("");
-  const [savingPrice, setSavingPrice] = useState(false);
-
-  const [loadingSettings, setLoadingSettings] = useState(false);
-  const [refreshing, setRefreshing] = useState(false);
   const [backfilling, setBackfilling] = useState(false);
   const [resettingStuck, setResettingStuck] = useState(false);
   const [repairing, setRepairing] = useState(false);
   const [syncingOzon, setSyncingOzon] = useState(false);
-
-  // Maintenance settings
-  const { refresh: refreshMaintenance } = useMaintenanceContext();
-  const [maintenanceEnabled, setMaintenanceEnabled] = useState(false);
-  const [maintenanceStartAt, setMaintenanceStartAt] = useState("");
-  const [maintenanceEndAt, setMaintenanceEndAt] = useState("");
-  const [maintenanceMessage, setMaintenanceMessage] = useState("");
-  const [maintenanceInstructions, setMaintenanceInstructions] = useState("");
-  const [maintenanceWarningMinutes, setMaintenanceWarningMinutes] =
-    useState("30");
-  const [savingMaintenance, setSavingMaintenance] = useState(false);
-
-  const applySettings = (
-    settings: Awaited<ReturnType<typeof adminService.getSettings>>,
-  ) => {
-    const prompt = settings.find((s) => s.key === AI_PROMPT_KEY);
-    if (prompt) setAiPrompt(prompt.value);
-
-    const maxP = settings.find((s) => s.key === MAX_PHOTOS_KEY);
-    if (maxP) setMaxPhotos(parseInt(maxP.value, 10) || DEFAULT_MAX_PHOTOS);
-
-    const pd = settings.find((s) => s.key === PRICE_DEFAULT_KEY);
-    if (pd) setPriceDefault(pd.value);
-    const pm = settings.find((s) => s.key === PRICE_MIN_KEY);
-    if (pm) setPriceMin(pm.value);
-    const pdt = settings.find((s) => s.key === PRICE_DISCOUNT_THRESHOLD_KEY);
-    if (pdt) setPriceDiscountThreshold(pdt.value);
-    const pdp = settings.find((s) => s.key === PRICE_DISCOUNT_PERCENT_KEY);
-    if (pdp) setPriceDiscountPercent(pdp.value);
-    const pam = settings.find((s) => s.key === PRICE_AI_MULTIPLIER_KEY);
-    if (pam) setPriceAiMultiplier(pam.value);
-
-    const mEnabled = settings.find((s) => s.key === MAINTENANCE_ENABLED_KEY);
-    setMaintenanceEnabled(mEnabled?.value === "true");
-    const mStart = settings.find((s) => s.key === MAINTENANCE_START_AT_KEY);
-    setMaintenanceStartAt(isoToRu(mStart?.value));
-    const mEnd = settings.find((s) => s.key === MAINTENANCE_END_AT_KEY);
-    setMaintenanceEndAt(isoToRu(mEnd?.value));
-    const mMsg = settings.find((s) => s.key === MAINTENANCE_MESSAGE_KEY);
-    setMaintenanceMessage(mMsg?.value ?? "");
-    const mInstr = settings.find((s) => s.key === MAINTENANCE_INSTRUCTIONS_KEY);
-    setMaintenanceInstructions(mInstr?.value ?? "");
-    const mWarn = settings.find(
-      (s) => s.key === MAINTENANCE_WARNING_MINUTES_KEY,
-    );
-    setMaintenanceWarningMinutes(mWarn?.value ?? "30");
-  };
-
-  const loadSettings = useCallback(async () => {
-    setLoadingSettings(true);
-    try {
-      const settings = await adminService.getSettings();
-      applySettings(settings);
-    } catch {
-      // ignore
-    } finally {
-      setLoadingSettings(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (isAdmin) {
-      loadSettings();
-    }
-  }, [isAdmin, loadSettings]);
-
-  const handleRefresh = useCallback(async () => {
-    setRefreshing(true);
-    try {
-      if (isAdmin) {
-        const settings = await adminService.getSettings();
-        applySettings(settings);
-      }
-    } catch {
-      // ignore
-    } finally {
-      setRefreshing(false);
-    }
-  }, [isAdmin]);
-
-  // Prompt handlers
-  const handleStartEditPrompt = () => {
-    setDraftPrompt(aiPrompt);
-    setEditingPrompt(true);
-  };
-
-  const handleCancelPrompt = () => {
-    setEditingPrompt(false);
-    setDraftPrompt("");
-  };
-
-  const handleSavePrompt = async () => {
-    if (!draftPrompt.trim()) {
-      Alert.alert("Ошибка", "Промпт не может быть пустым");
-      return;
-    }
-    setSavingPrompt(true);
-    try {
-      await adminService.upsertSetting({
-        key: AI_PROMPT_KEY,
-        value: draftPrompt.trim(),
-        description: "Кастомный промпт для AI-распознавания книг",
-        valueType: "string",
-      });
-      setAiPrompt(draftPrompt.trim());
-      setEditingPrompt(false);
-      setDraftPrompt("");
-      Alert.alert("Готово", "Промпт сохранён");
-    } catch {
-      Alert.alert("Ошибка", "Не удалось сохранить промпт");
-    } finally {
-      setSavingPrompt(false);
-    }
-  };
-
-  // Max photos handlers
-  const handleStartEditMaxPhotos = () => {
-    setDraftMaxPhotos(String(maxPhotos));
-    setEditingMaxPhotos(true);
-  };
-
-  const handleCancelMaxPhotos = () => {
-    setEditingMaxPhotos(false);
-    setDraftMaxPhotos("");
-  };
-
-  const handleSaveMaxPhotos = async () => {
-    const parsed = parseInt(draftMaxPhotos, 10);
-    if (isNaN(parsed) || parsed < 1 || parsed > 20) {
-      Alert.alert("Ошибка", "Введите число от 1 до 20");
-      return;
-    }
-    setSavingMaxPhotos(true);
-    try {
-      await adminService.upsertSetting({
-        key: MAX_PHOTOS_KEY,
-        value: String(parsed),
-        description: "Максимальное количество фото для одной книги",
-        valueType: "number",
-      });
-      setMaxPhotos(parsed);
-      setEditingMaxPhotos(false);
-      setDraftMaxPhotos("");
-      Alert.alert("Готово", "Настройка сохранена");
-    } catch {
-      Alert.alert("Ошибка", "Не удалось сохранить настройку");
-    } finally {
-      setSavingMaxPhotos(false);
-    }
-  };
-
-  // Price formula handlers
-  const handleStartEditPrice = () => {
-    setDraftPriceDefault(priceDefault);
-    setDraftPriceMin(priceMin);
-    setDraftPriceDiscountThreshold(priceDiscountThreshold);
-    setDraftPriceDiscountPercent(priceDiscountPercent);
-    setDraftPriceAiMultiplier(priceAiMultiplier);
-    setEditingPrice(true);
-  };
-
-  const handleCancelPrice = () => {
-    setEditingPrice(false);
-  };
-
-  const handleSavePrice = async () => {
-    const pd = parseInt(draftPriceDefault, 10);
-    const pm = parseInt(draftPriceMin, 10);
-    const pdt = parseInt(draftPriceDiscountThreshold, 10);
-    const pdp = parseInt(draftPriceDiscountPercent, 10);
-    const pam = parseFloat(draftPriceAiMultiplier);
-    if (isNaN(pd) || pd <= 0) {
-      Alert.alert("Ошибка", "Некорректная цена по умолчанию");
-      return;
-    }
-    if (isNaN(pm) || pm <= 0) {
-      Alert.alert("Ошибка", "Некорректная минимальная цена");
-      return;
-    }
-    if (isNaN(pdt) || pdt <= 0) {
-      Alert.alert("Ошибка", "Некорректный порог скидки");
-      return;
-    }
-    if (isNaN(pdp) || pdp < 0 || pdp > 100) {
-      Alert.alert("Ошибка", "Процент скидки должен быть от 0 до 100");
-      return;
-    }
-    if (isNaN(pam) || pam <= 0) {
-      Alert.alert("Ошибка", "Коэффициент ИИ должен быть больше 0");
-      return;
-    }
-    setSavingPrice(true);
-    try {
-      await Promise.all([
-        adminService.upsertSetting({
-          key: PRICE_DEFAULT_KEY,
-          value: String(pd),
-          valueType: "number",
-          description: "Цена книги если ИИ не смог определить цену",
-        }),
-        adminService.upsertSetting({
-          key: PRICE_MIN_KEY,
-          value: String(pm),
-          valueType: "number",
-          description: "Минимальная цена книги",
-        }),
-        adminService.upsertSetting({
-          key: PRICE_DISCOUNT_THRESHOLD_KEY,
-          value: String(pdt),
-          valueType: "number",
-          description: "Порог выше которого применяется скидка",
-        }),
-        adminService.upsertSetting({
-          key: PRICE_DISCOUNT_PERCENT_KEY,
-          value: String(pdp),
-          valueType: "number",
-          description: "Процент скидки от цены ИИ",
-        }),
-        adminService.upsertSetting({
-          key: PRICE_AI_MULTIPLIER_KEY,
-          value: String(pam),
-          valueType: "number",
-          description:
-            "Коэффициент умножения цены от ИИ (компенсация недооценки)",
-        }),
-      ]);
-      setPriceDefault(String(pd));
-      setPriceMin(String(pm));
-      setPriceDiscountThreshold(String(pdt));
-      setPriceDiscountPercent(String(pdp));
-      setPriceAiMultiplier(String(pam));
-      setEditingPrice(false);
-      Alert.alert("Готово", "Формула цены сохранена");
-    } catch {
-      Alert.alert("Ошибка", "Не удалось сохранить настройки цены");
-    } finally {
-      setSavingPrice(false);
-    }
-  };
-
-  const handleSaveMaintenance = async () => {
-    const startIso = maintenanceStartAt
-      ? parseRuDateTime(maintenanceStartAt)
-      : null;
-    const endIso = maintenanceEndAt ? parseRuDateTime(maintenanceEndAt) : null;
-
-    if (maintenanceStartAt && !startIso) {
-      Alert.alert(
-        "Ошибка",
-        "Неверный формат даты начала. Используйте ДД.ММ.ГГГГ ЧЧ:ММ",
-      );
-      return;
-    }
-    if (maintenanceEndAt && !endIso) {
-      Alert.alert(
-        "Ошибка",
-        "Неверный формат даты окончания. Используйте ДД.ММ.ГГГГ ЧЧ:ММ",
-      );
-      return;
-    }
-    const warnMin = parseInt(maintenanceWarningMinutes, 10);
-    if (isNaN(warnMin) || warnMin < 0) {
-      Alert.alert(
-        "Ошибка",
-        "Укажите корректное количество минут предупреждения",
-      );
-      return;
-    }
-
-    setSavingMaintenance(true);
-    try {
-      const calls = [
-        adminService.upsertSetting({
-          key: MAINTENANCE_ENABLED_KEY,
-          value: String(maintenanceEnabled),
-          valueType: "boolean",
-          description: "Режим технических работ",
-        }),
-        adminService.upsertSetting({
-          key: MAINTENANCE_WARNING_MINUTES_KEY,
-          value: String(warnMin),
-          valueType: "number",
-          description: "За сколько минут до начала показывать предупреждение",
-        }),
-      ];
-
-      // Only save date/text fields if they have a value — backend rejects empty strings
-      if (startIso) {
-        calls.push(
-          adminService.upsertSetting({
-            key: MAINTENANCE_START_AT_KEY,
-            value: startIso,
-            valueType: "string",
-            description: "Дата и время начала технических работ (ISO)",
-          }),
-        );
-      }
-      if (endIso) {
-        calls.push(
-          adminService.upsertSetting({
-            key: MAINTENANCE_END_AT_KEY,
-            value: endIso,
-            valueType: "string",
-            description:
-              "Приблизительное время окончания технических работ (ISO)",
-          }),
-        );
-      }
-      if (maintenanceMessage.trim()) {
-        calls.push(
-          adminService.upsertSetting({
-            key: MAINTENANCE_MESSAGE_KEY,
-            value: maintenanceMessage.trim(),
-            valueType: "string",
-            description: "Причина / описание технических работ",
-          }),
-        );
-      }
-      if (maintenanceInstructions.trim()) {
-        calls.push(
-          adminService.upsertSetting({
-            key: MAINTENANCE_INSTRUCTIONS_KEY,
-            value: maintenanceInstructions.trim(),
-            valueType: "string",
-            description: "Инструкции для пользователей на время работ",
-          }),
-        );
-      }
-
-      await Promise.all(calls);
-      await refreshMaintenance();
-      Alert.alert(
-        "Готово",
-        maintenanceEnabled
-          ? "Технические работы включены"
-          : "Настройки сохранены",
-      );
-    } catch {
-      Alert.alert("Ошибка", "Не удалось сохранить настройки");
-    } finally {
-      setSavingMaintenance(false);
-    }
-  };
 
   if (!isAdmin) {
     return <View style={styles.blank} />;
   }
 
   return (
-    <KeyboardAvoidingView
-      style={styles.flex}
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
-      keyboardVerticalOffset={Platform.OS === "ios" ? 88 : 0}
-    >
-      <ScrollView
-        style={styles.scroll}
-        contentContainerStyle={styles.container}
-        keyboardShouldPersistTaps="handled"
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={handleRefresh}
-            colors={["#1976D2"]}
-            tintColor="#1976D2"
-          />
-        }
+    <ScrollView style={styles.scroll} contentContainerStyle={styles.container}>
+      <NavCard
+        title="Управление пользователями"
+        desc="Создание, редактирование и удаление пользователей."
+        onPress={() => navigation.navigate("UserManagement")}
+      />
+
+      <NavCard
+        title="Магазины Ozon"
+        desc="Подключённые магазины. Выбор магазина происходит при загрузке товаров."
+        onPress={() => navigation.navigate("OzonStores")}
+      />
+
+      <NavCard
+        title="Сверка с Озоном"
+        desc="Сравнение количества товаров на Ozon и в системе. Показывает расхождения по конкретным SKU."
+        onPress={() => navigation.navigate("OzonSync")}
+      />
+
+      {/* Import from Ozon */}
+      {/* <TouchableOpacity
+        style={styles.card}
+        activeOpacity={0.75}
+        onPress={() => navigation.navigate("ImportFromOzon")}
       >
-        {loadingSettings ? (
-          <View style={styles.card}>
-            <ActivityIndicator color="#1976D2" />
+        <View style={[styles.sectionHeader, { marginBottom: 0 }]}>
+          <View style={{ flex: 1 }}>
+            <AppText style={styles.sectionTitle}>Импорт с Озона</AppText>
+            <AppText style={styles.sectionDesc}>
+              Загрузить в систему товары, уже опубликованные в магазине на
+              Озоне
+            </AppText>
           </View>
-        ) : (
-          <>
-            {/* User management */}
-            <TouchableOpacity
-              style={styles.card}
-              activeOpacity={0.75}
-              onPress={() => navigation.navigate("UserManagement")}
-            >
-              <View style={[styles.sectionHeader, { marginBottom: 0 }]}>
-                <View style={{ flex: 1 }}>
-                  <AppText style={styles.sectionTitle}>
-                    Управление пользователями
-                  </AppText>
-                  <AppText style={styles.sectionDesc}>
-                    Создание, редактирование и удаление пользователей.
-                  </AppText>
-                </View>
-                <AppText style={styles.userMgmtArrow}>›</AppText>
-              </View>
-            </TouchableOpacity>
+          <AppText style={{ fontSize: 20, color: "#1976D2" }}>›</AppText>
+        </View>
+      </TouchableOpacity> */}
 
-            {/* Ozon stores */}
-            <TouchableOpacity
-              style={styles.card}
-              activeOpacity={0.75}
-              onPress={() => navigation.navigate("OzonStores")}
-            >
-              <View style={[styles.sectionHeader, { marginBottom: 0 }]}>
-                <View style={{ flex: 1 }}>
-                  <AppText style={styles.sectionTitle}>Магазины Ozon</AppText>
-                  <AppText style={styles.sectionDesc}>
-                    Подключённые магазины. Выбор магазина происходит при
-                    загрузке товаров.
-                  </AppText>
-                </View>
-                <AppText style={{ fontSize: 20, color: "#1976D2" }}>›</AppText>
-              </View>
-            </TouchableOpacity>
-
-            {/* Ozon sync diff */}
-            <TouchableOpacity
-              style={styles.card}
-              activeOpacity={0.75}
-              onPress={() => navigation.navigate("OzonSync")}
-            >
-              <View style={[styles.sectionHeader, { marginBottom: 0 }]}>
-                <View style={{ flex: 1 }}>
-                  <AppText style={styles.sectionTitle}>Сверка с Озоном</AppText>
-                  <AppText style={styles.sectionDesc}>
-                    Сравнение количества товаров на Ozon и в системе. Показывает
-                    расхождения по конкретным SKU.
-                  </AppText>
-                </View>
-                <AppText style={{ fontSize: 20, color: "#1976D2" }}>›</AppText>
-              </View>
-            </TouchableOpacity>
-
-            {/* Import from Ozon */}
-            {/* <TouchableOpacity
-              style={styles.card}
-              activeOpacity={0.75}
-              onPress={() => navigation.navigate("ImportFromOzon")}
-            >
-              <View style={[styles.sectionHeader, { marginBottom: 0 }]}>
-                <View style={{ flex: 1 }}>
-                  <AppText style={styles.sectionTitle}>Импорт с Озона</AppText>
-                  <AppText style={styles.sectionDesc}>
-                    Загрузить в систему товары, уже опубликованные в магазине на
-                    Озоне
-                  </AppText>
-                </View>
-                <AppText style={{ fontSize: 20, color: "#1976D2" }}>›</AppText>
-              </View>
-            </TouchableOpacity> */}
-
-            {/* Reset stuck publications */}
-            {/* <TouchableOpacity
-              style={styles.card}
-              activeOpacity={0.75}
-              disabled={resettingStuck}
-              onPress={() => {
-                Alert.alert(
-                  "Сбросить зависшие публикации",
-                  "Книги, которые больше 24 часов висят в статусе «Публикуется в Ozon» без результата, будут проверены. Найденные на Ozon — помечены как опубликованные, остальные — как ошибка публикации.",
-                  [
-                    { text: "Отмена", style: "cancel" },
-                    {
-                      text: "Запустить",
-                      onPress: async () => {
-                        setResettingStuck(true);
-                        try {
-                          const res =
-                            await adminService.resetStuckPublications();
-                          if (res.checked === 0) {
-                            Alert.alert(
-                              "Готово",
-                              "Зависших публикаций не найдено",
-                            );
-                          } else {
-                            Alert.alert(
-                              "Готово",
-                              `Проверено: ${res.checked}\nНайдено на Ozon: ${res.published}\nПомечено как ошибка: ${res.failed}`,
-                            );
-                          }
-                        } catch {
-                          Alert.alert("Ошибка", "Не удалось выполнить сброс");
-                        } finally {
-                          setResettingStuck(false);
-                        }
-                      },
-                    },
-                  ],
-                );
-              }}
-            >
-              <View style={[styles.sectionHeader, { marginBottom: 0 }]}>
-                <View style={{ flex: 1 }}>
-                  <AppText style={styles.sectionTitle}>
-                    Сбросить зависшие публикации
-                  </AppText>
-                  <AppText style={styles.sectionDesc}>
-                    Исправить книги, застрявшие в статусе «Публикуется в Ozon»
-                    более 24 часов
-                  </AppText>
-                </View>
-                {resettingStuck ? (
-                  <ActivityIndicator size="small" color="#1976D2" />
-                ) : (
-                  <AppText style={{ fontSize: 20, color: "#1976D2" }}>›</AppText>
-                )}
-              </View>
-            </TouchableOpacity> */}
-
-            {/* Repair failed publications */}
-            {/* <TouchableOpacity
-              style={styles.card}
-              activeOpacity={0.75}
-              disabled={repairing}
-              onPress={() => {
-                Alert.alert(
-                  "Восстановить failed карточки",
-                  "Система проверит все карточки с ошибкой публикации и найдёт те, что реально опубликованы на Ozon. Они будут помечены как опубликованные.",
-                  [
-                    { text: "Отмена", style: "cancel" },
-                    {
-                      text: "Запустить",
-                      onPress: async () => {
-                        setRepairing(true);
-                        try {
-                          const res =
-                            await adminService.repairFailedPublications();
-                          Alert.alert("Запущено", res.message);
-                        } catch (e: any) {
-                          const msg =
-                            e?.response?.data?.message ||
-                            e?.message ||
-                            String(e);
-                          Alert.alert("Ошибка", msg);
-                        } finally {
-                          setRepairing(false);
-                        }
-                      },
-                    },
-                  ],
-                );
-              }}
-            >
-              <View style={[styles.sectionHeader, { marginBottom: 0 }]}>
-                <View style={{ flex: 1 }}>
-                  <AppText style={styles.sectionTitle}>
-                    Восстановить failed карточки
-                  </AppText>
-                  <AppText style={styles.sectionDesc}>
-                    Найти карточки с ошибкой публикации, которые реально
-                    опубликованы на Ozon
-                  </AppText>
-                </View>
-                {repairing ? (
-                  <ActivityIndicator size="small" color="#1976D2" />
-                ) : (
-                  <AppText style={{ fontSize: 20, color: "#1976D2" }}>›</AppText>
-                )}
-              </View>
-            </TouchableOpacity> */}
-
-            {/* Backfill store IDs */}
-            {/* <TouchableOpacity
-              style={styles.card}
-              activeOpacity={0.75}
-              disabled={backfilling}
-              onPress={async () => {
-                Alert.alert(
-                  "Привязать магазины",
-                  "Система пройдёт по всем магазинам Озона и привяжет их к карточкам, у которых магазин ещё не указан. Это может занять некоторое время.",
-                  [
-                    { text: "Отмена", style: "cancel" },
-                    {
-                      text: "Запустить",
-                      onPress: async () => {
-                        setBackfilling(true);
-                        try {
-                          const res = await adminService.backfillStoreIds();
-                          Alert.alert(
-                            "Готово",
-                            `Обновлено карточек: ${res.updated}\nПроверено магазинов: ${res.stores}`,
-                          );
-                        } catch {
-                          Alert.alert(
-                            "Ошибка",
-                            "Не удалось выполнить привязку",
-                          );
-                        } finally {
-                          setBackfilling(false);
-                        }
-                      },
-                    },
-                  ],
-                );
-              }}
-            >
-              <View style={[styles.sectionHeader, { marginBottom: 0 }]}>
-                <View style={{ flex: 1 }}>
-                  <AppText style={styles.sectionTitle}>
-                    Привязать магазины к карточкам
-                  </AppText>
-                  <AppText style={styles.sectionDesc}>
-                    Проставить магазин для карточек, опубликованных до
-                    добавления этой функции
-                  </AppText>
-                </View>
-                {backfilling ? (
-                  <ActivityIndicator size="small" color="#1976D2" />
-                ) : (
-                  <AppText style={{ fontSize: 20, color: "#1976D2" }}>›</AppText>
-                )}
-              </View>
-            </TouchableOpacity> */}
-
-            {/* Sync archived status */}
-            <TouchableOpacity
-              style={styles.card}
-              activeOpacity={0.75}
-              disabled={syncingOzon}
-              onPress={() => {
-                Alert.alert(
-                  "Синхронизировать с Ozon",
-                  "Система проверит статус каждого товара по магазинам и обновит состояние: опубликован или в архиве.",
-                  [
-                    { text: "Отмена", style: "cancel" },
-                    {
-                      text: "Запустить",
-                      onPress: async () => {
-                        setSyncingOzon(true);
-                        try {
-                          const res = await adminService.syncOzonStatus();
-                          Alert.alert("Запущено", res.message);
-                        } catch {
-                          Alert.alert(
-                            "Ошибка",
-                            "Не удалось запустить синхронизацию",
-                          );
-                        } finally {
-                          setSyncingOzon(false);
-                        }
-                      },
-                    },
-                  ],
-                );
-              }}
-            >
-              <View style={[styles.sectionHeader, { marginBottom: 0 }]}>
-                <View style={{ flex: 1 }}>
-                  <AppText style={styles.sectionTitle}>
-                    Синхронизировать с Ozon
-                  </AppText>
-                  <AppText style={styles.sectionDesc}>
-                    Обновить статусы товаров: опубликован или в архиве
-                  </AppText>
-                </View>
-                {syncingOzon ? (
-                  <ActivityIndicator size="small" color="#1976D2" />
-                ) : (
-                  <AppText style={{ fontSize: 20, color: "#1976D2" }}>›</AppText>
-                )}
-              </View>
-            </TouchableOpacity>
-
-            {/* Max photos setting */}
-            <View style={styles.card}>
-              <View style={styles.sectionHeader}>
-                <View style={{ flex: 1 }}>
-                  <AppText style={styles.sectionTitle}>
-                    Максимальное количество фото
-                  </AppText>
-                  <AppText style={styles.sectionDesc}>
-                    Сколько фотографий оператор может загрузить для одной книги.
-                  </AppText>
-                </View>
-              </View>
-
-              {editingMaxPhotos ? (
-                <>
-                  <TextInput
-                    style={styles.numberInput}
-                    value={draftMaxPhotos}
-                    onChangeText={setDraftMaxPhotos}
-                    keyboardType="number-pad"
-                    placeholder="Введите число (1–20)"
-                    placeholderTextColor="#aaa"
-                    editable={!savingMaxPhotos}
-                    autoFocus
-                    maxLength={2}
-                  />
-                  <View style={styles.editActions}>
-                    <TouchableOpacity
-                      style={[styles.actionBtn, styles.cancelBtn]}
-                      onPress={handleCancelMaxPhotos}
-                      disabled={savingMaxPhotos}
-                    >
-                      <AppText style={styles.cancelBtnText}>Отмена</AppText>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={[
-                        styles.actionBtn,
-                        styles.saveBtn,
-                        savingMaxPhotos && styles.disabledBtn,
-                      ]}
-                      onPress={handleSaveMaxPhotos}
-                      disabled={savingMaxPhotos}
-                    >
-                      {savingMaxPhotos ? (
-                        <ActivityIndicator size="small" color="#fff" />
-                      ) : (
-                        <AppText style={styles.saveBtnText}>Сохранить</AppText>
-                      )}
-                    </TouchableOpacity>
-                  </View>
-                </>
-              ) : (
-                <View style={styles.inlineValueRow}>
-                  <View style={styles.numberBadge}>
-                    <AppText style={styles.numberBadgeText}>{maxPhotos}</AppText>
-                  </View>
-                  <TouchableOpacity
-                    style={styles.editBtn}
-                    onPress={handleStartEditMaxPhotos}
-                  >
-                    <AppText style={styles.editBtnText}>Изменить</AppText>
-                  </TouchableOpacity>
-                </View>
-              )}
-            </View>
-
-            {/* Price formula setting */}
-            <View style={styles.card}>
-              <View style={styles.sectionHeader}>
-                <View style={{ flex: 1 }}>
-                  <AppText style={styles.sectionTitle}>Формула расчёта цены</AppText>
-                  <AppText style={styles.sectionDesc}>
-                    Параметры по которым рассчитывается итоговая цена на основе
-                    данных от ИИ.
-                  </AppText>
-                </View>
-              </View>
-
-              {editingPrice ? (
-                <>
-                  <View style={styles.priceRow}>
-                    <AppText style={styles.priceLabel}>Цена не найдена (₽)</AppText>
-                    <TextInput
-                      style={styles.priceInput}
-                      value={draftPriceDefault}
-                      onChangeText={setDraftPriceDefault}
-                      keyboardType="number-pad"
-                      editable={!savingPrice}
-                    />
-                  </View>
-                  <View style={styles.priceRow}>
-                    <AppText style={styles.priceLabel}>Минимальная цена (₽)</AppText>
-                    <TextInput
-                      style={styles.priceInput}
-                      value={draftPriceMin}
-                      onChangeText={setDraftPriceMin}
-                      keyboardType="number-pad"
-                      editable={!savingPrice}
-                    />
-                  </View>
-                  <View style={styles.priceRow}>
-                    <AppText style={styles.priceLabel}>Порог скидки (₽)</AppText>
-                    <TextInput
-                      style={styles.priceInput}
-                      value={draftPriceDiscountThreshold}
-                      onChangeText={setDraftPriceDiscountThreshold}
-                      keyboardType="number-pad"
-                      editable={!savingPrice}
-                    />
-                  </View>
-                  <View style={styles.priceRow}>
-                    <AppText style={styles.priceLabel}>
-                      Скидка выше порога (%)
-                    </AppText>
-                    <TextInput
-                      style={styles.priceInput}
-                      value={draftPriceDiscountPercent}
-                      onChangeText={setDraftPriceDiscountPercent}
-                      keyboardType="number-pad"
-                      editable={!savingPrice}
-                    />
-                  </View>
-                  <View style={styles.priceRow}>
-                    <AppText style={styles.priceLabel}>Коэффициент ИИ ×</AppText>
-                    <TextInput
-                      style={styles.priceInput}
-                      value={draftPriceAiMultiplier}
-                      onChangeText={setDraftPriceAiMultiplier}
-                      keyboardType="decimal-pad"
-                      editable={!savingPrice}
-                    />
-                  </View>
-                  <View style={styles.editActions}>
-                    <TouchableOpacity
-                      style={[styles.actionBtn, styles.cancelBtn]}
-                      onPress={handleCancelPrice}
-                      disabled={savingPrice}
-                    >
-                      <AppText style={styles.cancelBtnText}>Отмена</AppText>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={[
-                        styles.actionBtn,
-                        styles.saveBtn,
-                        savingPrice && styles.disabledBtn,
-                      ]}
-                      onPress={handleSavePrice}
-                      disabled={savingPrice}
-                    >
-                      {savingPrice ? (
-                        <ActivityIndicator size="small" color="#fff" />
-                      ) : (
-                        <AppText style={styles.saveBtnText}>Сохранить</AppText>
-                      )}
-                    </TouchableOpacity>
-                  </View>
-                </>
-              ) : (
-                <>
-                  <View style={styles.priceFormulaBox}>
-                    <AppText style={styles.priceFormulaLine}>
-                      Цена не найдена →{" "}
-                      <AppText style={styles.priceFormulaValue}>
-                        {priceDefault} ₽
-                      </AppText>
-                    </AppText>
-                    <AppText style={styles.priceFormulaLine}>
-                      Цена &lt; {priceMin} ₽ →{" "}
-                      <AppText style={styles.priceFormulaValue}>{priceMin} ₽</AppText>
-                    </AppText>
-                    <AppText style={styles.priceFormulaLine}>
-                      Цена &gt; {priceDiscountThreshold} ₽ →{" "}
-                      <AppText style={styles.priceFormulaValue}>
-                        цена − {priceDiscountPercent}%
-                      </AppText>
-                    </AppText>
-                    <AppText style={styles.priceFormulaLine}>
-                      Иначе →{" "}
-                      <AppText style={styles.priceFormulaValue}>
-                        цена без изменений
-                      </AppText>
-                    </AppText>
-                    <AppText style={[styles.priceFormulaLine, { marginTop: 6 }]}>
-                      Коэффициент ИИ →{" "}
-                      <AppText style={styles.priceFormulaValue}>
-                        ×{priceAiMultiplier}
-                      </AppText>
-                    </AppText>
-                  </View>
-                  <TouchableOpacity
-                    style={styles.editBtn}
-                    onPress={handleStartEditPrice}
-                  >
-                    <AppText style={styles.editBtnText}>Изменить</AppText>
-                  </TouchableOpacity>
-                </>
-              )}
-            </View>
-
-            {/* Excel export */}
-            <TouchableOpacity
-              style={styles.card}
-              activeOpacity={0.75}
-              onPress={() => navigation.navigate("Export")}
-            >
-              <View style={[styles.sectionHeader, { marginBottom: 0 }]}>
-                <View style={{ flex: 1 }}>
-                  <AppText style={styles.sectionTitle}>Выгрузка в Excel</AppText>
-                  <AppText style={styles.sectionDesc}>
-                    Карточки за период: данные книги, магазины Ozon, операторы и
-                    даты. Поля выбираются галочками.
-                  </AppText>
-                </View>
-                <AppText style={{ fontSize: 20, color: "#1976D2" }}>›</AppText>
-              </View>
-            </TouchableOpacity>
-
-            {/* Hashtag rules */}
-            <TouchableOpacity
-              style={styles.card}
-              activeOpacity={0.75}
-              onPress={() => navigation.navigate("HashtagRules")}
-            >
-              <View style={[styles.sectionHeader, { marginBottom: 0 }]}>
-                <View style={{ flex: 1 }}>
-                  <AppText style={styles.sectionTitle}>Правила хэштегов</AppText>
-                  <AppText style={styles.sectionDesc}>
-                    Запрещённые слова, замены и обязательные теги для хэштегов
-                    от ИИ.
-                  </AppText>
-                </View>
-                <AppText style={{ fontSize: 20, color: "#1976D2" }}>›</AppText>
-              </View>
-            </TouchableOpacity>
-
-            <ContentStoresCard />
-
-            <VideoCoverCard />
-
-            <RichContentCard />
-
-            <ExtraPhotosCard />
-
-            {/* AI prompt setting */}
-            <View style={styles.card}>
-              <View style={styles.sectionHeader}>
-                <View style={{ flex: 1 }}>
-                  <AppText style={styles.sectionTitle}>
-                    AI-промпт для распознавания
-                  </AppText>
-                  <AppText style={styles.sectionDesc}>
-                    Этот промпт передаётся в ИИ при извлечении данных из
-                    фотографий книг.
-                  </AppText>
-                </View>
-              </View>
-
-              {editingPrompt ? (
-                <>
-                  <TextInput
-                    style={styles.promptInput}
-                    value={draftPrompt}
-                    onChangeText={setDraftPrompt}
-                    placeholder="Введите кастомный промпт..."
-                    placeholderTextColor="#aaa"
-                    multiline
-                    textAlignVertical="top"
-                    editable={!savingPrompt}
-                    autoFocus
-                  />
-                  <View style={styles.editActions}>
-                    <TouchableOpacity
-                      style={[styles.actionBtn, styles.cancelBtn]}
-                      onPress={handleCancelPrompt}
-                      disabled={savingPrompt}
-                    >
-                      <AppText style={styles.cancelBtnText}>Отмена</AppText>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={[
-                        styles.actionBtn,
-                        styles.saveBtn,
-                        savingPrompt && styles.disabledBtn,
-                      ]}
-                      onPress={handleSavePrompt}
-                      disabled={savingPrompt}
-                    >
-                      {savingPrompt ? (
-                        <ActivityIndicator size="small" color="#fff" />
-                      ) : (
-                        <AppText style={styles.saveBtnText}>Сохранить</AppText>
-                      )}
-                    </TouchableOpacity>
-                  </View>
-                </>
-              ) : (
-                <>
-                  <View style={styles.promptTextBox}>
-                    <AppText style={styles.promptText}>
-                      {aiPrompt || "Промпт не задан"}
-                    </AppText>
-                  </View>
-                  <TouchableOpacity
-                    style={styles.editBtn}
-                    onPress={handleStartEditPrompt}
-                  >
-                    <AppText style={styles.editBtnText}>Изменить</AppText>
-                  </TouchableOpacity>
-                </>
-              )}
-            </View>
-
-            {/* Maintenance */}
-            <View style={styles.card}>
-              <View style={styles.sectionHeader}>
-                <View style={{ flex: 1 }}>
-                  <AppText style={styles.sectionTitle}>Технические работы</AppText>
-                  <AppText style={styles.sectionDesc}>
-                    Управление режимом обслуживания сервера. При включении
-                    пользователи увидят экран технических работ.
-                  </AppText>
-                </View>
-              </View>
-
-              <View style={styles.maintenanceToggleRow}>
-                <AppText
-                  style={[
-                    styles.maintenanceToggleLabel,
-                    maintenanceEnabled && styles.maintenanceToggleLabelActive,
-                  ]}
-                >
-                  {maintenanceEnabled
-                    ? "🔴  Технические работы ВКЛЮЧЕНЫ"
-                    : "🟢  Технические работы выключены"}
-                </AppText>
-                <Switch
-                  value={maintenanceEnabled}
-                  onValueChange={setMaintenanceEnabled}
-                  trackColor={{ false: "#ddd", true: "#FFCDD2" }}
-                  thumbColor={maintenanceEnabled ? "#E53935" : "#fff"}
-                />
-              </View>
-
-              <AppText style={styles.maintenanceFieldLabel}>
-                Дата и время начала (ДД.ММ.ГГГГ ЧЧ:ММ)
-              </AppText>
-              <View style={styles.maintenanceDateRow}>
-                <TextInput
-                  style={[
-                    styles.maintenanceInput,
-                    { flex: 1, marginBottom: 0 },
-                  ]}
-                  value={maintenanceStartAt}
-                  onChangeText={setMaintenanceStartAt}
-                  placeholder="напр. 15.04.2026 18:00"
-                  placeholderTextColor="#bbb"
-                  keyboardType="numbers-and-punctuation"
-                />
-              </View>
-              <View style={styles.maintenanceDateShortcuts}>
-                {[
-                  { label: "Сегодня", offset: 0 },
-                  { label: "Завтра", offset: 1 },
-                ].map(({ label, offset }) => (
-                  <TouchableOpacity
-                    key={label}
-                    style={styles.maintenanceDateChip}
-                    onPress={() => {
-                      const d = new Date();
-                      d.setDate(d.getDate() + offset);
-                      d.setSeconds(0, 0);
-                      const pad = (n: number) => String(n).padStart(2, "0");
-                      setMaintenanceStartAt(
-                        `${pad(d.getDate())}.${pad(d.getMonth() + 1)}.${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}`,
+      {/* Reset stuck publications */}
+      {/* <TouchableOpacity
+        style={styles.card}
+        activeOpacity={0.75}
+        disabled={resettingStuck}
+        onPress={() => {
+          Alert.alert(
+            "Сбросить зависшие публикации",
+            "Книги, которые больше 24 часов висят в статусе «Публикуется в Ozon» без результата, будут проверены. Найденные на Ozon — помечены как опубликованные, остальные — как ошибка публикации.",
+            [
+              { text: "Отмена", style: "cancel" },
+              {
+                text: "Запустить",
+                onPress: async () => {
+                  setResettingStuck(true);
+                  try {
+                    const res =
+                      await adminService.resetStuckPublications();
+                    if (res.checked === 0) {
+                      Alert.alert(
+                        "Готово",
+                        "Зависших публикаций не найдено",
                       );
-                    }}
-                    activeOpacity={0.7}
-                  >
-                    <AppText style={styles.maintenanceDateChipText}>{label}</AppText>
-                  </TouchableOpacity>
-                ))}
-              </View>
-
-              <AppText style={[styles.maintenanceFieldLabel, { marginTop: 8 }]}>
-                Примерное окончание (ДД.ММ.ГГГГ ЧЧ:ММ)
-              </AppText>
-              <TextInput
-                style={styles.maintenanceInput}
-                value={maintenanceEndAt}
-                onChangeText={setMaintenanceEndAt}
-                placeholder="напр. 15.04.2026 20:00"
-                placeholderTextColor="#bbb"
-                keyboardType="numbers-and-punctuation"
-              />
-              <View style={styles.maintenanceDateShortcuts}>
-                {[
-                  { label: "Сегодня", offset: 0 },
-                  { label: "Завтра", offset: 1 },
-                ].map(({ label, offset }) => (
-                  <TouchableOpacity
-                    key={label}
-                    style={styles.maintenanceDateChip}
-                    onPress={() => {
-                      const d = new Date();
-                      d.setDate(d.getDate() + offset);
-                      d.setSeconds(0, 0);
-                      const pad = (n: number) => String(n).padStart(2, "0");
-                      setMaintenanceEndAt(
-                        `${pad(d.getDate())}.${pad(d.getMonth() + 1)}.${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}`,
+                    } else {
+                      Alert.alert(
+                        "Готово",
+                        `Проверено: ${res.checked}\nНайдено на Ozon: ${res.published}\nПомечено как ошибка: ${res.failed}`,
                       );
-                    }}
-                    activeOpacity={0.7}
-                  >
-                    <AppText style={styles.maintenanceDateChipText}>{label}</AppText>
-                  </TouchableOpacity>
-                ))}
-              </View>
+                    }
+                  } catch {
+                    Alert.alert("Ошибка", "Не удалось выполнить сброс");
+                  } finally {
+                    setResettingStuck(false);
+                  }
+                },
+              },
+            ],
+          );
+        }}
+      >
+        <View style={[styles.sectionHeader, { marginBottom: 0 }]}>
+          <View style={{ flex: 1 }}>
+            <AppText style={styles.sectionTitle}>
+              Сбросить зависшие публикации
+            </AppText>
+            <AppText style={styles.sectionDesc}>
+              Исправить книги, застрявшие в статусе «Публикуется в Ozon»
+              более 24 часов
+            </AppText>
+          </View>
+          {resettingStuck ? (
+            <ActivityIndicator size="small" color="#1976D2" />
+          ) : (
+            <AppText style={{ fontSize: 20, color: "#1976D2" }}>›</AppText>
+          )}
+        </View>
+      </TouchableOpacity> */}
 
-              <AppText style={styles.maintenanceFieldLabel}>
-                За сколько минут показывать предупреждение
-              </AppText>
-              <TextInput
-                style={styles.maintenanceInput}
-                value={maintenanceWarningMinutes}
-                onChangeText={setMaintenanceWarningMinutes}
-                placeholder="30"
-                placeholderTextColor="#bbb"
-                keyboardType="number-pad"
-              />
+      {/* Repair failed publications */}
+      {/* <TouchableOpacity
+        style={styles.card}
+        activeOpacity={0.75}
+        disabled={repairing}
+        onPress={() => {
+          Alert.alert(
+            "Восстановить failed карточки",
+            "Система проверит все карточки с ошибкой публикации и найдёт те, что реально опубликованы на Ozon. Они будут помечены как опубликованные.",
+            [
+              { text: "Отмена", style: "cancel" },
+              {
+                text: "Запустить",
+                onPress: async () => {
+                  setRepairing(true);
+                  try {
+                    const res =
+                      await adminService.repairFailedPublications();
+                    Alert.alert("Запущено", res.message);
+                  } catch (e: any) {
+                    const msg =
+                      e?.response?.data?.message ||
+                      e?.message ||
+                      String(e);
+                    Alert.alert("Ошибка", msg);
+                  } finally {
+                    setRepairing(false);
+                  }
+                },
+              },
+            ],
+          );
+        }}
+      >
+        <View style={[styles.sectionHeader, { marginBottom: 0 }]}>
+          <View style={{ flex: 1 }}>
+            <AppText style={styles.sectionTitle}>
+              Восстановить failed карточки
+            </AppText>
+            <AppText style={styles.sectionDesc}>
+              Найти карточки с ошибкой публикации, которые реально
+              опубликованы на Ozon
+            </AppText>
+          </View>
+          {repairing ? (
+            <ActivityIndicator size="small" color="#1976D2" />
+          ) : (
+            <AppText style={{ fontSize: 20, color: "#1976D2" }}>›</AppText>
+          )}
+        </View>
+      </TouchableOpacity> */}
 
-              <AppText style={styles.maintenanceFieldLabel}>
-                Причина / сообщение для пользователей
-              </AppText>
-              <TextInput
-                style={[styles.maintenanceInput, styles.maintenanceTextArea]}
-                value={maintenanceMessage}
-                onChangeText={setMaintenanceMessage}
-                placeholder="Плановые технические работы по обновлению системы"
-                placeholderTextColor="#bbb"
-                multiline
-                numberOfLines={3}
-              />
+      {/* Backfill store IDs */}
+      {/* <TouchableOpacity
+        style={styles.card}
+        activeOpacity={0.75}
+        disabled={backfilling}
+        onPress={async () => {
+          Alert.alert(
+            "Привязать магазины",
+            "Система пройдёт по всем магазинам Озона и привяжет их к карточкам, у которых магазин ещё не указан. Это может занять некоторое время.",
+            [
+              { text: "Отмена", style: "cancel" },
+              {
+                text: "Запустить",
+                onPress: async () => {
+                  setBackfilling(true);
+                  try {
+                    const res = await adminService.backfillStoreIds();
+                    Alert.alert(
+                      "Готово",
+                      `Обновлено карточек: ${res.updated}\nПроверено магазинов: ${res.stores}`,
+                    );
+                  } catch {
+                    Alert.alert(
+                      "Ошибка",
+                      "Не удалось выполнить привязку",
+                    );
+                  } finally {
+                    setBackfilling(false);
+                  }
+                },
+              },
+            ],
+          );
+        }}
+      >
+        <View style={[styles.sectionHeader, { marginBottom: 0 }]}>
+          <View style={{ flex: 1 }}>
+            <AppText style={styles.sectionTitle}>
+              Привязать магазины к карточкам
+            </AppText>
+            <AppText style={styles.sectionDesc}>
+              Проставить магазин для карточек, опубликованных до
+              добавления этой функции
+            </AppText>
+          </View>
+          {backfilling ? (
+            <ActivityIndicator size="small" color="#1976D2" />
+          ) : (
+            <AppText style={{ fontSize: 20, color: "#1976D2" }}>›</AppText>
+          )}
+        </View>
+      </TouchableOpacity> */}
 
-              <AppText style={styles.maintenanceFieldLabel}>
-                Инструкции для пользователей (необязательно)
-              </AppText>
-              <TextInput
-                style={[styles.maintenanceInput, styles.maintenanceTextArea]}
-                value={maintenanceInstructions}
-                onChangeText={setMaintenanceInstructions}
-                placeholder={
-                  "• Завершите текущую работу\n• Все сохранённые карточки останутся\n• Несохранённые данные будут потеряны"
-                }
-                placeholderTextColor="#bbb"
-                multiline
-                numberOfLines={4}
-              />
+      {/* Sync archived status */}
+      <TouchableOpacity
+        style={styles.card}
+        activeOpacity={0.75}
+        disabled={syncingOzon}
+        onPress={() => {
+          Alert.alert(
+            "Синхронизировать с Ozon",
+            "Система проверит статус каждого товара по магазинам и обновит состояние: опубликован или в архиве.",
+            [
+              { text: "Отмена", style: "cancel" },
+              {
+                text: "Запустить",
+                onPress: async () => {
+                  setSyncingOzon(true);
+                  try {
+                    const res = await adminService.syncOzonStatus();
+                    Alert.alert("Запущено", res.message);
+                  } catch {
+                    Alert.alert(
+                      "Ошибка",
+                      "Не удалось запустить синхронизацию",
+                    );
+                  } finally {
+                    setSyncingOzon(false);
+                  }
+                },
+              },
+            ],
+          );
+        }}
+      >
+        <View style={[styles.sectionHeader, { marginBottom: 0 }]}>
+          <View style={{ flex: 1 }}>
+            <AppText style={styles.sectionTitle}>
+              Синхронизировать с Ozon
+            </AppText>
+            <AppText style={styles.sectionDesc}>
+              Обновить статусы товаров: опубликован или в архиве
+            </AppText>
+          </View>
+          {syncingOzon ? (
+            <ActivityIndicator size="small" color="#1976D2" />
+          ) : (
+            <AppText style={{ fontSize: 20, color: "#1976D2" }}>›</AppText>
+          )}
+        </View>
+      </TouchableOpacity>
 
-              <TouchableOpacity
-                style={[
-                  styles.maintenanceSaveBtn,
-                  savingMaintenance && styles.maintenanceSaveBtnDisabled,
-                ]}
-                onPress={handleSaveMaintenance}
-                disabled={savingMaintenance}
-                activeOpacity={0.8}
-              >
-                {savingMaintenance ? (
-                  <ActivityIndicator size="small" color="#fff" />
-                ) : (
-                  <AppText style={styles.maintenanceSaveBtnText}>Сохранить</AppText>
-                )}
-              </TouchableOpacity>
-            </View>
-          </>
-        )}
-      </ScrollView>
-    </KeyboardAvoidingView>
+      <NavCard
+        title="Доп. контент на Ozon"
+        desc="Видеообложки, Rich-контент, доп. фото и магазины, куда они отправляются."
+        onPress={() => navigation.navigate("OzonContent")}
+      />
+
+      <NavCard
+        title="Формула расчёта цены"
+        desc="Параметры, по которым считается итоговая цена на основе цены от ИИ."
+        onPress={() => navigation.navigate("PriceFormula")}
+      />
+
+      <NavCard
+        title="AI-промпт для распознавания"
+        desc="Промпт, который передаётся в ИИ при извлечении данных из фотографий книг."
+        onPress={() => navigation.navigate("AiPrompt")}
+      />
+
+      <NavCard
+        title="Правила хэштегов"
+        desc="Запрещённые слова, замены и обязательные теги для хэштегов от ИИ."
+        onPress={() => navigation.navigate("HashtagRules")}
+      />
+
+      <NavCard
+        title="Выгрузка в Excel"
+        desc="Карточки за период: данные книги, магазины Ozon, операторы и даты. Поля выбираются галочками."
+        onPress={() => navigation.navigate("Export")}
+      />
+
+      <NavCard
+        title="Технические работы"
+        desc="Режим обслуживания сервера: пользователи увидят экран технических работ."
+        status={
+          maintenance.isActive
+            ? "🔴 Сейчас включены"
+            : maintenance.isWarning
+              ? "🟠 Запланированы"
+              : null
+        }
+        onPress={() => navigation.navigate("Maintenance")}
+      />
+    </ScrollView>
   );
 }
 
@@ -1248,12 +355,9 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#F5F5F5",
   },
-  flex: {
-    flex: 1,
-    backgroundColor: "#F5F5F5",
-  },
   scroll: {
     flex: 1,
+    backgroundColor: "#F5F5F5",
   },
   container: {
     padding: 16,
@@ -1287,237 +391,14 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: "#888",
   },
-  inlineValueRow: {
-    flexDirection: "row",
-    alignSelf: "stretch",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  numberBadge: {
-    backgroundColor: "#E3F2FD",
-    borderRadius: 10,
-    paddingVertical: 8,
-    paddingHorizontal: 20,
-  },
-  numberBadgeText: {
-    fontSize: 22,
-    fontWeight: "700",
-    color: "#1976D2",
-  },
-  numberInput: {
-    width: "100%",
-    height: 52,
-    borderWidth: 1.5,
-    borderColor: "#1976D2",
-    borderRadius: 10,
-    paddingHorizontal: 16,
-    fontSize: 20,
+  statusText: {
+    fontSize: 13,
     fontWeight: "600",
-    color: "#222",
-    backgroundColor: "#FAFAFA",
-    textAlign: "center",
-  },
-  promptTextBox: {
-    width: "100%",
-    minHeight: 100,
-    backgroundColor: "#F5F7FA",
-    borderRadius: 10,
-    padding: 12,
-    borderWidth: 1,
-    borderColor: "#E8ECF0",
-  },
-  promptText: {
-    fontSize: 14,
-    color: "#333",
-    lineHeight: 20,
-  },
-  editBtn: {
-    marginTop: 10,
-    alignSelf: "flex-end",
-    paddingVertical: 8,
-    paddingHorizontal: 20,
-    borderRadius: 8,
-    borderWidth: 1.5,
-    borderColor: "#1976D2",
-  },
-  editBtnText: {
-    fontSize: 14,
-    color: "#1976D2",
-    fontWeight: "600",
-  },
-  promptInput: {
-    width: "100%",
-    minHeight: 160,
-    borderWidth: 1.5,
-    borderColor: "#1976D2",
-    borderRadius: 10,
-    padding: 12,
-    fontSize: 14,
-    color: "#222",
-    backgroundColor: "#FAFAFA",
-  },
-  editActions: {
-    flexDirection: "row",
-    gap: 10,
-    marginTop: 12,
-    alignSelf: "stretch",
-  },
-  actionBtn: {
-    flex: 1,
-    paddingVertical: 11,
-    borderRadius: 8,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  cancelBtn: {
-    borderWidth: 1.5,
-    borderColor: "#ccc",
-    backgroundColor: "#fff",
-  },
-  cancelBtnText: {
-    fontSize: 14,
-    color: "#666",
-    fontWeight: "600",
-  },
-  saveBtn: {
-    backgroundColor: "#1976D2",
-  },
-  saveBtnText: {
-    fontSize: 14,
-    color: "#fff",
-    fontWeight: "600",
-  },
-  disabledBtn: {
-    opacity: 0.6,
-  },
-  userMgmtArrow: {
-    fontSize: 22,
-    color: "#ccc",
-    fontWeight: "300",
-  },
-  priceFormulaBox: {
-    alignSelf: "stretch",
-    backgroundColor: "#F5F7FA",
-    borderRadius: 10,
-    padding: 14,
-    borderWidth: 1,
-    borderColor: "#E8ECF0",
-    gap: 6,
-  },
-  priceFormulaLine: {
-    fontSize: 14,
-    color: "#555",
-  },
-  priceFormulaValue: {
-    fontWeight: "700",
-    color: "#1976D2",
-  },
-  priceRow: {
-    flexDirection: "row",
-    alignSelf: "stretch",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: 10,
-  },
-  priceLabel: {
-    fontSize: 14,
-    color: "#555",
-    flex: 1,
-  },
-  priceInput: {
-    width: 100,
-    height: 40,
-    borderWidth: 1.5,
-    borderColor: "#1976D2",
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    fontSize: 15,
-    fontWeight: "600",
-    color: "#222",
-    backgroundColor: "#FAFAFA",
-    textAlign: "center",
-  },
-  // Maintenance styles
-  maintenanceToggleRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    backgroundColor: "#FAFAFA",
-    borderRadius: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: "#eee",
-  },
-  maintenanceToggleLabel: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: "#555",
-    flex: 1,
-    marginRight: 12,
-  },
-  maintenanceToggleLabelActive: {
     color: "#C62828",
+    marginTop: 6,
   },
-  maintenanceFieldLabel: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: "#888",
-    marginBottom: 6,
-    marginTop: 4,
-  },
-  maintenanceInput: {
-    borderWidth: 1,
-    borderColor: "#ddd",
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 14,
-    color: "#333",
-    backgroundColor: "#FAFAFA",
-    marginBottom: 12,
-  },
-  maintenanceTextArea: {
-    minHeight: 80,
-    textAlignVertical: "top",
-  },
-  maintenanceDateRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 6,
-  },
-  maintenanceDateShortcuts: {
-    flexDirection: "row",
-    gap: 8,
-    marginBottom: 4,
-  },
-  maintenanceDateChip: {
-    paddingVertical: 5,
-    paddingHorizontal: 14,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: "#1976D2",
-    backgroundColor: "#E3F2FD",
-  },
-  maintenanceDateChipText: {
-    fontSize: 12,
+  arrow: {
+    fontSize: 20,
     color: "#1976D2",
-    fontWeight: "600",
-  },
-  maintenanceSaveBtn: {
-    backgroundColor: "#1976D2",
-    borderRadius: 10,
-    paddingVertical: 13,
-    alignItems: "center",
-    marginTop: 4,
-  },
-  maintenanceSaveBtnDisabled: {
-    opacity: 0.5,
-  },
-  maintenanceSaveBtnText: {
-    color: "#fff",
-    fontSize: 15,
-    fontWeight: "600",
   },
 });

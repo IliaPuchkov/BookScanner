@@ -12,7 +12,6 @@ import { BookPhoto } from './entities/book-photo.entity';
 import { IStorageProvider, STORAGE_PROVIDER } from './storage/storage.interface';
 import { ReorderPhotosDto } from './dto/reorder-photos.dto';
 import { MAX_PHOTOS_PER_BOOK, MAX_FILE_SIZE_BYTES, ALLOWED_MIME_TYPES } from '@bookscanner/shared';
-import { SettingsService } from '../settings/settings.service';
 import { ThumbnailService } from './thumbnail.service';
 
 @Injectable()
@@ -22,7 +21,6 @@ export class PhotosService {
     private readonly photosRepository: Repository<BookPhoto>,
     @Inject(STORAGE_PROVIDER)
     private readonly storage: IStorageProvider,
-    private readonly settingsService: SettingsService,
     private readonly thumbnails: ThumbnailService,
   ) {}
 
@@ -34,7 +32,7 @@ export class PhotosService {
       where: { bookId },
     });
 
-    const maxPhotos = await this.settingsService.getValue<number>('max_photo_count', MAX_PHOTOS_PER_BOOK);
+    const maxPhotos = MAX_PHOTOS_PER_BOOK;
 
     if (existingCount + files.length > maxPhotos) {
       throw new BadRequestException(

@@ -407,13 +407,13 @@ The admin has two dedicated screens for managing books that are potential or con
 - `render-video-cover.ts`: 810×1080, 25 fps, 200 frames. Every photo fitted whole over a blurred copy of itself, 5% zoom, 0.5 s crossfades, cover shown 1.15× longer (`segmentTimings`, unit-tested). Frames are drawn one by one with sharp (`affine` with fractional offsets = smooth zoom; `zoompan` jitters) and piped raw to `ffmpeg -threads 1` (~95 MB). Don't move the effects into an ffmpeg filter graph: it buffers later photos and peaked at ~400 MB in the 512 MB container.
 - Server: `markPublished` → BullMQ `video-cover` queue (concurrency 1, only while setting `ozon_video_cover_enabled` is on) → `render-worker.js` in a `nice -n 15` child process → S3 `videos/<bookId>/cover-<photosHash>.mp4`. `VideoCoverCron` (every 10 min) sends unsynced covers via `/v1/product/attributes/update` (only 21845, batches of 100, per publishing store, within `daily_update`). Cover columns are written with raw SQL so `books.updatedAt` doesn't change. `photosHash` = sha1 of photo URLs in display order; a different hash = outdated cover. Covers are not re-rendered automatically when photos change after publication.
 - Backfill of old books runs on a workstation: `apps/backend/scripts/video-cover-backfill.ts` (needs ffmpeg + a **separate** admin account — login replaces the account's refresh token). Resumable.
-- Docker image has `ffmpeg` (`apk add`). Mobile: Settings → «Видеообложки на Ozon» (`components/VideoCoverCard.tsx`).
+- Docker image has `ffmpeg` (`apk add`). Mobile: Settings → «Доп. контент на Ozon» (`screens/admin/OzonContentScreen.tsx`) → «Видеообложки на Ozon» (`components/VideoCoverCard.tsx`).
 
 ### Ozon rich content (`ozon/rich-content/`)
 
 - «Rich-контент JSON» = attribute **11254** (complex 0). No public schema; what passed on test card 432j_M32HOI: root `{ content, version: 0.3 }` (without `version` → `invalid_rich_content_json`), one `raShowcase` `type: "chess"` widget, rows `{ imgLink: "", img: { src, srcMobile, alt, width, height, widthMobile, heightMobile }, title: { content: [..], size: "size4", align, color: "color1" }, text: { size: "size2", align, color, content: [lines] }, reverse }`. Ozon fits the picture itself, so a 3:4 size is sent for every photo (real sizes aren't stored).
 - `buildRichContent` (unit-tested): «О книге» (annotation without `ANNOTATION_PREFIX`/links, by paragraph) + cover, «Об издании» (filled fields) + photo 2, «Состояние» + photo 3; sides alternate. Chess needs 2–6 rows: < 2 photos → `raTextBlock`s + cover full width. Full-width `roll` images per photo were rejected by the client (huge, one column).
-- Setting `ozon_rich_content_enabled` (off by default). On: `publish`/`publishBulk` add it to the import payload (`ResolvedOzonData.richContent`), `markPublished` sets `richContentSyncedAt` when the payload carried it; `RichContentCron` (every 10 min) sends it to published books without it via `/v1/product/attributes/update` (batches of 100, per publishing store, within `daily_update`), skipping products that **already have 11254 on Ozon** (hand-made content is never overwritten). Edits after publication are not re-sent. Mobile: Settings → «Rich-контент на Ozon» (`components/RichContentCard.tsx`).
+- Setting `ozon_rich_content_enabled` (off by default). On: `publish`/`publishBulk` add it to the import payload (`ResolvedOzonData.richContent`), `markPublished` sets `richContentSyncedAt` when the payload carried it; `RichContentCron` (every 10 min) sends it to published books without it via `/v1/product/attributes/update` (batches of 100, per publishing store, within `daily_update`), skipping products that **already have 11254 on Ozon** (hand-made content is never overwritten). Edits after publication are not re-sent. Mobile: Settings → «Доп. контент на Ozon» (`screens/admin/OzonContentScreen.tsx`) → «Rich-контент на Ozon» (`components/RichContentCard.tsx`).
 
 ### Ozon extra photos (`ozon/extra-photos/`)
 
@@ -422,11 +422,11 @@ The admin has two dedicated screens for managing books that are potential or con
 - Fonts are bundled in `apps/backend/assets/fonts` (OFL: PT Serif/Sans, Caveat, Amatic SC) and passed as `fontfile`; the Alpine image has no other fonts, so a glyph missing from them renders as a box (that's why the tick is an SVG, not «✓»).
 - Stored at `books/<id>/generated/<extraPhotosHash>-<n>.jpg`, NOT in `book_photos` (the app never shows them); `extraPhotosHash` covers the template version, shop name, photo URLs and the fields drawn. ~0.55 MB per book.
 - Setting `ozon_extra_photos_enabled` (off by default) + the content scope; `ozon_extra_photos_max_books` (number, 0/unset = no cap) stops after that many synced books in scope — for a trial run. `ExtraPhotosCron` (every 10 min): up to 60 published in-scope books with `extraPhotosSyncedAt IS NULL` → draw (~4.5 s/book on prod, ~95 MB) → `/v2/product/pictures/import` `{ items: [{ offer_id, images }] }` (offer_id required, ≤100 per call, `images` = full ordered list: the book's photos, then the extra ones) per store within `daily_update`. Only photos change — price and attributes stay (v1 of the method is off since 2026-10-01; a full `/v3/product/import` would need Ozon's current price, which the client edits by hand). `publish`/`publishBulk` append the stored extra photos too, so a re-import doesn't drop them. A card shows «Не продаётся / Обновляется» for ~2 min after a photo change.
-- Mobile: Settings → «Доп. фото на Ozon» (`components/ExtraPhotosCard.tsx`).
+- Mobile: Settings → «Доп. контент на Ozon» (`screens/admin/OzonContentScreen.tsx`) → «Доп. фото на Ozon» (`components/ExtraPhotosCard.tsx`).
 
 ### Content scope (`ozon/content-scope.service.ts`)
 
-- Setting `ozon_content_store_ids` (JSON array, `[]` = every store): the stores where video covers, rich content and extra photos may be sent — to try them on one store first (Ozon fines). Checked by `publish`/`publishBulk` (rich content), `VideoCoverService.enqueue` / `listPending` (so the backfill script only gets those books) / `acceptUpload` (409 outside), and both push crons (`ContentScopeService.sql`). A book with an empty `ozon_products.storeId` counts as the active store. Mobile: Settings → «Магазины для видеообложек и Rich-контента» (`components/ContentStoresCard.tsx`).
+- Setting `ozon_content_store_ids` (JSON array, `[]` = every store): the stores where video covers, rich content and extra photos may be sent — to try them on one store first (Ozon fines). Checked by `publish`/`publishBulk` (rich content), `VideoCoverService.enqueue` / `listPending` (so the backfill script only gets those books) / `acceptUpload` (409 outside), and both push crons (`ContentScopeService.sql`). A book with an empty `ozon_products.storeId` counts as the active store. Mobile: Settings → «Доп. контент на Ozon» (`screens/admin/OzonContentScreen.tsx`) → «Магазины для видеообложек и Rich-контента» (`components/ContentStoresCard.tsx`).
 - Annotation prefix: "ВНИМАНИЕ! Книга не новая! Состояние - на фото."
 
 ### Authentication Flow
@@ -474,6 +474,8 @@ Admin screens in `apps/mobile/src/screens/admin/`:
 - `Dashboard.tsx` — grid of stat cards including Duplicates (→ Duplicates) and Copies count (→ Copies)
 - `DuplicatesScreen.tsx` — "На проверке: Копии": criterion picker (ISBN / автор+название / похожие названия), groups with copy sets, undecided and folded books
 - `CopiesScreen.tsx` — confirmed copies (`isCopy=true`), grouped by ISBN/title, with store name display
+
+Settings tab (`screens/operator/SettingsScreen.tsx`) is a list of navigation cards only; each setting has its own screen in `screens/admin/`: `PriceFormulaScreen`, `AiPromptScreen`, `MaintenanceScreen`, `OzonContentScreen` (content stores + video covers + rich content + extra photos), plus the older OzonStores / OzonSync / HashtagRules / Export / UserManagement. Shared look: `screens/admin/settingsStyles.ts`.
 
 ---
 
@@ -534,7 +536,7 @@ Build order in Dockerfile: `shared` → `ocr-processor` → `backend`
 
 ## Important Notes
 
-1. **Photo Limits**: Max 10MB per photo, JPEG/PNG, up to 10 photos per book
+1. **Photo Limits**: Max 10MB per photo, JPEG/PNG, up to 10 photos per book (`MAX_PHOTOS_PER_BOOK`, fixed — the old `max_photo_count` setting is no longer read or shown)
 2. **SKU Format**: `BoxNumber_UniqueCode` (auto-generated)
 3. **Default values if not detected**: height = 35mm, weight = 450g
 4. **boxNumber uniqueness**: scoped per user (not globally unique)
