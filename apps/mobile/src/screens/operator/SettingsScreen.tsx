@@ -961,6 +961,24 @@ export function SettingsScreen() {
               )}
             </View>
 
+            {/* Excel export */}
+            <TouchableOpacity
+              style={styles.card}
+              activeOpacity={0.75}
+              onPress={() => navigation.navigate("Export")}
+            >
+              <View style={[styles.sectionHeader, { marginBottom: 0 }]}>
+                <View style={{ flex: 1 }}>
+                  <AppText style={styles.sectionTitle}>Выгрузка в Excel</AppText>
+                  <AppText style={styles.sectionDesc}>
+                    Карточки за период: данные книги, магазины Ozon, операторы и
+                    даты. Поля выбираются галочками.
+                  </AppText>
+                </View>
+                <AppText style={{ fontSize: 20, color: "#1976D2" }}>›</AppText>
+              </View>
+            </TouchableOpacity>
+
             {/* Hashtag rules */}
             <TouchableOpacity
               style={styles.card}

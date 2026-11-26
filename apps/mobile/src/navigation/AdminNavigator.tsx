@@ -24,6 +24,7 @@ import { UnderpricedScreen } from "../screens/admin/UnderpricedScreen";
 import { CopiesScreen } from "../screens/admin/CopiesScreen";
 import { LibraryScreen } from "../screens/admin/LibraryScreen";
 import { HashtagRulesScreen } from "../screens/admin/HashtagRulesScreen";
+import { ExportScreen } from "../screens/admin/ExportScreen";
 
 export type AdminMainStackParamList = {
   Dashboard: undefined;
@@ -243,6 +244,11 @@ function SettingsStackScreen() {
         name="HashtagRules"
         component={HashtagRulesScreen}
         options={{ title: "Правила хэштегов" }}
+      />
+      <SettingsStack.Screen
+        name="Export"
+        component={ExportScreen}
+        options={{ title: "Выгрузка в Excel" }}
       />
       <SettingsStack.Screen
         name="OzonSync"

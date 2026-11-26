@@ -160,6 +160,7 @@ Located in `apps/backend/src/database/migrations/`:
 - `1748000000000-AddUserMustChangePassword.ts` — adds `"mustChangePassword"` (boolean, default false) to `users` (temporary password set by an admin)
 - `1748100000000-AddBookVideoCover.ts` — adds `"videoCoverUrl"`, `"videoCoverKey"`, `"videoCoverHash"` (varchar 16), `"videoCoverSyncedAt"` to `books` + partial index of covers not yet sent to Ozon
 - `1748200000000-AddBookRichContentSyncedAt.ts` — adds `"richContentSyncedAt"` to `books` + partial index of published books without it
+- `1748400000000-AddExportFiles.ts` — `export_files` (saved Excel exports: userId FK SET NULL, fileKey, fileName, sizeBytes, bookCount, params jsonb, createdAt, expiresAt)
 - `1748300000000-AddBookExtraPhotos.ts` — adds `"extraPhotosUrls"` (jsonb), `"extraPhotosHash"` (varchar 16), `"extraPhotosSyncedAt"` to `books` + partial index of published books without them
 
 ---
@@ -282,6 +283,13 @@ All routes prefixed with `/api`.
 - `GET /books/library` — "Домашняя книга": books with status `IN_LIBRARY`. Filters: `ownerId`, `search`
 - `POST /books/:id/library` — Add a PENDING_REVIEW, never-published book to the current admin's library
 - `DELETE /books/:id/library` — Remove from library → back to PENDING_REVIEW
+
+### Excel export (`/api/admin/export`, admin; `export/`)
+- `GET /fields` — field groups (Товар / Ozon и магазины / Оператор и работа / Копии и библиотека / Распознавание) + extra sheets + `ttlDays`; registry `EXPORT_GROUPS` in `export/export-fields.ts`
+- `GET /count?from&to&dateField` — books in the period
+- `POST /` `{ from?, to?, dateField, fields[], sheets[], tzOffset }` — builds the xlsx (exceljs `WorkbookWriter` into a temp file, 1 000 books per query), stores it at `exports/<uuid>.xlsx` (S3 or local) and returns the saved export. `dateField` = created/published/updated, period `[from, to)`; dates shifted to the phone's wall clock (`tzOffset` = `getTimezoneOffset()`). Sheets `operators`/`stores`/`days` are totals over the same rows (`export-summary.ts`). Logged as `excel_export`
+- `GET /files`, `GET /files/:id` (the xlsx), `DELETE /files/:id` — **only the admin's own** exports (`export_files.userId`; another admin's id answers 404). Kept `EXPORT_TTL_DAYS` = 14; `ExportFilesService.cleanupExpired` (hourly) deletes the file and the row. `userId` is SET NULL on user deletion so the cron still cleans up. Storage keys are never sent to the client
+- Mobile: Settings → «Выгрузка в Excel» (`screens/admin/ExportScreen.tsx`, choice kept in AsyncStorage `export.prefs`, list «Мои выгрузки»); downloaded with `expo-file-system/legacy`, Android saves to a folder via SAF, iOS opens the share sheet
 
 ### Settings (`/api/settings`)
 - `GET /` — Get all system settings (includes Ozon store configs)

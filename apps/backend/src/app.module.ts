@@ -12,6 +12,7 @@ import { PhotosModule } from './photos/photos.module';
 import { VisionModule } from './vision/vision.module';
 import { OzonModule } from './ozon/ozon.module';
 import { AdminModule } from './admin/admin.module';
+import { ExportModule } from './export/export.module';
 import { StatsModule } from './stats/stats.module';
 import { SettingsModule } from './settings/settings.module';
 import { WorkSessionsModule } from './work-sessions/work-sessions.module';
@@ -52,6 +53,7 @@ import { MaintenanceModule } from './maintenance/maintenance.module';
     VisionModule,
     OzonModule,
     AdminModule,
+    ExportModule,
     StatsModule,
     SettingsModule,
     WorkSessionsModule,
