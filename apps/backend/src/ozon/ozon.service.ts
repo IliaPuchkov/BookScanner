@@ -963,39 +963,71 @@ export class OzonService {
       this.logger.log(`syncOzonStatus: store=${storeId} — active=${activeOfferIds.size} archived=${archivedOfferIds.size}`);
     }
 
-    const tracked = await this.ozonProductRepository
-      .createQueryBuilder('op')
-      .innerJoinAndSelect('op.book', 'book')
-      .where('op.status IN (:...statuses)', { statuses: ['published', 'archived'] })
-      .getMany();
+    // Only the columns the sync needs: full entities (publishPayload JSONB + the joined book with its
+    // annotation) for ~36k rows ran the 512 MB container out of heap and the sync never finished.
+    const tracked: Array<{ opId: string; bookId: string; opStatus: string; bookStatus: BookStatus; sku: string | null }> =
+      await this.ozonProductRepository
+        .createQueryBuilder('op')
+        .innerJoin('op.book', 'book')
+        .select('op.id', 'opId')
+        .addSelect('op.bookId', 'bookId')
+        .addSelect('op.status', 'opStatus')
+        .addSelect('book.status', 'bookStatus')
+        .addSelect('book.sku', 'sku')
+        .where('op.status IN (:...statuses)', { statuses: ['published', 'archived'] })
+        .getRawMany();
 
     this.logger.log(`syncOzonStatus: checking ${tracked.length} tracked records`);
 
-    let archived = 0;
-    let restored = 0;
+    const toArchive = { opIds: [] as string[], bookIds: [] as string[] };
+    const toRestore = { opIds: [] as string[], bookIds: [] as string[] };
 
-    for (const op of tracked) {
-      const sku = op.book?.sku;
-      if (!sku) continue;
-      const isActive = activeOfferIds.has(sku);
-      if (!isActive && !archivedOfferIds.has(sku)) continue; // not on Ozon at all: leave as is
+    for (const row of tracked) {
+      if (!row.sku) continue;
+      const isActive = activeOfferIds.has(row.sku);
+      if (!isActive && !archivedOfferIds.has(row.sku)) continue; // not on Ozon at all: leave as is
 
-      if (!isActive && op.status !== 'archived') {
-        op.status = 'archived';
-        await this.ozonProductRepository.save(op);
-        await this.booksService.updateFromExtraction(op.bookId, { status: BookStatus.ARCHIVED });
-        archived++;
-        this.logger.log(`syncOzonStatus: archived book ${op.bookId} sku=${sku}`);
-      } else if (isActive && op.status === 'archived') {
-        op.status = 'published';
-        await this.ozonProductRepository.save(op);
-        await this.booksService.updateFromExtraction(op.bookId, { status: BookStatus.PUBLISHED });
-        restored++;
-        this.logger.log(`syncOzonStatus: restored book ${op.bookId} sku=${sku}`);
+      const target = isActive ? toRestore : toArchive;
+      const opStatus = isActive ? 'published' : 'archived';
+      const bookStatus = isActive ? BookStatus.PUBLISHED : BookStatus.ARCHIVED;
+      // The book is fixed too when only its own status drifted (op already right) — but only
+      // between published/archived, never over another status (e.g. in review again).
+      const opWrong = row.opStatus !== opStatus;
+      const bookWrong =
+        row.bookStatus !== bookStatus &&
+        (opWrong || row.bookStatus === BookStatus.PUBLISHED || row.bookStatus === BookStatus.ARCHIVED);
+      if (opWrong) target.opIds.push(row.opId);
+      if (bookWrong) target.bookIds.push(row.bookId);
+      if (opWrong || bookWrong) {
+        this.logger.log(`syncOzonStatus: ${isActive ? 'restored' : 'archived'} book ${row.bookId} sku=${row.sku}`);
       }
     }
 
-    this.logger.log(`syncOzonStatus: checked=${tracked.length}, archived=${archived}, restored=${restored}`);
+    const CHUNK = 1000;
+    const apply = async (
+      ids: string[],
+      run: (chunk: string[]) => Promise<unknown>,
+    ) => {
+      for (let i = 0; i < ids.length; i += CHUNK) await run(ids.slice(i, i + CHUNK));
+    };
+    for (const [set, opStatus, bookStatus] of [
+      [toArchive, 'archived', BookStatus.ARCHIVED],
+      [toRestore, 'published', BookStatus.PUBLISHED],
+    ] as const) {
+      await apply(set.opIds, (chunk) =>
+        this.ozonProductRepository.createQueryBuilder().update().set({ status: opStatus }).whereInIds(chunk).execute(),
+      );
+      await apply(set.bookIds, (chunk) =>
+        this.bookRepository.createQueryBuilder().update().set({ status: bookStatus }).whereInIds(chunk).execute(),
+      );
+    }
+
+    const archived = toArchive.bookIds.length;
+    const restored = toRestore.bookIds.length;
+    this.logger.log(
+      `syncOzonStatus: checked=${tracked.length}, archived=${archived} (ozon_products ${toArchive.opIds.length}), ` +
+        `restored=${restored} (ozon_products ${toRestore.opIds.length})`,
+    );
     return { checked: tracked.length, archived, restored };
   }
 
