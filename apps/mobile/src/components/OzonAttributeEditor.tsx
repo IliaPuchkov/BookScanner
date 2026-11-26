@@ -43,6 +43,20 @@ export const toInt = (t: string): number | null => {
   return Number.isNaN(n) ? null : n;
 };
 
+/** Signs of the comparisons — the app's own copy, so they show even when the server sends none */
+const OP_SIGNS: Record<string, string> = {
+  eq: "=",
+  ne: "≠",
+  lt: "<",
+  lte: "≤",
+  gt: ">",
+  gte: "≥",
+  contains: "∋",
+  notContains: "∌",
+  empty: "∅",
+  notEmpty: "≠ ∅",
+};
+
 /** What each comparison means, shown in the list of comparisons */
 const OP_DESCRIPTIONS: Record<string, string> = {
   eq: "равно",
@@ -381,7 +395,7 @@ export function AttributeEditor({
   const setMap = (i: number, patch: Partial<(typeof valueMap)[0]>) =>
     setR({ ...r, valueMap: valueMap.map((m, j) => (j === i ? { ...m, ...patch } : m)) });
 
-  const opLabel = (op: string) => `${dicts.ops[op] ?? op}  ${OP_DESCRIPTIONS[op] ?? ""}`.trim();
+  const opLabel = (op: string) => `${OP_SIGNS[op] ?? op}  ${OP_DESCRIPTIONS[op] ?? op}`;
 
   return (
     <Modal visible animationType="slide" onRequestClose={onCancel}>
