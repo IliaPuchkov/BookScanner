@@ -12,6 +12,8 @@ import {
   Platform,
 } from "react-native";
 import { AppText } from "../../components/AppText";
+import { UnsavedBar } from "../../components/UnsavedBar";
+import { useUnsavedChangesGuard } from "../../hooks/useUnsavedChanges";
 import { CoverType, PaperType } from "../../types";
 import { cardPipelineService, type CardDefaults } from "../../services/cardPipeline.service";
 import { useUndoable } from "../../context/UndoContext";
@@ -151,21 +153,21 @@ export function CardDefaultsScreen() {
     );
   };
 
-  const handleSave = async () => {
-    if (!draft) return;
+  const handleSave = async (): Promise<boolean> => {
+    if (!draft) return false;
     const numbers = {} as Record<NumberKey, number>;
     for (const f of NUMBER_FIELDS) {
       const n = Number(draft[f.key].replace(",", "."));
       if (!Number.isFinite(n) || n <= 0) {
         Alert.alert("Ошибка", `${f.label}: нужно число больше 0`);
-        return;
+        return false;
       }
       numbers[f.key] = n;
     }
     for (const f of TEXT_FIELDS) {
       if (!draft[f.key].trim()) {
         Alert.alert("Ошибка", `${f.label}: не может быть пустым`);
-        return;
+        return false;
       }
     }
     setSaving(true);
@@ -174,12 +176,16 @@ export function CardDefaultsScreen() {
       setSaved(toDraft(result));
       setDraft(toDraft(result));
       await offerApply();
+      return true;
     } catch (e: any) {
       Alert.alert("Ошибка", e?.response?.data?.message ?? "Не удалось сохранить");
+      return false;
     } finally {
       setSaving(false);
     }
   };
+
+  useUnsavedChangesGuard(dirty, saving, handleSave);
 
   if (loading || !draft) {
     return (
@@ -252,19 +258,6 @@ export function CardDefaultsScreen() {
           ))}
         </View>
 
-        <TouchableOpacity
-          style={[s.saveBtn, (!dirty || saving) && s.saveBtnDisabled]}
-          onPress={handleSave}
-          disabled={!dirty || saving}
-          activeOpacity={0.8}
-        >
-          {saving ? <ActivityIndicator size="small" color="#fff" /> : <AppText style={s.saveBtnText}>Сохранить</AppText>}
-        </TouchableOpacity>
-        {dirty && !saving && (
-          <TouchableOpacity style={s.secondaryBtn} onPress={() => setDraft(saved)} activeOpacity={0.8}>
-            <AppText style={s.secondaryBtnText}>Отменить изменения</AppText>
-          </TouchableOpacity>
-        )}
         {standard && !saving && (
           <TouchableOpacity style={s.secondaryBtn} onPress={() => setDraft(toDraft(standard))} activeOpacity={0.8}>
             <AppText style={s.secondaryBtnText}>Вернуть стандартные значения</AppText>
@@ -274,6 +267,12 @@ export function CardDefaultsScreen() {
           <AppText style={s.secondaryBtnText}>Применить к неопубликованным карточкам</AppText>
         </TouchableOpacity>
       </ScrollView>
+      <UnsavedBar
+        visible={dirty}
+        saving={saving}
+        onSave={handleSave}
+        onDiscard={() => setDraft(saved)}
+      />
     </KeyboardAvoidingView>
   );
 }

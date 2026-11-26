@@ -13,6 +13,8 @@ import {
   Platform,
 } from "react-native";
 import { AppText } from "../../components/AppText";
+import { UnsavedBar } from "../../components/UnsavedBar";
+import { useUnsavedChangesGuard } from "../../hooks/useUnsavedChanges";
 import {
   AttributeEditor,
   clone,
@@ -100,19 +102,23 @@ export function OzonPayloadScreen() {
 
   const update = (patch: Partial<OzonPayloadConfig>) => setDraft((d) => (d ? { ...d, ...patch } : d));
 
-  const handleSave = async () => {
+  const handleSave = async (): Promise<boolean> => {
     const c = current();
-    if (!c) return;
+    if (!c) return false;
     setSaving(true);
     try {
       applyLoaded(withCategory(await cardPipelineService.saveOzonPayloadConfig(c)));
       Alert.alert("Готово", "Настройка сохранена. Новые публикации пойдут по ней.");
+      return true;
     } catch (e: any) {
       Alert.alert("Не сохранено", e?.response?.data?.message ?? "Не удалось сохранить");
+      return false;
     } finally {
       setSaving(false);
     }
   };
+
+  useUnsavedChangesGuard(dirty, saving, handleSave);
 
   const handleCheck = async () => {
     const c = current();
@@ -247,19 +253,6 @@ export function OzonPayloadScreen() {
           </TouchableOpacity>
         </View>
 
-        <TouchableOpacity
-          style={[s.saveBtn, (!dirty || saving) && s.saveBtnDisabled]}
-          onPress={handleSave}
-          disabled={!dirty || saving}
-          activeOpacity={0.8}
-        >
-          {saving ? <ActivityIndicator size="small" color="#fff" /> : <AppText style={s.saveBtnText}>Сохранить</AppText>}
-        </TouchableOpacity>
-        {dirty && !saving && (
-          <TouchableOpacity style={s.secondaryBtn} onPress={() => saved && applyLoaded(saved)} activeOpacity={0.8}>
-            <AppText style={s.secondaryBtnText}>Отменить изменения</AppText>
-          </TouchableOpacity>
-        )}
         {standard && !saving && (
           <TouchableOpacity
             style={s.secondaryBtn}
@@ -384,6 +377,12 @@ export function OzonPayloadScreen() {
           }}
         />
       )}
+      <UnsavedBar
+        visible={dirty}
+        saving={saving}
+        onSave={handleSave}
+        onDiscard={() => saved && applyLoaded(saved)}
+      />
     </KeyboardAvoidingView>
   );
 }

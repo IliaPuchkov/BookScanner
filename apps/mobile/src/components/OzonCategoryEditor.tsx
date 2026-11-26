@@ -12,6 +12,7 @@ import {
 import { AppText } from "./AppText";
 import { OzonCategoryPicker } from "./OzonPickers";
 import { ChecksEditor, clone, type Dicts } from "./OzonAttributeEditor";
+import { confirmDiscard } from "../hooks/useUnsavedChanges";
 import { settingsStyles as s } from "../screens/admin/settingsStyles";
 import {
   OZON_UNARY_OPS,
@@ -66,6 +67,8 @@ export function CategoryRuleEditor({
     setConditions(next);
   };
 
+  const cancel = () => confirmDiscard(JSON.stringify(c) !== JSON.stringify(category), onCancel);
+
   const done = () => {
     for (const [i, cond] of conditions.entries()) {
       for (const k of cond.checks) {
@@ -85,7 +88,7 @@ export function CategoryRuleEditor({
   };
 
   return (
-    <Modal visible animationType="slide" onRequestClose={onCancel}>
+    <Modal visible animationType="slide" onRequestClose={cancel}>
       <KeyboardAvoidingView style={s.flex} behavior={Platform.OS === "ios" ? "padding" : "height"}>
         <ScrollView contentContainerStyle={s.container} keyboardShouldPersistTaps="handled">
           <View style={s.card}>
@@ -159,7 +162,7 @@ export function CategoryRuleEditor({
           <TouchableOpacity style={s.saveBtn} onPress={done} activeOpacity={0.8}>
             <AppText style={s.saveBtnText}>Готово</AppText>
           </TouchableOpacity>
-          <TouchableOpacity style={s.secondaryBtn} onPress={onCancel} activeOpacity={0.8}>
+          <TouchableOpacity style={s.secondaryBtn} onPress={cancel} activeOpacity={0.8}>
             <AppText style={s.secondaryBtnText}>Отмена</AppText>
           </TouchableOpacity>
           <AppText style={styles.hint}>Изменения попадут на сервер после «Сохранить» на основном экране.</AppText>

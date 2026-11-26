@@ -14,6 +14,7 @@ import {
 } from "react-native";
 import { AppText } from "./AppText";
 import { OzonAttributePicker, OzonValuePicker } from "./OzonPickers";
+import { confirmDiscard } from "../hooks/useUnsavedChanges";
 import { settingsStyles as s } from "../screens/admin/settingsStyles";
 import {
   OZON_UNARY_OPS,
@@ -535,13 +536,16 @@ export function AttributeEditor({
     onDone(out);
   };
 
+  const changed = JSON.stringify(r) !== JSON.stringify(rule) || idText !== (rule.id ? String(rule.id) : "");
+  const cancel = () => confirmDiscard(changed, onCancel);
+
   const valueMap = r.valueMap ?? [];
   const setMap = (i: number, patch: Partial<(typeof valueMap)[0]>) =>
     setR({ ...r, valueMap: valueMap.map((m, j) => (j === i ? { ...m, ...patch } : m)) });
 
 
   return (
-    <Modal visible animationType="slide" onRequestClose={onCancel}>
+    <Modal visible animationType="slide" onRequestClose={cancel}>
       <KeyboardAvoidingView style={s.flex} behavior={Platform.OS === "ios" ? "padding" : "height"}>
         <ScrollView contentContainerStyle={s.container} keyboardShouldPersistTaps="handled">
           {/* Attribute */}
@@ -699,7 +703,7 @@ export function AttributeEditor({
           <TouchableOpacity style={s.saveBtn} onPress={done} activeOpacity={0.8}>
             <AppText style={s.saveBtnText}>Готово</AppText>
           </TouchableOpacity>
-          <TouchableOpacity style={s.secondaryBtn} onPress={onCancel} activeOpacity={0.8}>
+          <TouchableOpacity style={s.secondaryBtn} onPress={cancel} activeOpacity={0.8}>
             <AppText style={s.secondaryBtnText}>Отмена</AppText>
           </TouchableOpacity>
           {!r.system && !isNew && (

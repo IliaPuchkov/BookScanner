@@ -12,6 +12,8 @@ import {
   Platform,
 } from "react-native";
 import { AppText } from "../../components/AppText";
+import { UnsavedBar } from "../../components/UnsavedBar";
+import { useUnsavedChangesGuard } from "../../hooks/useUnsavedChanges";
 import { adminService } from "../../services/admin.service";
 import { settingsStyles as s } from "./settingsStyles";
 
@@ -111,7 +113,7 @@ export function PriceFormulaScreen() {
     (k) => draft[k] !== saved[k],
   );
 
-  const handleSave = async () => {
+  const handleSave = async (): Promise<boolean> => {
     const pd = parseInt(draft.def, 10);
     const pm = parseInt(draft.min, 10);
     const pdt = parseInt(draft.threshold, 10);
@@ -119,23 +121,23 @@ export function PriceFormulaScreen() {
     const pam = parseFloat(draft.multiplier.replace(",", "."));
     if (isNaN(pd) || pd <= 0) {
       Alert.alert("Ошибка", "Некорректная цена по умолчанию");
-      return;
+      return false;
     }
     if (isNaN(pm) || pm <= 0) {
       Alert.alert("Ошибка", "Некорректная минимальная цена");
-      return;
+      return false;
     }
     if (isNaN(pdt) || pdt <= 0) {
       Alert.alert("Ошибка", "Некорректный порог скидки");
-      return;
+      return false;
     }
     if (isNaN(pdp) || pdp < 0 || pdp > 100) {
       Alert.alert("Ошибка", "Процент скидки должен быть от 0 до 100");
-      return;
+      return false;
     }
     if (isNaN(pam) || pam <= 0) {
       Alert.alert("Ошибка", "Коэффициент ИИ должен быть больше 0");
-      return;
+      return false;
     }
     setSaving(true);
     try {
@@ -182,12 +184,16 @@ export function PriceFormulaScreen() {
       setSaved(values);
       setDraft(values);
       Alert.alert("Готово", "Формула цены сохранена");
+      return true;
     } catch {
       Alert.alert("Ошибка", "Не удалось сохранить настройки цены");
+      return false;
     } finally {
       setSaving(false);
     }
   };
+
+  useUnsavedChangesGuard(dirty, saving, handleSave);
 
   if (loading) {
     return (
@@ -265,28 +271,13 @@ export function PriceFormulaScreen() {
           ))}
         </View>
 
-        <TouchableOpacity
-          style={[s.saveBtn, (!dirty || saving) && s.saveBtnDisabled]}
-          onPress={handleSave}
-          disabled={!dirty || saving}
-          activeOpacity={0.8}
-        >
-          {saving ? (
-            <ActivityIndicator size="small" color="#fff" />
-          ) : (
-            <AppText style={s.saveBtnText}>Сохранить</AppText>
-          )}
-        </TouchableOpacity>
-        {dirty && !saving && (
-          <TouchableOpacity
-            style={s.secondaryBtn}
-            onPress={() => setDraft(saved)}
-            activeOpacity={0.8}
-          >
-            <AppText style={s.secondaryBtnText}>Отменить изменения</AppText>
-          </TouchableOpacity>
-        )}
       </ScrollView>
+      <UnsavedBar
+        visible={dirty}
+        saving={saving}
+        onSave={handleSave}
+        onDiscard={() => setDraft(saved)}
+      />
     </KeyboardAvoidingView>
   );
 }

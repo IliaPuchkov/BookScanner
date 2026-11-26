@@ -12,6 +12,8 @@ import {
   Platform,
 } from "react-native";
 import { AppText } from "../../components/AppText";
+import { UnsavedBar } from "../../components/UnsavedBar";
+import { useUnsavedChangesGuard } from "../../hooks/useUnsavedChanges";
 import { adminService } from "../../services/admin.service";
 import { settingsStyles as s } from "./settingsStyles";
 
@@ -47,11 +49,11 @@ export function AiPromptScreen() {
 
   const dirty = draft.trim() !== saved.trim();
 
-  const handleSave = async () => {
+  const handleSave = async (): Promise<boolean> => {
     const value = draft.trim();
     if (!value) {
       Alert.alert("Ошибка", "Промпт не может быть пустым");
-      return;
+      return false;
     }
     setSaving(true);
     try {
@@ -64,12 +66,16 @@ export function AiPromptScreen() {
       setSaved(value);
       setDraft(value);
       Alert.alert("Готово", "Промпт сохранён");
+      return true;
     } catch {
       Alert.alert("Ошибка", "Не удалось сохранить промпт");
+      return false;
     } finally {
       setSaving(false);
     }
   };
+
+  useUnsavedChangesGuard(dirty, saving, handleSave);
 
   if (loading) {
     return (
@@ -116,28 +122,13 @@ export function AiPromptScreen() {
           <AppText style={styles.counter}>{draft.length} символов</AppText>
         </View>
 
-        <TouchableOpacity
-          style={[s.saveBtn, (!dirty || saving) && s.saveBtnDisabled]}
-          onPress={handleSave}
-          disabled={!dirty || saving}
-          activeOpacity={0.8}
-        >
-          {saving ? (
-            <ActivityIndicator size="small" color="#fff" />
-          ) : (
-            <AppText style={s.saveBtnText}>Сохранить</AppText>
-          )}
-        </TouchableOpacity>
-        {dirty && !saving && (
-          <TouchableOpacity
-            style={s.secondaryBtn}
-            onPress={() => setDraft(saved)}
-            activeOpacity={0.8}
-          >
-            <AppText style={s.secondaryBtnText}>Отменить изменения</AppText>
-          </TouchableOpacity>
-        )}
       </ScrollView>
+      <UnsavedBar
+        visible={dirty}
+        saving={saving}
+        onSave={handleSave}
+        onDiscard={() => setDraft(saved)}
+      />
     </KeyboardAvoidingView>
   );
 }
