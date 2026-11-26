@@ -124,6 +124,11 @@ export class GeminiVisionExtractor {
           content: [{ type: "text", text: prompt }, ...imageContents],
         },
       ],
+      // OpenAI models on Polza (gpt-5+/gpt-6) reason by default ("medium"): thinking would eat
+      // max_tokens and slow the answer down; reading a book's photos needs none.
+      ...(model.startsWith("openai/")
+        ? { reasoning_effort: "none" as ChatCompletionCreateParamsNonStreaming["reasoning_effort"] }
+        : {}),
     };
 
     const response = await this.client.chat.completions
