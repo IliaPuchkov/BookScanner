@@ -315,6 +315,8 @@ All routes prefixed with `/api`.
 4. Results stored in `ocr_results` table, book fields auto-populated
 5. Operator reviews extracted data in `CardDetail` screen and corrects if needed
 
+AI calls go to Polza.AI (`google/gemini-2.5-flash-lite`, served from Google AI Studio's "flex" tier → 429/503 happen). Retries live only in `runAiWithRetry` (SDK `maxRetries: 0`), driven by `vision/ai-retry.ts` (unit-tested): 408/429/5xx/network/empty JSON and 400 "…when fetching image" are retried with 1-2-4-8 s or `Retry-After`; other 4xx are not. Budget: preview 5 attempts / 45 s (the app waits 60 s), queue 6 / 150 s. **Fallback model** = setting `vision_ai_fallback_model` (default `qwen/qwen3-vl-235b-a22b-instruct`, other host; `""` = off): used at once when the model aborts the answer (503 "Провайдер прервал генерацию" — book-specific, e.g. 619_KNLU0W failed 6/6), after 2 overloads, or a `Retry-After` > 5 s. When attempts run out the error is an `HttpException` with a Russian text (shown by ProductDetail, saved to `ocr_results.errorMessage`).
+
 ### Hashtag rules (Настройки → «Правила хэштегов»)
 
 - One JSON setting `hashtag_rules` (`settings/hashtag-rules.ts`, unit-tested; `HashtagRulesService`). Until the admin saves, `DEFAULT_HASHTAG_RULES` = the old hard-coded forbidden fragments (полити, выбор, война, нарко, оруж, терро, экстрем, власт, идеолог).

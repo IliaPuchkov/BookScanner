@@ -1,4 +1,10 @@
-import { Injectable, Logger, Inject } from "@nestjs/common";
+import { Injectable, Logger, Inject, HttpException, HttpStatus } from "@nestjs/common";
+import {
+  classifyAiError,
+  retryDelayMs,
+  shouldUseFallback,
+  DEFAULT_FALLBACK_MODEL,
+} from "./ai-retry";
 import { InjectQueue } from "@nestjs/bullmq";
 import { Queue } from "bullmq";
 import { VISION_QUEUE, VISION_JOBS } from "./vision.constants";
@@ -16,6 +22,7 @@ import {
 } from "../photos/storage/storage.interface";
 import {
   GeminiVisionExtractor,
+  DEFAULT_VISION_MODEL,
   applyDefaults,
   isPlausibleWeight,
 } from "@bookscanner/ocr-processor";
@@ -75,6 +82,10 @@ export class VisionService {
     private readonly extractionQueue: Queue,
   ) {}
 
+  /** The app waits 60 s for the synchronous preview; a queue job can take longer. */
+  private readonly PREVIEW_AI_BUDGET = { maxAttempts: 5, deadlineMs: 45_000 };
+  private readonly JOB_AI_BUDGET = { maxAttempts: 6, deadlineMs: 150_000 };
+
   private readonly JOB_OPTS = {
     removeOnComplete: 100,
     removeOnFail: 200,
@@ -133,7 +144,7 @@ export class VisionService {
     try {
       ocrResult = await this.ocrResultRepository.save(ocrResult);
 
-      const { extractor, imageUrls, availablePhotos, prompt } =
+      const { extractor, imageUrls, availablePhotos, prompt, fallbackModel } =
         await this.prepareExtractor(bookId, photos);
 
       const { result, extractedData } = await this.runAiWithRetry(
@@ -141,6 +152,8 @@ export class VisionService {
         extractor,
         imageUrls,
         prompt,
+        this.JOB_AI_BUDGET,
+        fallbackModel,
       );
 
       const calculatedPrice = await this.calculatePrice(extractedData.price ?? undefined);
@@ -195,7 +208,7 @@ export class VisionService {
     try {
       ocrResult = await this.ocrResultRepository.save(ocrResult);
 
-      const { extractor, imageUrls, availablePhotos, prompt } =
+      const { extractor, imageUrls, availablePhotos, prompt, fallbackModel } =
         await this.prepareExtractor(bookId, photos);
 
       const { result, extractedData } = await this.runAiWithRetry(
@@ -203,6 +216,8 @@ export class VisionService {
         extractor,
         imageUrls,
         prompt,
+        this.PREVIEW_AI_BUDGET,
+        fallbackModel,
       );
 
       const calculatedPrice = await this.calculatePrice(extractedData.price ?? undefined);
@@ -248,6 +263,11 @@ export class VisionService {
       this.getDefaultPrompt(),
     );
 
+    // Used when the primary model is overloaded (see shouldUseFallback); "" turns it off
+    const fallbackModel = (
+      await this.settingsService.getValue<string>("vision_ai_fallback_model", DEFAULT_FALLBACK_MODEL)
+    )?.trim();
+
     const extractor = new GeminiVisionExtractor(apiKey);
     const availablePhotos = photos
       .slice(0, 4)
@@ -267,7 +287,7 @@ export class VisionService {
       );
     }
 
-    return { extractor, imageUrls, availablePhotos, prompt };
+    return { extractor, imageUrls, availablePhotos, prompt, fallbackModel };
   }
 
   /**
@@ -298,15 +318,23 @@ export class VisionService {
     extractor: GeminiVisionExtractor,
     imageUrls: string[],
     prompt: string,
+    budget: { maxAttempts: number; deadlineMs: number },
+    fallbackModel?: string,
   ): Promise<{ result: IExtractionResult; extractedData: IExtractionResult }> {
     let result: IExtractionResult | undefined;
+    let model = DEFAULT_VISION_MODEL;
+    let primaryFailures = 0;
+    const startedAt = Date.now();
+    const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+    let emptyResults = 0;
 
-    for (let attempt = 1; attempt <= 3; attempt++) {
+    for (let attempt = 1; ; attempt++) {
       try {
-        this.logger.log(`[${bookId}] AI attempt ${attempt}/3…`);
+        this.logger.log(`[${bookId}] AI attempt ${attempt}/${budget.maxAttempts} (${model})…`);
         const raw = await extractor.extractBookData(
           imageUrls.map((url) => ({ url })),
           prompt,
+          model,
         );
         result = this.normalizeAiResult(raw as unknown as Record<string, unknown>);
         this.logger.log(
@@ -320,17 +348,49 @@ export class VisionService {
           this.logger.log(`[${bookId}] AI returned key fields on attempt ${attempt}`);
           break;
         }
-        if (attempt < 3) {
-          this.logger.warn(`[${bookId}] attempt ${attempt}: no key fields, retrying in ${3 * attempt}s`);
-          await new Promise((r) => setTimeout(r, 3000 * attempt));
+        emptyResults++;
+        const pause = 3000 * emptyResults;
+        if (
+          emptyResults < 3 &&
+          attempt < budget.maxAttempts &&
+          Date.now() - startedAt + pause <= budget.deadlineMs
+        ) {
+          this.logger.warn(`[${bookId}] attempt ${attempt}: no key fields, retrying in ${pause / 1000}s`);
+          await sleep(pause);
         } else {
-          this.logger.warn(`[${bookId}] all 3 attempts returned no key fields — proceeding with defaults`);
+          this.logger.warn(`[${bookId}] attempt ${attempt}: no key fields — proceeding with defaults`);
+          break;
         }
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
-        this.logger.error(`[${bookId}] AI attempt ${attempt} threw: ${msg}`);
-        if (attempt === 3) throw err;
-        await new Promise((r) => setTimeout(r, 3000 * attempt));
+        const info = classifyAiError(err);
+        if (model === DEFAULT_VISION_MODEL && info.retryable) primaryFailures++;
+        const switchModel =
+          !!fallbackModel &&
+          fallbackModel !== model &&
+          model === DEFAULT_VISION_MODEL &&
+          shouldUseFallback(info, primaryFailures);
+        // Another model has its own limits — no need to wait out the primary's Retry-After
+        const pause = switchModel ? 1000 : retryDelayMs(attempt, info);
+        const canRetry =
+          info.retryable &&
+          attempt < budget.maxAttempts &&
+          Date.now() - startedAt + pause <= budget.deadlineMs;
+        this.logger.error(
+          `[${bookId}] AI attempt ${attempt} threw (status=${info.status ?? "-"}): ${msg}` +
+            (canRetry
+              ? ` — retrying in ${(pause / 1000).toFixed(1)}s${switchModel ? ` with fallback ${fallbackModel}` : ""}`
+              : " — giving up"),
+        );
+        if (!canRetry) {
+          // The app shows this text; the raw Polza error stays in the log above.
+          throw new HttpException(
+            info.userMessage,
+            info.status === 429 ? HttpStatus.TOO_MANY_REQUESTS : HttpStatus.SERVICE_UNAVAILABLE,
+          );
+        }
+        if (switchModel) model = fallbackModel!;
+        await sleep(pause);
       }
     }
 

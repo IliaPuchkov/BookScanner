@@ -89,6 +89,8 @@ export class YandexVisionExtractor {
   }
 }
 
+export const DEFAULT_VISION_MODEL = "google/gemini-2.5-flash-lite";
+
 export class GeminiVisionExtractor {
   private readonly client: OpenAI;
 
@@ -96,12 +98,16 @@ export class GeminiVisionExtractor {
     this.client = new OpenAI({
       apiKey,
       baseURL: "https://polza.ai/api/v1",
+      // Retries (with Polza's pauses and a time budget) are done by the caller.
+      maxRetries: 0,
+      timeout: 120_000,
     });
   }
 
   async extractBookData(
     images: Array<{ url: string }>,
     prompt: string,
+    model: string = DEFAULT_VISION_MODEL,
   ): Promise<IExtractionResult> {
     const imageContents = images.map(({ url }) => ({
       type: "image_url" as const,
@@ -109,7 +115,7 @@ export class GeminiVisionExtractor {
     }));
 
     const requestBody: ChatCompletionCreateParamsNonStreaming = {
-      model: "google/gemini-2.5-flash-lite",
+      model,
       max_tokens: 1500,
       response_format: { type: "json_object" as const },
       messages: [

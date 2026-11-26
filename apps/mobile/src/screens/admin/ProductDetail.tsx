@@ -600,8 +600,16 @@ export function ProductDetailScreen() {
               setRejectedFields(new Set());
               setPreviewData(result);
               setPreviewModalVisible(true);
-            } catch {
-              Alert.alert("Ошибка", "Не удалось выполнить распознавание");
+            } catch (e: any) {
+              // 429/503 carry a readable reason ("Сервис распознавания перегружен…")
+              const status = e?.response?.status;
+              const serverMessage = e?.response?.data?.message;
+              Alert.alert(
+                "Не удалось выполнить распознавание",
+                (status === 429 || status === 503) && typeof serverMessage === "string"
+                  ? serverMessage
+                  : "Попробуйте ещё раз",
+              );
             } finally {
               setReExtracting(false);
             }
