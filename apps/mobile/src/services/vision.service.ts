@@ -43,7 +43,8 @@ export const visionService = {
     const { data } = await api.post<ExtractPreviewResult>(
       '/vision/extract-preview',
       { bookId },
-      { timeout: 60_000 },
+      // The server may retry and switch to the fallback model (no new attempt after 80 s, PREVIEW_AI_BUDGET)
+      { timeout: 120_000 },
     );
     return data;
   },

@@ -82,8 +82,12 @@ export class VisionService {
     private readonly extractionQueue: Queue,
   ) {}
 
-  /** The app waits 60 s for the synchronous preview; a queue job can take longer. */
-  private readonly PREVIEW_AI_BUDGET = { maxAttempts: 5, deadlineMs: 45_000 };
+  /**
+   * The app waits 120 s for the synchronous preview (builds up to 1.14.0: 60 s — they just time
+   * out on a long retry); a queue job can take longer. The deadline only stops new attempts, so leave
+   * room for one more request after it.
+   */
+  private readonly PREVIEW_AI_BUDGET = { maxAttempts: 5, deadlineMs: 80_000 };
   private readonly JOB_AI_BUDGET = { maxAttempts: 6, deadlineMs: 150_000 };
 
   private readonly JOB_OPTS = {
