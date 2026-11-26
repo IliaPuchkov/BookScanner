@@ -475,7 +475,7 @@ Admin screens in `apps/mobile/src/screens/admin/`:
 - `DuplicatesScreen.tsx` — "На проверке: Копии": criterion picker (ISBN / автор+название / похожие названия), groups with copy sets, undecided and folded books
 - `CopiesScreen.tsx` — confirmed copies (`isCopy=true`), grouped by ISBN/title, with store name display
 
-Settings tab (`screens/operator/SettingsScreen.tsx`) is a list of navigation cards only; each setting has its own screen in `screens/admin/`: `PriceFormulaScreen`, `AiPromptScreen`, `MaintenanceScreen`, `OzonContentScreen` (content stores + video covers + rich content + extra photos), plus the older OzonStores / OzonSync / HashtagRules / Export / UserManagement. Shared look: `screens/admin/settingsStyles.ts`.
+Settings tab (`screens/operator/SettingsScreen.tsx`) is a list of navigation cards only, grouped by `SettingsSection` into «Ozon», «ИИ и карточки», «Пользователи и отчёты», «Сервер»; each setting has its own screen in `screens/admin/`: `PriceFormulaScreen`, `AiPromptScreen`, `MaintenanceScreen`, `OzonContentScreen` (content stores + video covers + rich content + extra photos), plus the older OzonStores / OzonSync / HashtagRules / Export / UserManagement. Shared look: `screens/admin/settingsStyles.ts`.
 
 ---
 
