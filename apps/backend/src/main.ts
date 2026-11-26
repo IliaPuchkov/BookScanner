@@ -98,7 +98,7 @@ async function bootstrap() {
     const swaggerConfig = new DocumentBuilder()
       .setTitle('BookScanner API')
       .setDescription('API для системы создания карточек б/у книг для маркетплейсов')
-      .setVersion('1.14.0')
+      .setVersion('1.15.0')
       .addBearerAuth()
       .build();
 
