@@ -22,6 +22,9 @@ import { OzonApiClient } from './ozon-api.client';
 import { OzonStatusCron } from './ozon-status.cron';
 import { BooksModule } from '../books/books.module';
 import { SettingsModule } from '../settings/settings.module';
+import { CardModule } from '../card/card.module';
+import { OzonPayloadConfigService } from './payload/ozon-payload-config.service';
+import { OzonPayloadConfigController } from './payload/ozon-payload-config.controller';
 import { EncryptionService } from '../common/encryption.service';
 import { Book } from '../books/entities/book.entity';
 import { BookPhoto } from '../photos/entities/book-photo.entity';
@@ -32,10 +35,11 @@ import { Box } from '../boxes/entities/box.entity';
     TypeOrmModule.forFeature([OzonProduct, Book, BookPhoto, Box]),
     BooksModule,
     SettingsModule,
+    CardModule,
     PhotosModule,
     BullModule.registerQueue({ name: VIDEO_COVER_QUEUE }),
   ],
-  controllers: [OzonController, VideoCoverController, RichContentController, ExtraPhotosController, ContentScopeController],
+  controllers: [OzonController, VideoCoverController, RichContentController, ExtraPhotosController, ContentScopeController, OzonPayloadConfigController],
   providers: [
     OzonService,
     OzonApiClient,
@@ -49,6 +53,7 @@ import { Box } from '../boxes/entities/box.entity';
     ExtraPhotosService,
     ExtraPhotosCron,
     ContentScopeService,
+    OzonPayloadConfigService,
   ],
   exports: [OzonService],
 })

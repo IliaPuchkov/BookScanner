@@ -1,88 +1,27 @@
 import { Book } from "../books/entities/book.entity";
-import {
-  OZON_DESCRIPTION_CATEGORY_ID,
-  OZON_TYPE_ID,
-  OZON_MODERN_DESCRIPTION_CATEGORY_ID,
-  OZON_MODERN_TYPE_ID,
-  OZON_ATTR_NAME,
-  OZON_ATTR_AUTHOR_COVER,
-  OZON_ATTR_BRAND,
-  OZON_ATTR_TYPE,
-  OZON_ATTR_DIRECTION,
-  OZON_ATTR_AUTHOR,
-  OZON_ATTR_ISBN,
-  OZON_ATTR_PUBLISHER,
-  OZON_ATTR_YEAR,
-  OZON_ATTR_COVER_TYPE,
-  OZON_ATTR_PAPER_TYPE,
-  OZON_ATTR_PAGE_COUNT,
-  OZON_ATTR_LANGUAGE,
-  OZON_ATTR_CONDITION,
-  OZON_ATTR_ANNOTATION,
-  OZON_ATTR_BOOK_TYPE,
-  OZON_ATTR_DIMENSIONS,
-  OZON_ATTR_WEIGHT,
-  OZON_ATTR_HASHTAGS,
-  OZON_ATTR_TNVED,
-  OZON_TNVED_BOOKS_VALUE_ID,
-  DEFAULT_WEIGHT_G,
-  DEFAULT_BOOK_TYPE,
-  DEFAULT_DIRECTION,
-  ANNOTATION_PREFIX,
-} from "@bookscanner/shared";
 import { formatDimensions } from "@bookscanner/shared";
 import { applyHashtagRules } from "../settings/hashtag-rules";
-import { OZON_ATTR_RICH_CONTENT } from "./rich-content/rich-content.builder";
+import { fillDefaults, type CardDefaults, type CardDefaultableValues } from "../card/card-defaults";
+import type {
+  OzonAttrRule,
+  OzonCardField,
+  OzonPayloadConfig,
+  OzonBuiltin,
+} from "./payload/ozon-payload-config";
+
+/**
+ * Card → Ozon import item, driven by `ozon_payload_config` (see payload/ozon-payload-config.ts).
+ * The card is already processed (AI + card defaults); empty fields of older cards still get the
+ * card defaults here. Item-level fields (offer_id, price, weight, dimensions) stay in code.
+ */
+
+type AttrValue = { value: string; dictionary_value_id?: number };
 
 interface OzonAttribute {
   complex_id: number;
   id: number;
-  values: Array<{ dictionary_value_id?: number; value: string }>;
+  values: AttrValue[];
 }
-
-function attr(
-  id: number,
-  value: string | number,
-  dictValueId?: number,
-): OzonAttribute {
-  const val: { value: string; dictionary_value_id?: number } = {
-    value: String(value),
-  };
-  if (dictValueId) val.dictionary_value_id = dictValueId;
-  return { complex_id: 0, id, values: [val] };
-}
-
-function multiAttr(
-  id: number,
-  values: Array<{ value: string; dictValueId?: number }>,
-): OzonAttribute {
-  return {
-    complex_id: 0,
-    id,
-    values: values.map(({ value, dictValueId }) => {
-      const v: { value: string; dictionary_value_id?: number } = { value };
-      if (dictValueId) v.dictionary_value_id = dictValueId;
-      return v;
-    }),
-  };
-}
-
-
-const COVER_TYPE_MAP: Record<string, string> = {
-  "мягкий переплет": "Мягкая обложка",
-  "твердый переплет": "Твердый переплет",
-};
-
-const PAPER_TYPE_MAP: Record<string, string> = {
-  "офсетная": "Офсетная",
-  "глянцевая": "Мелованная глянцевая",
-  "матовая": "Мелованная матовая",
-};
-
-// Defaults when AI returns 0: длина=100, ширина=100, толщина=35
-const DEFAULT_WIDTH_MM = 100; // ширина
-const DEFAULT_LENGTH_MM = 100; // длина (= height в модели книги)
-const DEFAULT_THICKNESS_MM = 35; // толщина (= depth в модели книги)
 
 export interface ResolvedOzonData {
   brandDictValueId?: number;
@@ -98,129 +37,175 @@ export interface ResolvedOzonData {
   extraImages?: string[];
 }
 
-export function buildOzonImportPayload(
+export interface OzonPayloadReport {
+  payload: Record<string, unknown>;
+  /** Attributes left out or sent empty, for the «Проверить на книге» screen */
+  warnings: string[];
+}
+
+function value(v: string, dictId?: number | null): AttrValue {
+  const out: AttrValue = { value: v };
+  if (dictId) out.dictionary_value_id = dictId;
+  return out;
+}
+
+function mapValue(rule: OzonAttrRule, v: AttrValue): AttrValue {
+  if (!rule.valueMap?.length || v.dictionary_value_id) return v;
+  const needle = v.value.trim().toLowerCase();
+  const hit = rule.valueMap.find((m) => m.from.trim().toLowerCase() === needle);
+  return hit ? value(hit.to, hit.dictionaryValueId) : v;
+}
+
+function annotationText(book: Book, config: OzonPayloadConfig): string {
+  const { prefix, stripLinks } = config.annotation;
+  const text = (book.annotation || "").trim();
+  // Older cards carry the prefix in the text already
+  const head = prefix.trim().slice(0, 30);
+  let out = head && text.startsWith(head) ? text : `${prefix}${text}`;
+  if (stripLinks) out = out.replace(/(https?:\/\/\S+|www\.\S+)/gi, "");
+  return out.replace(/\s{2,}/g, " ").trim();
+}
+
+export function buildOzonPayloadReport(
   book: Book,
-  resolved: ResolvedOzonData = {},
-): Record<string, unknown> {
-  const raw = book.dimensions || { width: 0, height: 0, depth: 0 };
+  resolved: ResolvedOzonData,
+  config: OzonPayloadConfig,
+  cardDefaults: CardDefaults,
+): OzonPayloadReport {
+  const { values: filled } = fillDefaults(book as unknown as CardDefaultableValues, cardDefaults);
   const dimensions = {
-    width: Math.round(raw.width || DEFAULT_WIDTH_MM), // ширина
-    height: Math.round(raw.height || DEFAULT_LENGTH_MM), // длина
-    depth: Math.round(raw.depth || DEFAULT_THICKNESS_MM), // толщина
+    width: Math.round(filled.dimensions.width), // ширина
+    height: Math.round(filled.dimensions.height), // длина
+    depth: Math.round(filled.dimensions.depth), // толщина
   };
-  // The card keeps the annotation without the «book is not new» prefix (older cards have it already)
-  const text = (book.annotation || '').trim();
-  const withPrefix = text.startsWith(ANNOTATION_PREFIX.trim().slice(0, 30))
-    ? text
-    : `${ANNOTATION_PREFIX}${text}`;
-  const annotation = withPrefix
-    .replace(/(https?:\/\/\S+|www\.\S+)/gi, '')
-    .replace(/\s{2,}/g, ' ')
-    .trim();
+  const weight = Math.round(filled.weightGross);
 
-  const isModern = (book.yearPublished ?? 0) >= 2011;
-  const descCategoryId = isModern ? OZON_MODERN_DESCRIPTION_CATEGORY_ID : OZON_DESCRIPTION_CATEGORY_ID;
-  const typeId = isModern ? OZON_MODERN_TYPE_ID : OZON_TYPE_ID;
+  const fieldValue = (f: OzonCardField): string | null => {
+    switch (f) {
+      case "weightGross":
+        return String(weight);
+      case "paperType":
+      case "coverType":
+      case "language":
+      case "condition":
+      case "bookType":
+      case "direction":
+        return filled[f];
+      default: {
+        const v = (book as unknown as Record<string, unknown>)[f];
+        return v == null || v === "" ? null : String(v);
+      }
+    }
+  };
 
-  // Author cover: all authors joined by ";" without spaces
-  const authorCoverText = resolved.authors?.length
-    ? resolved.authors.map((a) => a.value).join(";")
-    : book.author || "Не указан";
+  const builtinValues = (b: OzonBuiltin): AttrValue[] => {
+    switch (b) {
+      case "brand":
+        return [value(resolved.resolvedBrandName ?? "Нет бренда", resolved.brandDictValueId)];
+      case "publisher":
+        return resolved.resolvedPublisherName && resolved.publisherDictValueId
+          ? [value(resolved.resolvedPublisherName, resolved.publisherDictValueId)]
+          : [];
+      case "authors":
+        // strict dictionary attribute: only authors Ozon knows
+        return (resolved.authors ?? [])
+          .filter((a) => a.dictValueId)
+          .map((a) => value(a.value, a.dictValueId));
+      case "authorCover":
+        return [
+          value(
+            resolved.authors?.length
+              ? resolved.authors.map((a) => a.value).join(";")
+              : book.author || "Не указан",
+          ),
+        ];
+      case "annotation":
+        return [value(annotationText(book, config))];
+      case "hashtags": {
+        const tags = resolved.hashtags ?? applyHashtagRules(book.hashtags, []);
+        return tags.length ? [value(tags.join(" "))] : [];
+      }
+      case "richContent":
+        return resolved.richContent ? [value(resolved.richContent)] : [];
+      case "dimensions":
+        // Ozon: Д x Ш x В — длина = height книги, ширина = width, высота = depth
+        return [value(formatDimensions(dimensions.height, dimensions.width, dimensions.depth))];
+    }
+  };
 
-  const attributes: OzonAttribute[] = [
-    // Required
-    attr(OZON_ATTR_NAME, book.title),
-    attr(OZON_ATTR_AUTHOR_COVER, authorCoverText),
-    attr(OZON_ATTR_BRAND, resolved.resolvedBrandName ?? "Нет бренда", resolved.brandDictValueId),
-    attr(OZON_ATTR_TYPE, book.bookType || DEFAULT_BOOK_TYPE),
-    attr(OZON_ATTR_DIRECTION, book.direction || DEFAULT_DIRECTION),
-    attr(OZON_ATTR_TNVED, "4901990000 - Прочие книги, брошюры, листовки, аналогичные печатные издания, сброшюрованные", OZON_TNVED_BOOKS_VALUE_ID),
-  ];
+  const attributes: OzonAttribute[] = [];
+  const warnings: string[] = [];
 
-  // OZON_ATTR_AUTHOR — строгий словарный атрибут, отправляем только авторов с найденным dict value id
-  const foundAuthors = resolved.authors?.filter((a) => a.dictValueId);
-  if (foundAuthors?.length) {
-    attributes.push(multiAttr(OZON_ATTR_AUTHOR, foundAuthors));
-  }
+  for (const rule of config.attributes) {
+    if (!rule.enabled) continue;
+    const s = rule.source;
+    let values: AttrValue[];
+    if (s.kind === "const") values = [value(s.value, s.dictionaryValueId)];
+    else if (s.kind === "builtin") values = builtinValues(s.builtin);
+    else {
+      const v = fieldValue(s.field);
+      values = v == null ? [] : [value(v)];
+    }
+    values = values.map((v) => mapValue(rule, v)).filter((v) => v.value !== "" || !rule.skipIfEmpty);
 
-  // Optional attributes
-
-  if (book.isbn) {
-    attributes.push(attr(OZON_ATTR_ISBN, book.isbn));
-  }
-  if (resolved.resolvedPublisherName && resolved.publisherDictValueId) {
-    attributes.push(attr(OZON_ATTR_PUBLISHER, resolved.resolvedPublisherName, resolved.publisherDictValueId));
-  }
-  if (book.yearPublished) {
-    attributes.push(attr(OZON_ATTR_YEAR, book.yearPublished));
-  }
-  if (book.coverType) {
-    attributes.push(attr(OZON_ATTR_COVER_TYPE, COVER_TYPE_MAP[book.coverType] ?? book.coverType));
-  }
-  if (book.paperType) {
-    attributes.push(attr(OZON_ATTR_PAPER_TYPE, PAPER_TYPE_MAP[book.paperType] ?? book.paperType));
-  }
-  if (book.pageCount) {
-    attributes.push(attr(OZON_ATTR_PAGE_COUNT, book.pageCount));
-  }
-  if (book.language) {
-    attributes.push(attr(OZON_ATTR_LANGUAGE, book.language));
-  }
-  if (book.condition) {
-    attributes.push(attr(OZON_ATTR_CONDITION, book.condition));
-  }
-  attributes.push(attr(OZON_ATTR_ANNOTATION, annotation));
-  attributes.push(
-    attr(OZON_ATTR_BOOK_TYPE, book.bookType || DEFAULT_BOOK_TYPE),
-  );
-
-  // Ozon format: ДxШxВ (длина x ширина x высота)
-  // длина = height книги, ширина = width книги, высота = depth книги
-  const dimStr = formatDimensions(
-    dimensions.height,
-    dimensions.width,
-    dimensions.depth,
-  );
-  attributes.push(attr(OZON_ATTR_DIMENSIONS, dimStr));
-
-  const weight = Math.round(book.weightGross || DEFAULT_WEIGHT_G);
-  attributes.push(attr(OZON_ATTR_WEIGHT, weight));
-
-  const cleanTags = resolved.hashtags ?? applyHashtagRules(book.hashtags, []);
-  if (cleanTags.length > 0) {
-    attributes.push(attr(OZON_ATTR_HASHTAGS, cleanTags.join(" ")));
+    if (values.length === 0) {
+      if (rule.skipIfEmpty) {
+        warnings.push(
+          `${rule.system ? "Ошибка: обязательный " : ""}«${rule.label}» (${rule.id}) пустой — не отправлен`,
+        );
+        continue;
+      }
+      values = [value("")];
+    }
+    if (values.every((v) => v.value === "")) {
+      warnings.push(`${rule.system ? "Ошибка: обязательный " : ""}«${rule.label}» (${rule.id}) отправлен пустым`);
+    }
+    attributes.push({ complex_id: 0, id: rule.id, values });
   }
 
-  if (resolved.richContent) {
-    attributes.push(attr(OZON_ATTR_RICH_CONTENT, resolved.richContent));
-  }
+  const year = book.yearPublished ?? 0;
+  const category =
+    config.categories.find(
+      (c) => (c.yearFrom == null || year >= c.yearFrom) && (c.yearTo == null || year <= c.yearTo),
+    ) ?? config.categories[0];
 
   const images =
     book.photos
       ?.sort((a, b) => a.sortOrder - b.sortOrder)
       .map((p) => p.fileUrl) || [];
   if (resolved.extraImages?.length) images.push(...resolved.extraImages);
-  images.splice(30); // Ozon: at most 30 images
+  images.splice(config.maxImages);
 
   return {
-    items: [
-      {
-        description_category_id: descCategoryId,
-        type_id: typeId,
-        name: book.title,
-        offer_id: book.sku,
-        price: String(book.price || 0),
-        // old_price: String(Math.round((book.price || 0) * 1.2)),
-        vat: "0",
-        weight: Number(weight),
-        weight_unit: "g",
-        width: dimensions.width, // высота книги → ширина Озон
-        height: dimensions.depth, // ширина книги → длина Озон
-        depth: dimensions.height,
-        dimension_unit: "mm",
-        images,
-        attributes,
-      },
-    ],
+    payload: {
+      items: [
+        {
+          description_category_id: category.descriptionCategoryId,
+          type_id: category.typeId,
+          name: book.title,
+          offer_id: book.sku,
+          price: String(book.price || 0),
+          vat: config.vat,
+          weight: Number(weight),
+          weight_unit: "g",
+          width: dimensions.width, // высота книги → ширина Озон
+          height: dimensions.depth, // ширина книги → длина Озон
+          depth: dimensions.height,
+          dimension_unit: "mm",
+          images,
+          attributes,
+        },
+      ],
+    },
+    warnings,
   };
+}
+
+export function buildOzonImportPayload(
+  book: Book,
+  resolved: ResolvedOzonData,
+  config: OzonPayloadConfig,
+  cardDefaults: CardDefaults,
+): Record<string, unknown> {
+  return buildOzonPayloadReport(book, resolved, config, cardDefaults).payload;
 }

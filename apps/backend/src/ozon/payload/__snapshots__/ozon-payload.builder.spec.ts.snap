@@ -1,0 +1,1667 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`buildOzonImportPayload — standard config = legacy payload hashtags from the card (no rules passed) 1`] = `
+{
+  "items": [
+    {
+      "attributes": [
+        {
+          "complex_id": 0,
+          "id": 4180,
+          "values": [
+            {
+              "value": "Бухара",
+            },
+          ],
+        },
+        {
+          "complex_id": 0,
+          "id": 4182,
+          "values": [
+            {
+              "value": "Иванов И.",
+            },
+          ],
+        },
+        {
+          "complex_id": 0,
+          "id": 85,
+          "values": [
+            {
+              "dictionary_value_id": 501,
+              "value": "АСТ",
+            },
+          ],
+        },
+        {
+          "complex_id": 0,
+          "id": 8229,
+          "values": [
+            {
+              "value": "Печатная книга",
+            },
+          ],
+        },
+        {
+          "complex_id": 0,
+          "id": 23273,
+          "values": [
+            {
+              "value": "Проза",
+            },
+          ],
+        },
+        {
+          "complex_id": 0,
+          "id": 22232,
+          "values": [
+            {
+              "dictionary_value_id": 971398243,
+              "value": "4901990000 - Прочие книги, брошюры, листовки, аналогичные печатные издания, сброшюрованные",
+            },
+          ],
+        },
+        {
+          "complex_id": 0,
+          "id": 105,
+          "values": [
+            {
+              "dictionary_value_id": 9001,
+              "value": "Иванов И.",
+            },
+          ],
+        },
+        {
+          "complex_id": 0,
+          "id": 4184,
+          "values": [
+            {
+              "value": "978-5-17-090735-5",
+            },
+          ],
+        },
+        {
+          "complex_id": 0,
+          "id": 7,
+          "values": [
+            {
+              "dictionary_value_id": 702,
+              "value": "АСТ",
+            },
+          ],
+        },
+        {
+          "complex_id": 0,
+          "id": 4081,
+          "values": [
+            {
+              "value": "1987",
+            },
+          ],
+        },
+        {
+          "complex_id": 0,
+          "id": 9356,
+          "values": [
+            {
+              "value": "Твердый переплет",
+            },
+          ],
+        },
+        {
+          "complex_id": 0,
+          "id": 10755,
+          "values": [
+            {
+              "value": "Офсетная",
+            },
+          ],
+        },
+        {
+          "complex_id": 0,
+          "id": 4051,
+          "values": [
+            {
+              "value": "320",
+            },
+          ],
+        },
+        {
+          "complex_id": 0,
+          "id": 4189,
+          "values": [
+            {
+              "value": "Русский",
+            },
+          ],
+        },
+        {
+          "complex_id": 0,
+          "id": 8857,
+          "values": [
+            {
+              "value": "Хорошая",
+            },
+          ],
+        },
+        {
+          "complex_id": 0,
+          "id": 4191,
+          "values": [
+            {
+              "value": "ВНИМАНИЕ! Книга не новая! Состояние - на фото. Роман о городе. См.",
+            },
+          ],
+        },
+        {
+          "complex_id": 0,
+          "id": 9236,
+          "values": [
+            {
+              "value": "Печатная книга",
+            },
+          ],
+        },
+        {
+          "complex_id": 0,
+          "id": 4382,
+          "values": [
+            {
+              "value": "200x130x22",
+            },
+          ],
+        },
+        {
+          "complex_id": 0,
+          "id": 4383,
+          "values": [
+            {
+              "value": "410",
+            },
+          ],
+        },
+        {
+          "complex_id": 0,
+          "id": 23171,
+          "values": [
+            {
+              "value": "#политика #роман_века #детектив",
+            },
+          ],
+        },
+      ],
+      "depth": 200,
+      "description_category_id": 200001485,
+      "dimension_unit": "mm",
+      "height": 22,
+      "images": [
+        "https://s3/b/2.jpg",
+        "https://s3/b/1.jpg",
+        "https://s3/b/0.jpg",
+      ],
+      "name": "Бухара",
+      "offer_id": "12_ABCDEF",
+      "price": "1290",
+      "type_id": 971445087,
+      "vat": "0",
+      "weight": 410,
+      "weight_unit": "g",
+      "width": 130,
+    },
+  ],
+}
+`;
+
+exports[`buildOzonImportPayload — standard config = legacy payload modern book (2015) 1`] = `
+{
+  "items": [
+    {
+      "attributes": [
+        {
+          "complex_id": 0,
+          "id": 4180,
+          "values": [
+            {
+              "value": "Бухара",
+            },
+          ],
+        },
+        {
+          "complex_id": 0,
+          "id": 4182,
+          "values": [
+            {
+              "value": "Иванов И.",
+            },
+          ],
+        },
+        {
+          "complex_id": 0,
+          "id": 85,
+          "values": [
+            {
+              "dictionary_value_id": 501,
+              "value": "АСТ",
+            },
+          ],
+        },
+        {
+          "complex_id": 0,
+          "id": 8229,
+          "values": [
+            {
+              "value": "Печатная книга",
+            },
+          ],
+        },
+        {
+          "complex_id": 0,
+          "id": 23273,
+          "values": [
+            {
+              "value": "Проза",
+            },
+          ],
+        },
+        {
+          "complex_id": 0,
+          "id": 22232,
+          "values": [
+            {
+              "dictionary_value_id": 971398243,
+              "value": "4901990000 - Прочие книги, брошюры, листовки, аналогичные печатные издания, сброшюрованные",
+            },
+          ],
+        },
+        {
+          "complex_id": 0,
+          "id": 105,
+          "values": [
+            {
+              "dictionary_value_id": 9001,
+              "value": "Иванов И.",
+            },
+          ],
+        },
+        {
+          "complex_id": 0,
+          "id": 4184,
+          "values": [
+            {
+              "value": "978-5-17-090735-5",
+            },
+          ],
+        },
+        {
+          "complex_id": 0,
+          "id": 7,
+          "values": [
+            {
+              "dictionary_value_id": 702,
+              "value": "АСТ",
+            },
+          ],
+        },
+        {
+          "complex_id": 0,
+          "id": 4081,
+          "values": [
+            {
+              "value": "2015",
+            },
+          ],
+        },
+        {
+          "complex_id": 0,
+          "id": 9356,
+          "values": [
+            {
+              "value": "Твердый переплет",
+            },
+          ],
+        },
+        {
+          "complex_id": 0,
+          "id": 10755,
+          "values": [
+            {
+              "value": "Офсетная",
+            },
+          ],
+        },
+        {
+          "complex_id": 0,
+          "id": 4051,
+          "values": [
+            {
+              "value": "320",
+            },
+          ],
+        },
+        {
+          "complex_id": 0,
+          "id": 4189,
+          "values": [
+            {
+              "value": "Русский",
+            },
+          ],
+        },
+        {
+          "complex_id": 0,
+          "id": 8857,
+          "values": [
+            {
+              "value": "Хорошая",
+            },
+          ],
+        },
+        {
+          "complex_id": 0,
+          "id": 4191,
+          "values": [
+            {
+              "value": "ВНИМАНИЕ! Книга не новая! Состояние - на фото. Роман о городе. См.",
+            },
+          ],
+        },
+        {
+          "complex_id": 0,
+          "id": 9236,
+          "values": [
+            {
+              "value": "Печатная книга",
+            },
+          ],
+        },
+        {
+          "complex_id": 0,
+          "id": 4382,
+          "values": [
+            {
+              "value": "200x130x22",
+            },
+          ],
+        },
+        {
+          "complex_id": 0,
+          "id": 4383,
+          "values": [
+            {
+              "value": "410",
+            },
+          ],
+        },
+        {
+          "complex_id": 0,
+          "id": 23171,
+          "values": [
+            {
+              "value": "#роман #ссср",
+            },
+          ],
+        },
+      ],
+      "depth": 200,
+      "description_category_id": 200001483,
+      "dimension_unit": "mm",
+      "height": 22,
+      "images": [
+        "https://s3/b/2.jpg",
+        "https://s3/b/1.jpg",
+        "https://s3/b/0.jpg",
+      ],
+      "name": "Бухара",
+      "offer_id": "12_ABCDEF",
+      "price": "1290",
+      "type_id": 971445087,
+      "vat": "0",
+      "weight": 410,
+      "weight_unit": "g",
+      "width": 130,
+    },
+  ],
+}
+`;
+
+exports[`buildOzonImportPayload — standard config = legacy payload no publisher, no isbn, no page count, empty annotation 1`] = `
+{
+  "items": [
+    {
+      "attributes": [
+        {
+          "complex_id": 0,
+          "id": 4180,
+          "values": [
+            {
+              "value": "Бухара",
+            },
+          ],
+        },
+        {
+          "complex_id": 0,
+          "id": 4182,
+          "values": [
+            {
+              "value": "Иванов Иван",
+            },
+          ],
+        },
+        {
+          "complex_id": 0,
+          "id": 85,
+          "values": [
+            {
+              "dictionary_value_id": 1,
+              "value": "Нет бренда",
+            },
+          ],
+        },
+        {
+          "complex_id": 0,
+          "id": 8229,
+          "values": [
+            {
+              "value": "Печатная книга",
+            },
+          ],
+        },
+        {
+          "complex_id": 0,
+          "id": 23273,
+          "values": [
+            {
+              "value": "Проза",
+            },
+          ],
+        },
+        {
+          "complex_id": 0,
+          "id": 22232,
+          "values": [
+            {
+              "dictionary_value_id": 971398243,
+              "value": "4901990000 - Прочие книги, брошюры, листовки, аналогичные печатные издания, сброшюрованные",
+            },
+          ],
+        },
+        {
+          "complex_id": 0,
+          "id": 4081,
+          "values": [
+            {
+              "value": "1987",
+            },
+          ],
+        },
+        {
+          "complex_id": 0,
+          "id": 9356,
+          "values": [
+            {
+              "value": "Твердый переплет",
+            },
+          ],
+        },
+        {
+          "complex_id": 0,
+          "id": 10755,
+          "values": [
+            {
+              "value": "Офсетная",
+            },
+          ],
+        },
+        {
+          "complex_id": 0,
+          "id": 4189,
+          "values": [
+            {
+              "value": "Русский",
+            },
+          ],
+        },
+        {
+          "complex_id": 0,
+          "id": 8857,
+          "values": [
+            {
+              "value": "Хорошая",
+            },
+          ],
+        },
+        {
+          "complex_id": 0,
+          "id": 4191,
+          "values": [
+            {
+              "value": "ВНИМАНИЕ! Книга не новая! Состояние - на фото. При необходимости мы можем добавить больше фотографий для оценки состояния экземпляра.",
+            },
+          ],
+        },
+        {
+          "complex_id": 0,
+          "id": 9236,
+          "values": [
+            {
+              "value": "Печатная книга",
+            },
+          ],
+        },
+        {
+          "complex_id": 0,
+          "id": 4382,
+          "values": [
+            {
+              "value": "200x130x22",
+            },
+          ],
+        },
+        {
+          "complex_id": 0,
+          "id": 4383,
+          "values": [
+            {
+              "value": "410",
+            },
+          ],
+        },
+      ],
+      "depth": 200,
+      "description_category_id": 200001485,
+      "dimension_unit": "mm",
+      "height": 22,
+      "images": [
+        "https://s3/b/2.jpg",
+        "https://s3/b/1.jpg",
+        "https://s3/b/0.jpg",
+      ],
+      "name": "Бухара",
+      "offer_id": "12_ABCDEF",
+      "price": "1290",
+      "type_id": 971445087,
+      "vat": "0",
+      "weight": 410,
+      "weight_unit": "g",
+      "width": 130,
+    },
+  ],
+}
+`;
+
+exports[`buildOzonImportPayload — standard config = legacy payload no year 1`] = `
+{
+  "items": [
+    {
+      "attributes": [
+        {
+          "complex_id": 0,
+          "id": 4180,
+          "values": [
+            {
+              "value": "Бухара",
+            },
+          ],
+        },
+        {
+          "complex_id": 0,
+          "id": 4182,
+          "values": [
+            {
+              "value": "Иванов Иван",
+            },
+          ],
+        },
+        {
+          "complex_id": 0,
+          "id": 85,
+          "values": [
+            {
+              "dictionary_value_id": 501,
+              "value": "АСТ",
+            },
+          ],
+        },
+        {
+          "complex_id": 0,
+          "id": 8229,
+          "values": [
+            {
+              "value": "Печатная книга",
+            },
+          ],
+        },
+        {
+          "complex_id": 0,
+          "id": 23273,
+          "values": [
+            {
+              "value": "Проза",
+            },
+          ],
+        },
+        {
+          "complex_id": 0,
+          "id": 22232,
+          "values": [
+            {
+              "dictionary_value_id": 971398243,
+              "value": "4901990000 - Прочие книги, брошюры, листовки, аналогичные печатные издания, сброшюрованные",
+            },
+          ],
+        },
+        {
+          "complex_id": 0,
+          "id": 4184,
+          "values": [
+            {
+              "value": "978-5-17-090735-5",
+            },
+          ],
+        },
+        {
+          "complex_id": 0,
+          "id": 7,
+          "values": [
+            {
+              "dictionary_value_id": 702,
+              "value": "АСТ",
+            },
+          ],
+        },
+        {
+          "complex_id": 0,
+          "id": 9356,
+          "values": [
+            {
+              "value": "Твердый переплет",
+            },
+          ],
+        },
+        {
+          "complex_id": 0,
+          "id": 10755,
+          "values": [
+            {
+              "value": "Офсетная",
+            },
+          ],
+        },
+        {
+          "complex_id": 0,
+          "id": 4051,
+          "values": [
+            {
+              "value": "320",
+            },
+          ],
+        },
+        {
+          "complex_id": 0,
+          "id": 4189,
+          "values": [
+            {
+              "value": "Русский",
+            },
+          ],
+        },
+        {
+          "complex_id": 0,
+          "id": 8857,
+          "values": [
+            {
+              "value": "Хорошая",
+            },
+          ],
+        },
+        {
+          "complex_id": 0,
+          "id": 4191,
+          "values": [
+            {
+              "value": "ВНИМАНИЕ! Книга не новая! Состояние - на фото. Роман о городе. См.",
+            },
+          ],
+        },
+        {
+          "complex_id": 0,
+          "id": 9236,
+          "values": [
+            {
+              "value": "Печатная книга",
+            },
+          ],
+        },
+        {
+          "complex_id": 0,
+          "id": 4382,
+          "values": [
+            {
+              "value": "200x130x22",
+            },
+          ],
+        },
+        {
+          "complex_id": 0,
+          "id": 4383,
+          "values": [
+            {
+              "value": "410",
+            },
+          ],
+        },
+        {
+          "complex_id": 0,
+          "id": 23171,
+          "values": [
+            {
+              "value": "#роман #ссср",
+            },
+          ],
+        },
+      ],
+      "depth": 200,
+      "description_category_id": 200001485,
+      "dimension_unit": "mm",
+      "height": 22,
+      "images": [
+        "https://s3/b/2.jpg",
+        "https://s3/b/1.jpg",
+        "https://s3/b/0.jpg",
+      ],
+      "name": "Бухара",
+      "offer_id": "12_ABCDEF",
+      "price": "1290",
+      "type_id": 971445087,
+      "vat": "0",
+      "weight": 410,
+      "weight_unit": "g",
+      "width": 130,
+    },
+  ],
+}
+`;
+
+exports[`buildOzonImportPayload — standard config = legacy payload old book, everything resolved 1`] = `
+{
+  "items": [
+    {
+      "attributes": [
+        {
+          "complex_id": 0,
+          "id": 4180,
+          "values": [
+            {
+              "value": "Бухара",
+            },
+          ],
+        },
+        {
+          "complex_id": 0,
+          "id": 4182,
+          "values": [
+            {
+              "value": "Иванов И.",
+            },
+          ],
+        },
+        {
+          "complex_id": 0,
+          "id": 85,
+          "values": [
+            {
+              "dictionary_value_id": 501,
+              "value": "АСТ",
+            },
+          ],
+        },
+        {
+          "complex_id": 0,
+          "id": 8229,
+          "values": [
+            {
+              "value": "Печатная книга",
+            },
+          ],
+        },
+        {
+          "complex_id": 0,
+          "id": 23273,
+          "values": [
+            {
+              "value": "Проза",
+            },
+          ],
+        },
+        {
+          "complex_id": 0,
+          "id": 22232,
+          "values": [
+            {
+              "dictionary_value_id": 971398243,
+              "value": "4901990000 - Прочие книги, брошюры, листовки, аналогичные печатные издания, сброшюрованные",
+            },
+          ],
+        },
+        {
+          "complex_id": 0,
+          "id": 105,
+          "values": [
+            {
+              "dictionary_value_id": 9001,
+              "value": "Иванов И.",
+            },
+          ],
+        },
+        {
+          "complex_id": 0,
+          "id": 4184,
+          "values": [
+            {
+              "value": "978-5-17-090735-5",
+            },
+          ],
+        },
+        {
+          "complex_id": 0,
+          "id": 7,
+          "values": [
+            {
+              "dictionary_value_id": 702,
+              "value": "АСТ",
+            },
+          ],
+        },
+        {
+          "complex_id": 0,
+          "id": 4081,
+          "values": [
+            {
+              "value": "1987",
+            },
+          ],
+        },
+        {
+          "complex_id": 0,
+          "id": 9356,
+          "values": [
+            {
+              "value": "Твердый переплет",
+            },
+          ],
+        },
+        {
+          "complex_id": 0,
+          "id": 10755,
+          "values": [
+            {
+              "value": "Офсетная",
+            },
+          ],
+        },
+        {
+          "complex_id": 0,
+          "id": 4051,
+          "values": [
+            {
+              "value": "320",
+            },
+          ],
+        },
+        {
+          "complex_id": 0,
+          "id": 4189,
+          "values": [
+            {
+              "value": "Русский",
+            },
+          ],
+        },
+        {
+          "complex_id": 0,
+          "id": 8857,
+          "values": [
+            {
+              "value": "Хорошая",
+            },
+          ],
+        },
+        {
+          "complex_id": 0,
+          "id": 4191,
+          "values": [
+            {
+              "value": "ВНИМАНИЕ! Книга не новая! Состояние - на фото. Роман о городе. См.",
+            },
+          ],
+        },
+        {
+          "complex_id": 0,
+          "id": 9236,
+          "values": [
+            {
+              "value": "Печатная книга",
+            },
+          ],
+        },
+        {
+          "complex_id": 0,
+          "id": 4382,
+          "values": [
+            {
+              "value": "200x130x22",
+            },
+          ],
+        },
+        {
+          "complex_id": 0,
+          "id": 4383,
+          "values": [
+            {
+              "value": "410",
+            },
+          ],
+        },
+        {
+          "complex_id": 0,
+          "id": 23171,
+          "values": [
+            {
+              "value": "#роман #ссср",
+            },
+          ],
+        },
+      ],
+      "depth": 200,
+      "description_category_id": 200001485,
+      "dimension_unit": "mm",
+      "height": 22,
+      "images": [
+        "https://s3/b/2.jpg",
+        "https://s3/b/1.jpg",
+        "https://s3/b/0.jpg",
+      ],
+      "name": "Бухара",
+      "offer_id": "12_ABCDEF",
+      "price": "1290",
+      "type_id": 971445087,
+      "vat": "0",
+      "weight": 410,
+      "weight_unit": "g",
+      "width": 130,
+    },
+  ],
+}
+`;
+
+exports[`buildOzonImportPayload — standard config = legacy payload rich content and extra photos, matte paper 1`] = `
+{
+  "items": [
+    {
+      "attributes": [
+        {
+          "complex_id": 0,
+          "id": 4180,
+          "values": [
+            {
+              "value": "Бухара",
+            },
+          ],
+        },
+        {
+          "complex_id": 0,
+          "id": 4182,
+          "values": [
+            {
+              "value": "Иванов И.",
+            },
+          ],
+        },
+        {
+          "complex_id": 0,
+          "id": 85,
+          "values": [
+            {
+              "dictionary_value_id": 501,
+              "value": "АСТ",
+            },
+          ],
+        },
+        {
+          "complex_id": 0,
+          "id": 8229,
+          "values": [
+            {
+              "value": "Печатная книга",
+            },
+          ],
+        },
+        {
+          "complex_id": 0,
+          "id": 23273,
+          "values": [
+            {
+              "value": "Проза",
+            },
+          ],
+        },
+        {
+          "complex_id": 0,
+          "id": 22232,
+          "values": [
+            {
+              "dictionary_value_id": 971398243,
+              "value": "4901990000 - Прочие книги, брошюры, листовки, аналогичные печатные издания, сброшюрованные",
+            },
+          ],
+        },
+        {
+          "complex_id": 0,
+          "id": 105,
+          "values": [
+            {
+              "dictionary_value_id": 9001,
+              "value": "Иванов И.",
+            },
+          ],
+        },
+        {
+          "complex_id": 0,
+          "id": 4184,
+          "values": [
+            {
+              "value": "978-5-17-090735-5",
+            },
+          ],
+        },
+        {
+          "complex_id": 0,
+          "id": 7,
+          "values": [
+            {
+              "dictionary_value_id": 702,
+              "value": "АСТ",
+            },
+          ],
+        },
+        {
+          "complex_id": 0,
+          "id": 4081,
+          "values": [
+            {
+              "value": "1987",
+            },
+          ],
+        },
+        {
+          "complex_id": 0,
+          "id": 9356,
+          "values": [
+            {
+              "value": "Твердый переплет",
+            },
+          ],
+        },
+        {
+          "complex_id": 0,
+          "id": 10755,
+          "values": [
+            {
+              "value": "Мелованная матовая",
+            },
+          ],
+        },
+        {
+          "complex_id": 0,
+          "id": 4051,
+          "values": [
+            {
+              "value": "320",
+            },
+          ],
+        },
+        {
+          "complex_id": 0,
+          "id": 4189,
+          "values": [
+            {
+              "value": "Русский",
+            },
+          ],
+        },
+        {
+          "complex_id": 0,
+          "id": 8857,
+          "values": [
+            {
+              "value": "Хорошая",
+            },
+          ],
+        },
+        {
+          "complex_id": 0,
+          "id": 4191,
+          "values": [
+            {
+              "value": "ВНИМАНИЕ! Книга не новая! Состояние - на фото. Роман о городе. См.",
+            },
+          ],
+        },
+        {
+          "complex_id": 0,
+          "id": 9236,
+          "values": [
+            {
+              "value": "Печатная книга",
+            },
+          ],
+        },
+        {
+          "complex_id": 0,
+          "id": 4382,
+          "values": [
+            {
+              "value": "200x130x22",
+            },
+          ],
+        },
+        {
+          "complex_id": 0,
+          "id": 4383,
+          "values": [
+            {
+              "value": "410",
+            },
+          ],
+        },
+        {
+          "complex_id": 0,
+          "id": 23171,
+          "values": [
+            {
+              "value": "#роман #ссср",
+            },
+          ],
+        },
+        {
+          "complex_id": 0,
+          "id": 11254,
+          "values": [
+            {
+              "value": "{"content":[],"version":0.3}",
+            },
+          ],
+        },
+      ],
+      "depth": 200,
+      "description_category_id": 200001485,
+      "dimension_unit": "mm",
+      "height": 22,
+      "images": [
+        "https://s3/b/27.jpg",
+        "https://s3/b/26.jpg",
+        "https://s3/b/25.jpg",
+        "https://s3/b/24.jpg",
+        "https://s3/b/23.jpg",
+        "https://s3/b/22.jpg",
+        "https://s3/b/21.jpg",
+        "https://s3/b/20.jpg",
+        "https://s3/b/19.jpg",
+        "https://s3/b/18.jpg",
+        "https://s3/b/17.jpg",
+        "https://s3/b/16.jpg",
+        "https://s3/b/15.jpg",
+        "https://s3/b/14.jpg",
+        "https://s3/b/13.jpg",
+        "https://s3/b/12.jpg",
+        "https://s3/b/11.jpg",
+        "https://s3/b/10.jpg",
+        "https://s3/b/9.jpg",
+        "https://s3/b/8.jpg",
+        "https://s3/b/7.jpg",
+        "https://s3/b/6.jpg",
+        "https://s3/b/5.jpg",
+        "https://s3/b/4.jpg",
+        "https://s3/b/3.jpg",
+        "https://s3/b/2.jpg",
+        "https://s3/b/1.jpg",
+        "https://s3/b/0.jpg",
+        "https://s3/x/1.jpg",
+        "https://s3/x/2.jpg",
+      ],
+      "name": "Бухара",
+      "offer_id": "12_ABCDEF",
+      "price": "1290",
+      "type_id": 971445087,
+      "vat": "0",
+      "weight": 410,
+      "weight_unit": "g",
+      "width": 130,
+    },
+  ],
+}
+`;
+
+exports[`buildOzonImportPayload — standard config = legacy payload several authors, one unknown to Ozon 1`] = `
+{
+  "items": [
+    {
+      "attributes": [
+        {
+          "complex_id": 0,
+          "id": 4180,
+          "values": [
+            {
+              "value": "Бухара",
+            },
+          ],
+        },
+        {
+          "complex_id": 0,
+          "id": 4182,
+          "values": [
+            {
+              "value": "Ильф И.;Петров Евгений",
+            },
+          ],
+        },
+        {
+          "complex_id": 0,
+          "id": 85,
+          "values": [
+            {
+              "dictionary_value_id": 501,
+              "value": "АСТ",
+            },
+          ],
+        },
+        {
+          "complex_id": 0,
+          "id": 8229,
+          "values": [
+            {
+              "value": "Печатная книга",
+            },
+          ],
+        },
+        {
+          "complex_id": 0,
+          "id": 23273,
+          "values": [
+            {
+              "value": "Проза",
+            },
+          ],
+        },
+        {
+          "complex_id": 0,
+          "id": 22232,
+          "values": [
+            {
+              "dictionary_value_id": 971398243,
+              "value": "4901990000 - Прочие книги, брошюры, листовки, аналогичные печатные издания, сброшюрованные",
+            },
+          ],
+        },
+        {
+          "complex_id": 0,
+          "id": 105,
+          "values": [
+            {
+              "dictionary_value_id": 11,
+              "value": "Ильф И.",
+            },
+          ],
+        },
+        {
+          "complex_id": 0,
+          "id": 4184,
+          "values": [
+            {
+              "value": "978-5-17-090735-5",
+            },
+          ],
+        },
+        {
+          "complex_id": 0,
+          "id": 7,
+          "values": [
+            {
+              "dictionary_value_id": 702,
+              "value": "АСТ",
+            },
+          ],
+        },
+        {
+          "complex_id": 0,
+          "id": 4081,
+          "values": [
+            {
+              "value": "1987",
+            },
+          ],
+        },
+        {
+          "complex_id": 0,
+          "id": 9356,
+          "values": [
+            {
+              "value": "Твердый переплет",
+            },
+          ],
+        },
+        {
+          "complex_id": 0,
+          "id": 10755,
+          "values": [
+            {
+              "value": "Офсетная",
+            },
+          ],
+        },
+        {
+          "complex_id": 0,
+          "id": 4051,
+          "values": [
+            {
+              "value": "320",
+            },
+          ],
+        },
+        {
+          "complex_id": 0,
+          "id": 4189,
+          "values": [
+            {
+              "value": "Русский",
+            },
+          ],
+        },
+        {
+          "complex_id": 0,
+          "id": 8857,
+          "values": [
+            {
+              "value": "Хорошая",
+            },
+          ],
+        },
+        {
+          "complex_id": 0,
+          "id": 4191,
+          "values": [
+            {
+              "value": "ВНИМАНИЕ! Книга не новая! Состояние - на фото. Роман о городе. См.",
+            },
+          ],
+        },
+        {
+          "complex_id": 0,
+          "id": 9236,
+          "values": [
+            {
+              "value": "Печатная книга",
+            },
+          ],
+        },
+        {
+          "complex_id": 0,
+          "id": 4382,
+          "values": [
+            {
+              "value": "200x130x22",
+            },
+          ],
+        },
+        {
+          "complex_id": 0,
+          "id": 4383,
+          "values": [
+            {
+              "value": "410",
+            },
+          ],
+        },
+        {
+          "complex_id": 0,
+          "id": 23171,
+          "values": [
+            {
+              "value": "#роман #ссср",
+            },
+          ],
+        },
+      ],
+      "depth": 200,
+      "description_category_id": 200001485,
+      "dimension_unit": "mm",
+      "height": 22,
+      "images": [
+        "https://s3/b/2.jpg",
+        "https://s3/b/1.jpg",
+        "https://s3/b/0.jpg",
+      ],
+      "name": "Бухара",
+      "offer_id": "12_ABCDEF",
+      "price": "1290",
+      "type_id": 971445087,
+      "vat": "0",
+      "weight": 410,
+      "weight_unit": "g",
+      "width": 130,
+    },
+  ],
+}
+`;
+
+exports[`buildOzonImportPayload — standard config = legacy payload softcover, glossy, no dimensions and weight 1`] = `
+{
+  "items": [
+    {
+      "attributes": [
+        {
+          "complex_id": 0,
+          "id": 4180,
+          "values": [
+            {
+              "value": "Бухара",
+            },
+          ],
+        },
+        {
+          "complex_id": 0,
+          "id": 4182,
+          "values": [
+            {
+              "value": "Иванов И.",
+            },
+          ],
+        },
+        {
+          "complex_id": 0,
+          "id": 85,
+          "values": [
+            {
+              "dictionary_value_id": 501,
+              "value": "АСТ",
+            },
+          ],
+        },
+        {
+          "complex_id": 0,
+          "id": 8229,
+          "values": [
+            {
+              "value": "Печатная книга",
+            },
+          ],
+        },
+        {
+          "complex_id": 0,
+          "id": 23273,
+          "values": [
+            {
+              "value": "Проза",
+            },
+          ],
+        },
+        {
+          "complex_id": 0,
+          "id": 22232,
+          "values": [
+            {
+              "dictionary_value_id": 971398243,
+              "value": "4901990000 - Прочие книги, брошюры, листовки, аналогичные печатные издания, сброшюрованные",
+            },
+          ],
+        },
+        {
+          "complex_id": 0,
+          "id": 105,
+          "values": [
+            {
+              "dictionary_value_id": 9001,
+              "value": "Иванов И.",
+            },
+          ],
+        },
+        {
+          "complex_id": 0,
+          "id": 4184,
+          "values": [
+            {
+              "value": "978-5-17-090735-5",
+            },
+          ],
+        },
+        {
+          "complex_id": 0,
+          "id": 7,
+          "values": [
+            {
+              "dictionary_value_id": 702,
+              "value": "АСТ",
+            },
+          ],
+        },
+        {
+          "complex_id": 0,
+          "id": 4081,
+          "values": [
+            {
+              "value": "1987",
+            },
+          ],
+        },
+        {
+          "complex_id": 0,
+          "id": 9356,
+          "values": [
+            {
+              "value": "Мягкая обложка",
+            },
+          ],
+        },
+        {
+          "complex_id": 0,
+          "id": 10755,
+          "values": [
+            {
+              "value": "Мелованная глянцевая",
+            },
+          ],
+        },
+        {
+          "complex_id": 0,
+          "id": 4051,
+          "values": [
+            {
+              "value": "320",
+            },
+          ],
+        },
+        {
+          "complex_id": 0,
+          "id": 4189,
+          "values": [
+            {
+              "value": "Русский",
+            },
+          ],
+        },
+        {
+          "complex_id": 0,
+          "id": 8857,
+          "values": [
+            {
+              "value": "Хорошая",
+            },
+          ],
+        },
+        {
+          "complex_id": 0,
+          "id": 4191,
+          "values": [
+            {
+              "value": "ВНИМАНИЕ! Книга не новая! Состояние - на фото. Роман о городе. См.",
+            },
+          ],
+        },
+        {
+          "complex_id": 0,
+          "id": 9236,
+          "values": [
+            {
+              "value": "Печатная книга",
+            },
+          ],
+        },
+        {
+          "complex_id": 0,
+          "id": 4382,
+          "values": [
+            {
+              "value": "100x100x35",
+            },
+          ],
+        },
+        {
+          "complex_id": 0,
+          "id": 4383,
+          "values": [
+            {
+              "value": "450",
+            },
+          ],
+        },
+        {
+          "complex_id": 0,
+          "id": 23171,
+          "values": [
+            {
+              "value": "#роман #ссср",
+            },
+          ],
+        },
+      ],
+      "depth": 100,
+      "description_category_id": 200001485,
+      "dimension_unit": "mm",
+      "height": 35,
+      "images": [
+        "https://s3/b/2.jpg",
+        "https://s3/b/1.jpg",
+        "https://s3/b/0.jpg",
+      ],
+      "name": "Бухара",
+      "offer_id": "12_ABCDEF",
+      "price": "1290",
+      "type_id": 971445087,
+      "vat": "0",
+      "weight": 450,
+      "weight_unit": "g",
+      "width": 100,
+    },
+  ],
+}
+`;

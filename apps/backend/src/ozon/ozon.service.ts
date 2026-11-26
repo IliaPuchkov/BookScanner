@@ -12,12 +12,16 @@ import { BookPhoto } from '../photos/entities/book-photo.entity';
 import { Box } from '../boxes/entities/box.entity';
 import { BooksService } from '../books/books.service';
 import { OzonApiClient, OzonApiError, type OzonImportInfoItem } from './ozon-api.client';
-import { buildOzonImportPayload } from './ozon-payload.builder';
+import { buildOzonPayloadReport, type OzonPayloadReport } from './ozon-payload.builder';
 import { mapOzonProductToBook } from './ozon-import.mapper';
 import { BookStatus, OZON_ATTR_BRAND, OZON_ATTR_AUTHOR, OZON_ATTR_PUBLISHER, DEFAULT_PRICE } from '@bookscanner/shared';
 import type { ResolvedOzonData } from './ozon-payload.builder';
 import { HashtagRulesService } from '../settings/hashtag-rules.service';
-import { applyHashtagRules } from '../settings/hashtag-rules';
+import { applyHashtagRules, type HashtagRule } from '../settings/hashtag-rules';
+import { CardDefaultsService } from '../card/card-defaults.service';
+import type { CardDefaults } from '../card/card-defaults';
+import { OzonPayloadConfigService } from './payload/ozon-payload-config.service';
+import type { OzonBuiltin, OzonPayloadConfig } from './payload/ozon-payload-config';
 import { VideoCoverService } from './video-cover/video-cover.service';
 import { RichContentService } from './rich-content/rich-content.service';
 import { ExtraPhotosService } from './extra-photos/extra-photos.service';
@@ -26,6 +30,15 @@ const IMPORTABLE_STATUSES = ['importing'];
 // Ozon's product list lags behind the import task — a miss right after import is not proof of failure
 const FAILURE_GRACE_MS = 60 * 60 * 1000;
 const OZON_IMPORT_BOX_NUMBER = 'OZON_IMPORT';
+
+/** What every payload of one publish call shares (loaded once for a bulk publish). */
+interface PayloadContext {
+  storeId?: string;
+  config: OzonPayloadConfig;
+  cardDefaults: CardDefaults;
+  hashtagRules: HashtagRule[];
+  richContentOn: boolean;
+}
 
 async function resolveBrand(
   publisher: string | null,
@@ -97,7 +110,77 @@ export class OzonService {
     private readonly videoCovers: VideoCoverService,
     private readonly richContent: RichContentService,
     private readonly extraPhotos: ExtraPhotosService,
+    private readonly payloadConfig: OzonPayloadConfigService,
+    private readonly cardDefaults: CardDefaultsService,
   ) {}
+
+  private async payloadContext(storeId?: string, config?: OzonPayloadConfig): Promise<PayloadContext> {
+    const [cfg, cardDefaults, hashtagRules, richContentOn] = await Promise.all([
+      config ?? this.payloadConfig.get(),
+      this.cardDefaults.get(),
+      this.hashtagRules.getRules(),
+      this.richContent.enabledFor(storeId),
+    ]);
+    return { storeId, config: cfg, cardDefaults, hashtagRules, richContentOn };
+  }
+
+  /**
+   * The Ozon import item for a card: dictionary lookups (only for the builtins the config uses),
+   * hashtag rules, rich content, extra photos, then `ozon_payload_config`. Shared by publish,
+   * publishBulk and the «Проверить на книге» preview.
+   */
+  async buildPayloadForBook(book: Book, ctx: PayloadContext): Promise<OzonPayloadReport> {
+    const on = new Set<OzonBuiltin>(
+      ctx.config.attributes
+        .filter((a) => a.enabled && a.source.kind === 'builtin')
+        .map((a) => (a.source as { builtin: OzonBuiltin }).builtin),
+    );
+    const [brand, publisher, authors, extraImages] = await Promise.all([
+      on.has('brand') ? resolveBrand(book.publisher, this.ozonApiClient) : undefined,
+      on.has('publisher') ? resolvePublisher(book.publisher, this.ozonApiClient) : undefined,
+      on.has('authors') || on.has('authorCover') ? resolveAuthors(book.author, this.ozonApiClient) : undefined,
+      // a re-import must not drop extra photos Ozon already shows
+      this.extraPhotos.forPublish(book, ctx.storeId),
+    ]);
+    this.logger.log(
+      `Dictionary lookup ${book.sku}: brand="${book.publisher}" -> ${JSON.stringify(brand)}, publisher -> ${JSON.stringify(publisher)}, authors="${book.author}" -> ${JSON.stringify(authors)}`,
+    );
+    return buildOzonPayloadReport(
+      book,
+      {
+        brandDictValueId: brand?.id,
+        resolvedBrandName: brand?.name,
+        publisherDictValueId: publisher?.id,
+        resolvedPublisherName: publisher?.name,
+        authors,
+        hashtags: applyHashtagRules(book.hashtags, ctx.hashtagRules, { yearPublished: book.yearPublished }),
+        richContent: ctx.richContentOn && on.has('richContent') ? this.richContent.build(book) : null,
+        extraImages,
+      },
+      ctx.config,
+      ctx.cardDefaults,
+    );
+  }
+
+  /** «Проверить на книге»: the payload a book would get now, without sending it. */
+  async previewPayload(q: { bookId?: string; sku?: string; config?: OzonPayloadConfig }) {
+    let bookId = q.bookId;
+    if (!bookId) {
+      const row = await this.bookRepository.findOne({ where: { sku: q.sku }, select: ['id'] });
+      if (!row) throw new BadRequestException(`Книга с SKU «${q.sku}» не найдена`);
+      bookId = row.id;
+    }
+    const book = await this.booksService.findOne(bookId);
+    const ctx = await this.payloadContext(book.ozonProduct?.storeId ?? undefined, q.config);
+    const report = await this.buildPayloadForBook(book, ctx);
+    return {
+      ...report,
+      bookId: book.id,
+      sku: book.sku,
+      title: book.title,
+      defaultedFields: book.defaultedFields ?? [],
+    };
+  }
 
   async publish(bookId: string, storeId?: string) {
     const book = await this.booksService.findOne(bookId);
@@ -177,30 +260,7 @@ export class OzonService {
       this.logger.warn(`Failed to check limits before publish: ${error}`);
     }
 
-    const [brand, publisher, authors, hashtags, richContent, extraImages] = await Promise.all([
-      resolveBrand(book.publisher, this.ozonApiClient),
-      resolvePublisher(book.publisher, this.ozonApiClient),
-      resolveAuthors(book.author, this.ozonApiClient),
-      this.hashtagRules.apply(book.hashtags, { yearPublished: book.yearPublished }),
-      this.richContent.forPublish(book, storeId),
-      // a re-import must not drop extra photos Ozon already shows
-      this.extraPhotos.forPublish(book, storeId),
-    ]);
-
-    this.logger.log(
-      `Dictionary lookup: brand="${book.publisher}" → id=${brand.id} name="${brand.name}", publisher → ${JSON.stringify(publisher)}, authors="${book.author}" → ${JSON.stringify(authors)}`,
-    );
-
-    const payload = buildOzonImportPayload(book, {
-      brandDictValueId: brand.id,
-      resolvedBrandName: brand.name,
-      publisherDictValueId: publisher?.id,
-      resolvedPublisherName: publisher?.name,
-      authors,
-      hashtags,
-      richContent,
-      extraImages,
-    });
+    const { payload } = await this.buildPayloadForBook(book, await this.payloadContext(storeId));
 
     // Create or update OzonProduct entry
     if (!ozonProduct) {
@@ -558,31 +618,11 @@ export class OzonService {
       }
     }
 
-    // 4. Dictionary lookups — brand and authors per book.
-    // OzonApiClient caches results, so duplicate publisher/author lookups are free after the first.
-    // Process in concurrency-limited batches to avoid flooding Ozon API with hundreds of parallel requests.
-    const validForLookup = books.filter((b) => b.title && b.photos?.length >= 2);
-    const resolvedMap = new Map<string, { brand: { id: number | undefined; name: string }; publisher: { id: number; name: string } | undefined; authors: ResolvedOzonData['authors'] }>();
-    const LOOKUP_CONCURRENCY = 5;
-    for (let i = 0; i < validForLookup.length; i += LOOKUP_CONCURRENCY) {
-      await Promise.all(
-        validForLookup.slice(i, i + LOOKUP_CONCURRENCY).map(async (book) => {
-          const [brand, publisher, authors] = await Promise.all([
-            resolveBrand(book.publisher, this.ozonApiClient),
-            resolvePublisher(book.publisher, this.ozonApiClient),
-            resolveAuthors(book.author, this.ozonApiClient),
-          ]);
-          resolvedMap.set(book.id, { brand, publisher, authors });
-        }),
-      );
-    }
-
-    // 5. Split into valid and skipped
+    // 4. Split into valid and skipped
     type BatchEntry = { book: (typeof books)[0]; payload: Record<string, unknown>; item: unknown };
     const validEntries: BatchEntry[] = [];
     const failed: { id: string; title?: string; error: string }[] = [];
-    const hashtagRules = await this.hashtagRules.getRules();
-    const richContentOn = await this.richContent.enabledFor(storeId);
+    const toBuild: typeof books = [];
 
     for (const book of books) {
       if (book.status === BookStatus.IN_LIBRARY) {
@@ -601,18 +641,21 @@ export class OzonService {
         failed.push({ id: book.id, title: book.title, error: 'Необходимо минимум 2 фото' });
         continue;
       }
-      const r = resolvedMap.get(book.id);
-      const payload = buildOzonImportPayload(book, {
-        brandDictValueId: r?.brand.id,
-        resolvedBrandName: r?.brand.name,
-        publisherDictValueId: r?.publisher?.id,
-        resolvedPublisherName: r?.publisher?.name,
-        authors: r?.authors,
-        hashtags: applyHashtagRules(book.hashtags, hashtagRules, { yearPublished: book.yearPublished }),
-        richContent: richContentOn ? this.richContent.build(book) : null,
-        extraImages: await this.extraPhotos.forPublish(book, storeId),
-      });
-      validEntries.push({ book, payload, item: (payload.items as unknown[])[0] });
+      toBuild.push(book);
+    }
+
+    // 5. Payloads. Dictionary lookups are cached by OzonApiClient; a few books at a time
+    // so hundreds of books don't flood the Ozon API with parallel requests.
+    const ctx = await this.payloadContext(storeId);
+    const LOOKUP_CONCURRENCY = 5;
+    for (let i = 0; i < toBuild.length; i += LOOKUP_CONCURRENCY) {
+      const built = await Promise.all(
+        toBuild.slice(i, i + LOOKUP_CONCURRENCY).map(async (book) => {
+          const { payload } = await this.buildPayloadForBook(book, ctx);
+          return { book, payload, item: (payload.items as unknown[])[0] };
+        }),
+      );
+      validEntries.push(...built);
     }
 
     // 6. Import in batches of BATCH_SIZE
