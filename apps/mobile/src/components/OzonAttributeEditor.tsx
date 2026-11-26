@@ -43,6 +43,20 @@ export const toInt = (t: string): number | null => {
   return Number.isNaN(n) ? null : n;
 };
 
+/** What each comparison means, shown in the list of comparisons */
+const OP_DESCRIPTIONS: Record<string, string> = {
+  eq: "равно",
+  ne: "не равно",
+  lt: "меньше (числа)",
+  lte: "меньше или равно (числа)",
+  gt: "больше (числа)",
+  gte: "больше или равно (числа)",
+  contains: "содержит текст",
+  notContains: "не содержит текст",
+  empty: "значения нет",
+  notEmpty: "значение есть",
+};
+
 export function sourceSummary(src: OzonCondAction, dicts: Dicts): string {
   switch (src.kind) {
     case "skip":
@@ -243,6 +257,7 @@ type Picking =
   | { kind: "dict"; target: "main" | number }
   | { kind: "map"; index: number }
   | { kind: "operand"; cond: number; check: number }
+  | { kind: "op"; cond: number; check: number }
   | null;
 
 /** The attribute editor modal of «Сборка карточки Ozon». */
@@ -366,7 +381,7 @@ export function AttributeEditor({
   const setMap = (i: number, patch: Partial<(typeof valueMap)[0]>) =>
     setR({ ...r, valueMap: valueMap.map((m, j) => (j === i ? { ...m, ...patch } : m)) });
 
-  const opOptions = Object.entries(dicts.ops).map(([value, label]) => ({ value, label }));
+  const opLabel = (op: string) => `${dicts.ops[op] ?? op}  ${OP_DESCRIPTIONS[op] ?? ""}`.trim();
 
   return (
     <Modal visible animationType="slide" onRequestClose={onCancel}>
@@ -452,7 +467,13 @@ export function AttributeEditor({
                       <AppText style={styles.selectText}>{operandLabel(k.operand)}</AppText>
                       <AppText style={styles.selectArrow}>›</AppText>
                     </TouchableOpacity>
-                    <Chips options={opOptions} value={k.op} onChange={(op) => setCheck(ci, ki, { op })} />
+                    <TouchableOpacity
+                      style={styles.selectBtn}
+                      onPress={() => setPicking({ kind: "op", cond: ci, check: ki })}
+                    >
+                      <AppText style={styles.selectText}>{opLabel(k.op)}</AppText>
+                      <AppText style={styles.selectArrow}>›</AppText>
+                    </TouchableOpacity>
                     {!OZON_UNARY_OPS.includes(k.op) && (
                       <TextInput
                         style={[styles.input, { marginTop: 6 }]}
@@ -606,6 +627,35 @@ export function AttributeEditor({
                 conditions: (cur.conditions ?? []).map((c, j) => (j === ci ? { ...c, action: chosen } : c)),
               }));
             }
+            setPicking(null);
+          }}
+        />
+      )}
+
+      {picking?.kind === "op" && (
+        <ChoiceModal
+          title="Сравнение"
+          sections={[
+            {
+              title: "Числа и текст",
+              items: ["eq", "ne"].map((op) => ({ key: op, label: opLabel(op) })),
+            },
+            {
+              title: "Только числа (год, страницы, тираж, вес…)",
+              items: ["lt", "lte", "gt", "gte"].map((op) => ({ key: op, label: opLabel(op) })),
+            },
+            {
+              title: "Текст",
+              items: ["contains", "notContains"].map((op) => ({ key: op, label: opLabel(op) })),
+            },
+            {
+              title: "Есть ли значение",
+              items: ["empty", "notEmpty"].map((op) => ({ key: op, label: opLabel(op), hint: "сравнивать ни с чем не нужно" })),
+            },
+          ]}
+          onClose={() => setPicking(null)}
+          onPick={(op) => {
+            setCheck(picking.cond, picking.check, { op });
             setPicking(null);
           }}
         />
