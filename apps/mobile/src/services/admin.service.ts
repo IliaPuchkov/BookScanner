@@ -70,6 +70,14 @@ export interface RichContentStatus {
   synced: number;
 }
 
+/** Mirror of backend `ozon/extra-photos/extra-photos.service.ts` ExtraPhotosStatus (counts within the content scope) */
+export interface ExtraPhotosStatus {
+  enabled: boolean;
+  published: number;
+  rendered: number;
+  synced: number;
+}
+
 /** Mirror of backend `settings/hashtag-rules.ts` */
 export interface HashtagRule {
   id: string;
@@ -208,6 +216,17 @@ export const adminService = {
 
   async setRichContentEnabled(enabled: boolean): Promise<RichContentStatus> {
     const { data } = await api.put<RichContentStatus>('/ozon/rich-content/enabled', { enabled });
+    return data;
+  },
+
+  /** Ozon extra photos: on/off and progress */
+  async getExtraPhotosStatus(): Promise<ExtraPhotosStatus> {
+    const { data } = await api.get<ExtraPhotosStatus>('/ozon/extra-photos/status');
+    return data;
+  },
+
+  async setExtraPhotosEnabled(enabled: boolean): Promise<ExtraPhotosStatus> {
+    const { data } = await api.put<ExtraPhotosStatus>('/ozon/extra-photos/enabled', { enabled });
     return data;
   },
 

@@ -166,6 +166,21 @@ export class Book {
   @Column({ type: 'timestamp', nullable: true })
   richContentSyncedAt: Date | null;
 
+  /**
+   * Generated extra photos for Ozon («Об издании», «О книге», «Состояние», the shop's note), shown
+   * after the book's own photos. Not in book_photos: the app never shows them. See ozon/extra-photos
+   */
+  @Column({ type: 'jsonb', nullable: true })
+  extraPhotosUrls: string[] | null;
+
+  /** extraPhotosHash() of the data the images were drawn from; keys are books/<id>/generated/<hash>-<n>.jpg */
+  @Column({ type: 'varchar', length: 16, nullable: true })
+  extraPhotosHash: string | null;
+
+  /** when Ozon got the photo list with the extra photos; null = waiting for the push cron */
+  @Column({ type: 'timestamp', nullable: true })
+  extraPhotosSyncedAt: Date | null;
+
   @CreateDateColumn()
   createdAt: Date;
 

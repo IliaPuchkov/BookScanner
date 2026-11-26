@@ -160,6 +160,7 @@ Located in `apps/backend/src/database/migrations/`:
 - `1748000000000-AddUserMustChangePassword.ts` — adds `"mustChangePassword"` (boolean, default false) to `users` (temporary password set by an admin)
 - `1748100000000-AddBookVideoCover.ts` — adds `"videoCoverUrl"`, `"videoCoverKey"`, `"videoCoverHash"` (varchar 16), `"videoCoverSyncedAt"` to `books` + partial index of covers not yet sent to Ozon
 - `1748200000000-AddBookRichContentSyncedAt.ts` — adds `"richContentSyncedAt"` to `books` + partial index of published books without it
+- `1748300000000-AddBookExtraPhotos.ts` — adds `"extraPhotosUrls"` (jsonb), `"extraPhotosHash"` (varchar 16), `"extraPhotosSyncedAt"` to `books` + partial index of published books without them
 
 ---
 
@@ -255,7 +256,8 @@ All routes prefixed with `/api`.
 - `GET /status/:bookId` — Get publication status
 - `/ozon/video-covers` (admin): `GET status`, `PUT enabled` `{ enabled }`, `GET pending?limit&after` (published books without a cover + photo URLs + `photosHash`, keyset by id), `POST :bookId` (multipart `file` + `photosHash`; 409 if the photos changed), `POST :bookId/render` (queue a server render), `POST push` (send to Ozon now)
 - `/ozon/rich-content` (admin): `GET status`, `PUT enabled` `{ enabled }`, `POST push`
-- `/ozon/content-scope` (admin): `GET` → `{ storeIds, stores }`, `PUT` `{ storeIds }` — stores where video covers and rich content may go (`[]` = all)
+- `/ozon/extra-photos` (admin): `GET status`, `PUT enabled` `{ enabled }`, `POST push` (draw + send now)
+- `/ozon/content-scope` (admin): `GET` → `{ storeIds, stores }`, `PUT` `{ storeIds }` — stores where video covers, rich content and extra photos may go (`[]` = all)
 
 ### Admin (`/api/admin`)
 - `POST /users/:id/password` — `{ password? }`: set a **temporary** password for an **operator** (403 for admins); without `password` the server generates one (`generateTemporaryPassword`, 10 chars, no look-alikes) and returns `generatedPassword` once. Clears the login lock and the stored refresh token, sets `mustChangePassword`, logged as `password_reset` in `activity_logs`. `POST /users` (admin-created user) also sets `mustChangePassword`
@@ -403,9 +405,18 @@ The admin has two dedicated screens for managing books that are potential or con
 - `buildRichContent` (unit-tested): «О книге» (annotation without `ANNOTATION_PREFIX`/links, by paragraph) + cover, «Об издании» (filled fields) + photo 2, «Состояние» + photo 3; sides alternate. Chess needs 2–6 rows: < 2 photos → `raTextBlock`s + cover full width. Full-width `roll` images per photo were rejected by the client (huge, one column).
 - Setting `ozon_rich_content_enabled` (off by default). On: `publish`/`publishBulk` add it to the import payload (`ResolvedOzonData.richContent`), `markPublished` sets `richContentSyncedAt` when the payload carried it; `RichContentCron` (every 10 min) sends it to published books without it via `/v1/product/attributes/update` (batches of 100, per publishing store, within `daily_update`), skipping products that **already have 11254 on Ozon** (hand-made content is never overwritten). Edits after publication are not re-sent. Mobile: Settings → «Rich-контент на Ozon» (`components/RichContentCard.tsx`).
 
+### Ozon extra photos (`ozon/extra-photos/`)
+
+- Ozon wants 8 photos, photographers shoot 4: `renderExtraPhotos` (sharp + Pango, unit-tested) draws up to 4 JPEGs 1200×1600 — «Об издании» (`editionLines`), «О книге» (`cleanAnnotation`, font fitted, then sentences dropped; left out when empty), «Состояние» (сохранность + 3 thumbnails of the book's photos), the shop's note (burgundy, «возвращаем книгам дом», three promises). Footer/name = `shopName(store name)` («Jolly White» → «Джолли Уайт», unknown → «Джолли Бук»).
+- **Ozon rules (fines):** every image must show the product → each one carries the book's own cover; no prices, contacts/links, calls to action, delivery or return info (so no «быстро доставляем»), no b/w or blurry photos. A storefront picture was dropped by the client.
+- Fonts are bundled in `apps/backend/assets/fonts` (OFL: PT Serif/Sans, Caveat, Amatic SC) and passed as `fontfile`; the Alpine image has no other fonts, so a glyph missing from them renders as a box (that's why the tick is an SVG, not «✓»).
+- Stored at `books/<id>/generated/<extraPhotosHash>-<n>.jpg`, NOT in `book_photos` (the app never shows them); `extraPhotosHash` covers the template version, shop name, photo URLs and the fields drawn. ~0.55 MB per book.
+- Setting `ozon_extra_photos_enabled` (off by default) + the content scope; `ozon_extra_photos_max_books` (number, 0/unset = no cap) stops after that many synced books in scope — for a trial run. `ExtraPhotosCron` (every 10 min): up to 60 published in-scope books with `extraPhotosSyncedAt IS NULL` → draw (~4.5 s/book on prod, ~95 MB) → `/v2/product/pictures/import` `{ items: [{ offer_id, images }] }` (offer_id required, ≤100 per call, `images` = full ordered list: the book's photos, then the extra ones) per store within `daily_update`. Only photos change — price and attributes stay (v1 of the method is off since 2026-10-01; a full `/v3/product/import` would need Ozon's current price, which the client edits by hand). `publish`/`publishBulk` append the stored extra photos too, so a re-import doesn't drop them. A card shows «Не продаётся / Обновляется» for ~2 min after a photo change.
+- Mobile: Settings → «Доп. фото на Ozon» (`components/ExtraPhotosCard.tsx`).
+
 ### Content scope (`ozon/content-scope.service.ts`)
 
-- Setting `ozon_content_store_ids` (JSON array, `[]` = every store): the stores where video covers and rich content may be sent — to try them on one store first (Ozon fines). Checked by `publish`/`publishBulk` (rich content), `VideoCoverService.enqueue` / `listPending` (so the backfill script only gets those books) / `acceptUpload` (409 outside), and both push crons (`ContentScopeService.sql`). A book with an empty `ozon_products.storeId` counts as the active store. Mobile: Settings → «Магазины для видеообложек и Rich-контента» (`components/ContentStoresCard.tsx`).
+- Setting `ozon_content_store_ids` (JSON array, `[]` = every store): the stores where video covers, rich content and extra photos may be sent — to try them on one store first (Ozon fines). Checked by `publish`/`publishBulk` (rich content), `VideoCoverService.enqueue` / `listPending` (so the backfill script only gets those books) / `acceptUpload` (409 outside), and both push crons (`ContentScopeService.sql`). A book with an empty `ozon_products.storeId` counts as the active store. Mobile: Settings → «Магазины для видеообложек и Rich-контента» (`components/ContentStoresCard.tsx`).
 - Annotation prefix: "ВНИМАНИЕ! Книга не новая! Состояние - на фото."
 
 ### Authentication Flow

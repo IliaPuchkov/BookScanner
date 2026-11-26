@@ -198,6 +198,19 @@ export class OzonApiClient {
   }
 
   /**
+   * Replaces the photo lists of existing products (nothing else changes); `images` = the full list
+   * in gallery order, the first one is the main photo. Up to 100 products per call. v1 of this
+   * method was switched off on 2026-10-01. Returns the task id for /v1/product/import/info.
+   */
+  async importPictures(items: Array<{ offer_id: string; images: string[] }>, storeId?: string): Promise<number> {
+    const credentials = storeId
+      ? await this.getCredentialsForStore(storeId)
+      : await this.getCredentials();
+    const response = await this.post<{ task_id: number }>('/v2/product/pictures/import', { items }, credentials);
+    return response.task_id;
+  }
+
+  /**
    * Changes only the given attributes of existing products (other attributes stay as they are).
    * Counts against the store's daily_update limit. Returns the task id for /v1/product/import/info.
    */

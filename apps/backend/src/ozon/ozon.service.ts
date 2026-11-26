@@ -20,6 +20,7 @@ import { HashtagRulesService } from '../settings/hashtag-rules.service';
 import { applyHashtagRules } from '../settings/hashtag-rules';
 import { VideoCoverService } from './video-cover/video-cover.service';
 import { RichContentService } from './rich-content/rich-content.service';
+import { ExtraPhotosService } from './extra-photos/extra-photos.service';
 
 const IMPORTABLE_STATUSES = ['importing'];
 // Ozon's product list lags behind the import task — a miss right after import is not proof of failure
@@ -95,6 +96,7 @@ export class OzonService {
     private readonly hashtagRules: HashtagRulesService,
     private readonly videoCovers: VideoCoverService,
     private readonly richContent: RichContentService,
+    private readonly extraPhotos: ExtraPhotosService,
   ) {}
 
   async publish(bookId: string, storeId?: string) {
@@ -175,12 +177,14 @@ export class OzonService {
       this.logger.warn(`Failed to check limits before publish: ${error}`);
     }
 
-    const [brand, publisher, authors, hashtags, richContent] = await Promise.all([
+    const [brand, publisher, authors, hashtags, richContent, extraImages] = await Promise.all([
       resolveBrand(book.publisher, this.ozonApiClient),
       resolvePublisher(book.publisher, this.ozonApiClient),
       resolveAuthors(book.author, this.ozonApiClient),
       this.hashtagRules.apply(book.hashtags, { yearPublished: book.yearPublished }),
       this.richContent.forPublish(book, storeId),
+      // a re-import must not drop extra photos Ozon already shows
+      this.extraPhotos.forPublish(book, storeId),
     ]);
 
     this.logger.log(
@@ -195,6 +199,7 @@ export class OzonService {
       authors,
       hashtags,
       richContent,
+      extraImages,
     });
 
     // Create or update OzonProduct entry
@@ -605,6 +610,7 @@ export class OzonService {
         authors: r?.authors,
         hashtags: applyHashtagRules(book.hashtags, hashtagRules, { yearPublished: book.yearPublished }),
         richContent: richContentOn ? this.richContent.build(book) : null,
+        extraImages: await this.extraPhotos.forPublish(book, storeId),
       });
       validEntries.push({ book, payload, item: (payload.items as unknown[])[0] });
     }

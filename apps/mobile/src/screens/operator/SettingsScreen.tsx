@@ -16,6 +16,7 @@ import { AppText } from '../../components/AppText';
 import { VideoCoverCard } from '../../components/VideoCoverCard';
 import { ContentStoresCard } from '../../components/ContentStoresCard';
 import { RichContentCard } from '../../components/RichContentCard';
+import { ExtraPhotosCard } from '../../components/ExtraPhotosCard';
 import { useNavigation } from "@react-navigation/native";
 import { useAuth } from "../../hooks/useAuth";
 import { adminService } from "../../services/admin.service";
@@ -983,6 +984,8 @@ export function SettingsScreen() {
             <VideoCoverCard />
 
             <RichContentCard />
+
+            <ExtraPhotosCard />
 
             {/* AI prompt setting */}
             <View style={styles.card}>

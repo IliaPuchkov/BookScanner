@@ -93,6 +93,8 @@ export interface ResolvedOzonData {
   hashtags?: string[];
   /** «Rich-контент JSON» (attribute 11254) from RichContentService.forPublish; null/undefined — not sent */
   richContent?: string | null;
+  /** Generated extra photos (ExtraPhotosService.forPublish), appended after the book's own photos */
+  extraImages?: string[];
 }
 
 export function buildOzonImportPayload(
@@ -191,6 +193,8 @@ export function buildOzonImportPayload(
     book.photos
       ?.sort((a, b) => a.sortOrder - b.sortOrder)
       .map((p) => p.fileUrl) || [];
+  if (resolved.extraImages?.length) images.push(...resolved.extraImages);
+  images.splice(30); // Ozon: at most 30 images
 
   return {
     items: [
