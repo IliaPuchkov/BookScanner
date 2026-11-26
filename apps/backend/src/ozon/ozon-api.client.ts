@@ -496,6 +496,39 @@ export class OzonApiClient {
   private readonly attrCache = new Map<string, { at: number; list: OzonCategoryAttribute[] }>();
 
   /**
+   * Every leaf of Ozon's category tree as «Категория › … › Тип» with its ids (the tree is ~0.85 MB,
+   * ~9 000 types — kept for a day). Disabled nodes are left out.
+   */
+  async getCategoryLeaves(): Promise<Array<{ label: string; descriptionCategoryId: number; typeId: number }>> {
+    if (this.treeCache && Date.now() - this.treeCache.at < 24 * 60 * 60 * 1000) return this.treeCache.list;
+    type Node = {
+      description_category_id?: number;
+      category_name?: string;
+      type_id?: number;
+      type_name?: string;
+      disabled?: boolean;
+      children?: Node[];
+    };
+    const res = await this.post<{ result: Node[] }>('/v1/description-category/tree', { language: 'DEFAULT' });
+    const list: Array<{ label: string; descriptionCategoryId: number; typeId: number }> = [];
+    const walk = (node: Node, path: string[], categoryId: number | null) => {
+      if (node.disabled) return;
+      if (node.type_id) {
+        if (categoryId) list.push({ label: [...path, node.type_name ?? ''].join(' › '), descriptionCategoryId: categoryId, typeId: node.type_id });
+        return;
+      }
+      for (const child of node.children ?? []) {
+        walk(child, [...path, node.category_name ?? ''], node.description_category_id ?? categoryId);
+      }
+    };
+    for (const n of res.result ?? []) walk(n, [], null);
+    this.treeCache = { at: Date.now(), list };
+    return list;
+  }
+
+  private treeCache: { at: number; list: Array<{ label: string; descriptionCategoryId: number; typeId: number }> } | null = null;
+
+  /**
    * Values of a dictionary attribute: a search by text (Ozon needs ≥ 2 characters) or,
    * without a query, the first page of the dictionary.
    */

@@ -112,7 +112,7 @@ function Chips<T extends string>({
 }
 
 /** A list of choices in a modal (fields of the card / attributes / built-ins). */
-function ChoiceModal({
+export function ChoiceModal({
   title,
   sections,
   onPick,
@@ -266,12 +266,161 @@ function SourceEditor({
   );
 }
 
+/**
+ * «Если … и …» — the checks of one condition. Used by attribute conditions and by the category.
+ * `attributes` — attributes a check may look at; `categoryLabels` — offered as values when the
+ * check looks at the category.
+ */
+export function ChecksEditor({
+  checks,
+  onChange,
+  dicts,
+  attributes,
+  allowCategory,
+  categoryLabels = [],
+}: {
+  checks: OzonCondCheck[];
+  onChange: (checks: OzonCondCheck[]) => void;
+  dicts: Dicts;
+  attributes: OzonAttrRule[];
+  allowCategory: boolean;
+  categoryLabels?: string[];
+}) {
+  const [picking, setPicking] = useState<{ kind: "operand" | "op" | "value"; index: number } | null>(null);
+  const setCheck = (i: number, patch: Partial<OzonCondCheck>) =>
+    onChange(checks.map((k, j) => (j === i ? { ...k, ...patch } : k)));
+
+  const operandLabel = (o: OzonCondOperand): string => {
+    if (o.kind === "field") return dicts.fields[o.field] ?? o.field;
+    if (o.kind === "category") return "Категория Ozon";
+    const a = attributes.find((x) => x.id === o.attrId);
+    return a ? `атрибут «${a.label}» (${a.id})` : `атрибут ${o.attrId}`;
+  };
+  const opLabel = (op: string) => `${OP_SIGNS[op] ?? op}  ${OP_DESCRIPTIONS[op] ?? op}`;
+
+  return (
+    <View>
+      {checks.map((k, ki) => (
+        <View key={ki} style={styles.check}>
+          <AppText style={styles.condWord}>{ki === 0 ? "Если" : "и"}</AppText>
+          <TouchableOpacity style={styles.selectBtn} onPress={() => setPicking({ kind: "operand", index: ki })}>
+            <AppText style={styles.selectText}>{operandLabel(k.operand)}</AppText>
+            <AppText style={styles.selectArrow}>›</AppText>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.selectBtn} onPress={() => setPicking({ kind: "op", index: ki })}>
+            <AppText style={styles.selectText}>{opLabel(k.op)}</AppText>
+            <AppText style={styles.selectArrow}>›</AppText>
+          </TouchableOpacity>
+          {!OZON_UNARY_OPS.includes(k.op) &&
+            (k.operand.kind === "category" ? (
+              <TouchableOpacity style={styles.selectBtn} onPress={() => setPicking({ kind: "value", index: ki })}>
+                <AppText style={[styles.selectText, !k.value && { color: "#aaa" }]}>
+                  {k.value || "Выбрать категорию"}
+                </AppText>
+                <AppText style={styles.selectArrow}>›</AppText>
+              </TouchableOpacity>
+            ) : (
+              <TextInput
+                style={[styles.input, { marginTop: 6 }]}
+                value={k.value ?? ""}
+                onChangeText={(value) => setCheck(ki, { value })}
+                placeholder="значение, например 2011"
+                placeholderTextColor="#aaa"
+              />
+            ))}
+          {checks.length > 1 && (
+            <TouchableOpacity onPress={() => onChange(checks.filter((_, j) => j !== ki))} hitSlop={8}>
+              <AppText style={styles.removeText}>Убрать проверку</AppText>
+            </TouchableOpacity>
+          )}
+        </View>
+      ))}
+      <TouchableOpacity
+        onPress={() => onChange([...checks, { operand: { kind: "field", field: "yearPublished" }, op: "eq", value: "" }])}
+      >
+        <AppText style={styles.link}>+ И ещё проверка</AppText>
+      </TouchableOpacity>
+
+      {picking?.kind === "op" && (
+        <ChoiceModal
+          title="Сравнение"
+          sections={[
+            { title: "Числа и текст", items: ["eq", "ne"].map((op) => ({ key: op, label: opLabel(op) })) },
+            {
+              title: "Только числа (год, страницы, тираж, вес…)",
+              items: ["lt", "lte", "gt", "gte"].map((op) => ({ key: op, label: opLabel(op) })),
+            },
+            { title: "Текст", items: ["contains", "notContains"].map((op) => ({ key: op, label: opLabel(op) })) },
+            {
+              title: "Есть ли значение",
+              items: ["empty", "notEmpty"].map((op) => ({ key: op, label: opLabel(op), hint: "сравнивать ни с чем не нужно" })),
+            },
+          ]}
+          onClose={() => setPicking(null)}
+          onPick={(op) => {
+            setCheck(picking.index, { op });
+            setPicking(null);
+          }}
+        />
+      )}
+
+      {picking?.kind === "operand" && (
+        <ChoiceModal
+          title="Что проверять"
+          sections={[
+            ...(allowCategory
+              ? [{ title: "Категория", items: [{ key: "category:", label: "Категория Ozon", hint: "выбранная для книги" }] }]
+              : []),
+            {
+              title: "Поле карточки",
+              items: Object.entries(dicts.fields).map(([key, label]) => ({ key: `field:${key}`, label })),
+            },
+            {
+              title: "Значение атрибута (как уйдёт на Ozon, без его условий)",
+              items: attributes.map((a) => ({
+                key: `attr:${a.id}`,
+                label: a.label,
+                hint: `${a.id}${a.enabled ? "" : " · выключен"}`,
+              })),
+            },
+          ]}
+          onClose={() => setPicking(null)}
+          onPick={(key) => {
+            const [kind, v] = key.split(":");
+            const operand: OzonCondOperand =
+              kind === "field"
+                ? { kind: "field", field: v }
+                : kind === "category"
+                  ? { kind: "category" }
+                  : { kind: "attr", attrId: Number(v) };
+            const cur = checks[picking.index];
+            // a category is compared by its name — switch a numeric comparison to «=»
+            const op = kind === "category" && ["lt", "lte", "gt", "gte"].includes(cur.op) ? "eq" : cur.op;
+            setCheck(picking.index, { operand, op, ...(kind === "category" && { value: "" }) });
+            setPicking(null);
+          }}
+        />
+      )}
+
+      {picking?.kind === "value" && (
+        <ChoiceModal
+          title="Категория"
+          sections={[{ title: "Категории из настройки", items: categoryLabels.map((l) => ({ key: l, label: l })) }]}
+          onClose={() => setPicking(null)}
+          onPick={(label) => {
+            setCheck(picking.index, { value: label });
+            setPicking(null);
+          }}
+        />
+      )}
+    </View>
+  );
+}
+
 type Picking =
   | { kind: "attr" }
   | { kind: "dict"; target: "main" | number }
   | { kind: "map"; index: number }
-  | { kind: "operand"; cond: number; check: number }
-  | { kind: "op"; cond: number; check: number }
   | null;
 
 /** The attribute editor modal of «Сборка карточки Ozon». */
@@ -280,6 +429,7 @@ export function AttributeEditor({
   isNew,
   dicts,
   allAttributes,
+  categoryLabels,
   catalog,
   loadCatalog,
   onDone,
@@ -291,6 +441,8 @@ export function AttributeEditor({
   dicts: Dicts;
   /** the draft's attributes — conditions may look at them */
   allAttributes: OzonAttrRule[];
+  /** the categories the config can choose — conditions may compare with them */
+  categoryLabels: string[];
   catalog: Catalog | null;
   /** loads the catalogue (once); resolves false when Ozon could not be reached */
   loadCatalog: () => Promise<boolean>;
@@ -327,20 +479,12 @@ export function AttributeEditor({
   const setConditions = (next: OzonAttrCondition[]) => setR((cur) => ({ ...cur, conditions: next }));
   const setCondition = (i: number, patch: Partial<OzonAttrCondition>) =>
     setConditions(conditions.map((c, j) => (j === i ? { ...c, ...patch } : c)));
-  const setCheck = (ci: number, ki: number, patch: Partial<OzonCondCheck>) =>
-    setCondition(ci, { checks: conditions[ci].checks.map((k, j) => (j === ki ? { ...k, ...patch } : k)) });
   const moveCondition = (i: number, d: -1 | 1) => {
     const j = i + d;
     if (j < 0 || j >= conditions.length) return;
     const next = [...conditions];
     [next[i], next[j]] = [next[j], next[i]];
     setConditions(next);
-  };
-
-  const operandLabel = (o: OzonCondOperand): string => {
-    if (o.kind === "field") return dicts.fields[o.field] ?? o.field;
-    const a = allAttributes.find((x) => x.id === o.attrId);
-    return a ? `атрибут «${a.label}» (${a.id})` : `атрибут ${o.attrId}`;
   };
 
   const sourceError = (src: OzonCondAction): string | null => {
@@ -395,7 +539,6 @@ export function AttributeEditor({
   const setMap = (i: number, patch: Partial<(typeof valueMap)[0]>) =>
     setR({ ...r, valueMap: valueMap.map((m, j) => (j === i ? { ...m, ...patch } : m)) });
 
-  const opLabel = (op: string) => `${OP_SIGNS[op] ?? op}  ${OP_DESCRIPTIONS[op] ?? op}`;
 
   return (
     <Modal visible animationType="slide" onRequestClose={onCancel}>
@@ -471,51 +614,14 @@ export function AttributeEditor({
                   </View>
                 </View>
 
-                {c.checks.map((k, ki) => (
-                  <View key={ki} style={styles.check}>
-                    <AppText style={styles.condWord}>{ki === 0 ? "Если" : "и"}</AppText>
-                    <TouchableOpacity
-                      style={styles.selectBtn}
-                      onPress={() => setPicking({ kind: "operand", cond: ci, check: ki })}
-                    >
-                      <AppText style={styles.selectText}>{operandLabel(k.operand)}</AppText>
-                      <AppText style={styles.selectArrow}>›</AppText>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={styles.selectBtn}
-                      onPress={() => setPicking({ kind: "op", cond: ci, check: ki })}
-                    >
-                      <AppText style={styles.selectText}>{opLabel(k.op)}</AppText>
-                      <AppText style={styles.selectArrow}>›</AppText>
-                    </TouchableOpacity>
-                    {!OZON_UNARY_OPS.includes(k.op) && (
-                      <TextInput
-                        style={[styles.input, { marginTop: 6 }]}
-                        value={k.value ?? ""}
-                        onChangeText={(value) => setCheck(ci, ki, { value })}
-                        placeholder="значение, например 2011"
-                        placeholderTextColor="#aaa"
-                      />
-                    )}
-                    {c.checks.length > 1 && (
-                      <TouchableOpacity
-                        onPress={() => setCondition(ci, { checks: c.checks.filter((_, j) => j !== ki) })}
-                        hitSlop={8}
-                      >
-                        <AppText style={styles.removeText}>Убрать проверку</AppText>
-                      </TouchableOpacity>
-                    )}
-                  </View>
-                ))}
-                <TouchableOpacity
-                  onPress={() =>
-                    setCondition(ci, {
-                      checks: [...c.checks, { operand: { kind: "field", field: "yearPublished" }, op: "eq", value: "" }],
-                    })
-                  }
-                >
-                  <AppText style={styles.link}>+ И ещё проверка</AppText>
-                </TouchableOpacity>
+                <ChecksEditor
+                  checks={c.checks}
+                  onChange={(checks) => setCondition(ci, { checks })}
+                  dicts={dicts}
+                  attributes={otherAttributes}
+                  allowCategory
+                  categoryLabels={categoryLabels}
+                />
 
                 <AppText style={[styles.condWord, { marginTop: 10 }]}>То</AppText>
                 <SourceEditor
@@ -646,61 +752,6 @@ export function AttributeEditor({
         />
       )}
 
-      {picking?.kind === "op" && (
-        <ChoiceModal
-          title="Сравнение"
-          sections={[
-            {
-              title: "Числа и текст",
-              items: ["eq", "ne"].map((op) => ({ key: op, label: opLabel(op) })),
-            },
-            {
-              title: "Только числа (год, страницы, тираж, вес…)",
-              items: ["lt", "lte", "gt", "gte"].map((op) => ({ key: op, label: opLabel(op) })),
-            },
-            {
-              title: "Текст",
-              items: ["contains", "notContains"].map((op) => ({ key: op, label: opLabel(op) })),
-            },
-            {
-              title: "Есть ли значение",
-              items: ["empty", "notEmpty"].map((op) => ({ key: op, label: opLabel(op), hint: "сравнивать ни с чем не нужно" })),
-            },
-          ]}
-          onClose={() => setPicking(null)}
-          onPick={(op) => {
-            setCheck(picking.cond, picking.check, { op });
-            setPicking(null);
-          }}
-        />
-      )}
-
-      {picking?.kind === "operand" && (
-        <ChoiceModal
-          title="Что проверять"
-          sections={[
-            {
-              title: "Поле карточки",
-              items: Object.entries(dicts.fields).map(([key, label]) => ({ key: `field:${key}`, label })),
-            },
-            {
-              title: "Значение другого атрибута (как уйдёт на Ozon, без его условий)",
-              items: otherAttributes.map((a) => ({
-                key: `attr:${a.id}`,
-                label: a.label,
-                hint: `${a.id}${a.enabled ? "" : " · выключен"}`,
-              })),
-            },
-          ]}
-          onClose={() => setPicking(null)}
-          onPick={(key) => {
-            const [kind, v] = key.split(":");
-            const operand: OzonCondOperand = kind === "field" ? { kind: "field", field: v } : { kind: "attr", attrId: Number(v) };
-            setCheck(picking.cond, picking.check, { operand });
-            setPicking(null);
-          }}
-        />
-      )}
     </Modal>
   );
 }

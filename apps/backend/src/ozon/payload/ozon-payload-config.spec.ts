@@ -55,13 +55,19 @@ describe('ozonPayloadConfigError', () => {
     const d = clone();
     d.attributes.push({ key: 'x', id: 99999, label: 'Пусто', enabled: true, source: { kind: 'const', value: ' ' }, skipIfEmpty: true });
     expect(ozonPayloadConfigError(d)).toMatch(/пустое значение/);
-    expect(ozonPayloadConfigError({ ...clone(), categories: [] })).toMatch(/категория/);
+    expect(ozonPayloadConfigError({ ...clone(), category: undefined as any })).toMatch(/категория/i);
+    const e = clone();
+    e.category.default.typeId = 0;
+    expect(ozonPayloadConfigError(e)).toMatch(/ID категории/);
+    const f = clone();
+    f.category.conditions = [{ checks: [{ operand: { kind: 'category' }, op: 'notEmpty' }], category: std.category.default }];
+    expect(ozonPayloadConfigError(f)).toMatch(/самой себя/);
     expect(ozonPayloadConfigError({ ...clone(), vat: '20%' })).toMatch(/НДС/);
   });
 
   it('falls back to the standard config when the saved one is broken', () => {
     expect(configOrStandard(null)).toBe(std);
-    expect(configOrStandard({ categories: [] })).toBe(std);
+    expect(configOrStandard({ category: { default: { label: '', descriptionCategoryId: 1, typeId: 1 } } })).toBe(std);
     expect(configOrStandard({ vat: '0.2' }).vat).toBe('0.2');
   });
 });
@@ -87,7 +93,7 @@ describe('buildOzonPayloadReport with a changed config', () => {
 
   it('picks the category by year, VAT and the photo limit from the config', () => {
     const c = clone();
-    c.categories = [{ label: 'Всё', yearFrom: null, yearTo: null, descriptionCategoryId: 5, typeId: 6 }];
+    c.category = { default: { label: 'Всё', descriptionCategoryId: 5, typeId: 6 } };
     c.vat = '0.1';
     c.maxImages = 1;
     const r = buildOzonPayloadReport({ ...book, photos: [{ fileUrl: 'a', sortOrder: 0 }, { fileUrl: 'b', sortOrder: 1 }] }, {}, c, DEFAULT_CARD_DEFAULTS);
@@ -103,5 +109,52 @@ describe('buildOzonPayloadReport with a changed config', () => {
     expect(r1.warnings.some((w) => w.includes('ISBN'))).toBe(true);
     const r2 = buildOzonPayloadReport({ ...book, annotation: 'Б/у. Текст' }, {}, c, DEFAULT_CARD_DEFAULTS);
     expect(attr(r2, 4191)?.values[0].value).toBe('Б/у. Текст');
+  });
+});
+
+describe('category', () => {
+  const legacy = [
+    { label: 'Букинистика', yearFrom: null, yearTo: 2010, descriptionCategoryId: 200001485, typeId: 971445087 },
+    { label: 'Современные', yearFrom: 2011, yearTo: null, descriptionCategoryId: 200001483, typeId: 971445087 },
+  ];
+  const catOf = (c: OzonPayloadConfig, year: number | null) => {
+    const r = buildOzonPayloadReport({ ...book, yearPublished: year }, {}, c, DEFAULT_CARD_DEFAULTS);
+    return (r.payload.items as any[])[0].description_category_id;
+  };
+
+  it('the old «Категории по году» become a category with conditions, same choice for every year', () => {
+    const c = configOrStandard({ ...clone(), category: undefined, categories: legacy });
+    expect(c.category.default.descriptionCategoryId).toBe(200001485);
+    for (const [year, want] of [[1950, 200001485], [2010, 200001485], [2011, 200001483], [2024, 200001483], [null, 200001485]] as const) {
+      expect(catOf(c, year)).toBe(want);
+    }
+  });
+
+  it('a book without a year keeps going where year 0 went, even if that is not the first range', () => {
+    const odd = [
+      { label: 'Новые', yearFrom: 2000, yearTo: null, descriptionCategoryId: 2, typeId: 1 },
+      { label: 'Старые', yearFrom: null, yearTo: 1999, descriptionCategoryId: 1, typeId: 1 },
+    ];
+    const c = configOrStandard({ ...clone(), category: undefined, categories: odd });
+    expect(catOf(c, null)).toBe(1);
+    expect(catOf(c, 2005)).toBe(2);
+    expect(catOf(c, 1980)).toBe(1);
+  });
+
+  it('category conditions may look at other fields; attributes may look at the category', () => {
+    const c = clone();
+    c.category.conditions = [
+      { checks: [{ operand: { kind: 'field', field: 'yearPublished' }, op: 'lte', value: '1941' }], category: { label: 'Антикварные', descriptionCategoryId: 200001486, typeId: 971445087 } },
+      ...(c.category.conditions ?? []),
+    ];
+    c.attributes.find((a) => a.key === 'condition')!.conditions = [
+      { checks: [{ operand: { kind: 'category' }, op: 'contains', value: 'антиквар' }], action: { kind: 'const', value: 'Антикварная' } },
+    ];
+    const r = buildOzonPayloadReport({ ...book, yearPublished: 1930 }, {}, c, DEFAULT_CARD_DEFAULTS);
+    expect((r.payload.items as any[])[0].description_category_id).toBe(200001486);
+    expect(r.category.note).toBe('условие 1');
+    expect(attr(r, 8857)?.values[0].value).toBe('Антикварная');
+    expect(catOf(c, 1990)).toBe(200001485);
+    expect(catOf(c, 2015)).toBe(200001483);
   });
 });

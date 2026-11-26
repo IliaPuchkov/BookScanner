@@ -24,61 +24,12 @@ import {
 import {
   cardPipelineService,
   type OzonAttrRule,
-  type OzonCategoryRule,
   type OzonPayloadConfig,
   type OzonPayloadPreview,
+  configCategories,
 } from "../../services/cardPipeline.service";
+import { CategoryRuleEditor } from "../../components/OzonCategoryEditor";
 import { settingsStyles as s } from "./settingsStyles";
-
-// ─── Category row ────────────────────────────────────────────────────────────
-
-function CategoryEditor({
-  cat,
-  onChange,
-  onRemove,
-}: {
-  cat: OzonCategoryRule;
-  onChange: (c: OzonCategoryRule) => void;
-  onRemove?: () => void;
-}) {
-  const num = (key: keyof OzonCategoryRule, nullable: boolean) => ({
-    value: cat[key] == null ? "" : String(cat[key]),
-    onChangeText: (t: string) => onChange({ ...cat, [key]: nullable ? toInt(t) : (toInt(t) ?? 0) }),
-    keyboardType: "number-pad" as const,
-  });
-  return (
-    <View style={styles.category}>
-      <View style={styles.categoryHead}>
-        <TextInput style={[styles.input, { flex: 1 }]} value={cat.label} onChangeText={(label) => onChange({ ...cat, label })} />
-        {onRemove && (
-          <TouchableOpacity onPress={onRemove} hitSlop={8} style={{ marginLeft: 10 }}>
-            <AppText style={styles.remove}>✕</AppText>
-          </TouchableOpacity>
-        )}
-      </View>
-      <View style={styles.grid}>
-        <View style={styles.gridCell}>
-          <AppText style={styles.fieldLabel}>Год с</AppText>
-          <TextInput style={styles.input} placeholder="—" {...num("yearFrom", true)} />
-        </View>
-        <View style={styles.gridCell}>
-          <AppText style={styles.fieldLabel}>Год по</AppText>
-          <TextInput style={styles.input} placeholder="—" {...num("yearTo", true)} />
-        </View>
-      </View>
-      <View style={styles.grid}>
-        <View style={styles.gridCell}>
-          <AppText style={styles.fieldLabel}>ID категории</AppText>
-          <TextInput style={styles.input} {...num("descriptionCategoryId", false)} />
-        </View>
-        <View style={styles.gridCell}>
-          <AppText style={styles.fieldLabel}>ID типа</AppText>
-          <TextInput style={styles.input} {...num("typeId", false)} />
-        </View>
-      </View>
-    </View>
-  );
-}
 
 // ─── Screen ──────────────────────────────────────────────────────────────────
 
@@ -91,6 +42,7 @@ export function OzonPayloadScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [editing, setEditing] = useState<{ index: number; rule: OzonAttrRule } | null>(null);
+  const [editingCategory, setEditingCategory] = useState(false);
   const [vatText, setVatText] = useState("");
   const [maxImagesText, setMaxImagesText] = useState("");
 
@@ -210,32 +162,6 @@ export function OzonPayloadScreen() {
           </AppText>
         </View>
 
-        {/* Categories */}
-        <View style={s.card}>
-          <AppText style={s.sectionTitle}>Категории по году издания</AppText>
-          <AppText style={s.sectionDesc}>Берётся первая подходящая. Книга без года считается 0-м годом.</AppText>
-          {draft.categories.map((cat, i) => (
-            <CategoryEditor
-              key={i}
-              cat={cat}
-              onChange={(c) => update({ categories: draft.categories.map((x, j) => (j === i ? c : x)) })}
-              onRemove={draft.categories.length > 1 ? () => update({ categories: draft.categories.filter((_, j) => j !== i) }) : undefined}
-            />
-          ))}
-          <TouchableOpacity
-            onPress={() =>
-              update({
-                categories: [
-                  ...draft.categories,
-                  { label: "Новая категория", yearFrom: null, yearTo: null, descriptionCategoryId: 0, typeId: 0 },
-                ],
-              })
-            }
-          >
-            <AppText style={styles.link}>+ Категория</AppText>
-          </TouchableOpacity>
-        </View>
-
         {/* General */}
         <View style={s.card}>
           <AppText style={s.sectionTitle}>Общее</AppText>
@@ -269,6 +195,16 @@ export function OzonPayloadScreen() {
         <View style={s.card}>
           <AppText style={s.sectionTitle}>Атрибуты ({draft.attributes.filter((a) => a.enabled).length} из {draft.attributes.length})</AppText>
           <AppText style={s.sectionDesc}>Нажмите на атрибут, чтобы изменить. Обязательные помечены ★.</AppText>
+          <TouchableOpacity style={styles.attrRow} onPress={() => setEditingCategory(true)} activeOpacity={0.7}>
+            <View style={{ flex: 1 }}>
+              <AppText style={styles.attrTitle}>★ Категория Ozon</AppText>
+              <AppText style={styles.attrSource} numberOfLines={2}>
+                {draft.category.default.label}
+                {draft.category.conditions?.length ? ` · условий: ${draft.category.conditions.length}` : ""}
+              </AppText>
+            </View>
+            <AppText style={styles.chevron}>›</AppText>
+          </TouchableOpacity>
           {draft.attributes.map((a, i) => (
             <TouchableOpacity key={a.key} style={styles.attrRow} onPress={() => setEditing({ index: i, rule: a })} activeOpacity={0.7}>
               <View style={{ flex: 1 }}>
@@ -367,6 +303,11 @@ export function OzonPayloadScreen() {
                 Категория {item.description_category_id} / тип {item.type_id} · цена {item.price} · НДС {item.vat} · вес{" "}
                 {item.weight} г · {item.width}×{item.height}×{item.depth} мм · фото {item.images?.length ?? 0}
               </AppText>
+              {preview.category && (
+                <AppText style={styles.previewMeta}>
+                  Категория: {preview.category.label} ({preview.category.note})
+                </AppText>
+              )}
               {preview.defaultedFields.length > 0 && (
                 <AppText style={styles.previewMeta}>По умолчанию в карточке: {preview.defaultedFields.join(", ")}</AppText>
               )}
@@ -406,12 +347,26 @@ export function OzonPayloadScreen() {
         </View>
       </ScrollView>
 
+      {editingCategory && (
+        <CategoryRuleEditor
+          category={draft.category}
+          dicts={dicts}
+          attributes={draft.attributes}
+          onCancel={() => setEditingCategory(false)}
+          onDone={(category) => {
+            update({ category });
+            setEditingCategory(false);
+          }}
+        />
+      )}
+
       {editing && (
         <AttributeEditor
           rule={editing.rule}
           isNew={editing.index < 0}
           dicts={dicts}
           allAttributes={draft.attributes}
+          categoryLabels={configCategories(draft).map((c) => c.label)}
           catalog={catalog}
           loadCatalog={loadCatalog}
           onCancel={() => setEditing(null)}
@@ -464,6 +419,7 @@ const styles = StyleSheet.create({
   categoryHead: { flexDirection: "row", alignItems: "center" },
   switchRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 12 },
   switchLabel: { fontSize: 14, color: "#333", flex: 1, marginRight: 12 },
+  chevron: { fontSize: 20, color: "#1976D2", marginLeft: 8 },
   attrRow: {
     flexDirection: "row",
     alignItems: "center",

@@ -14,6 +14,7 @@ import { AppText } from "./AppText";
 import {
   cardPipelineService,
   type OzonCatalogAttribute,
+  type OzonCategoryValue,
   type OzonDictionaryValue,
 } from "../services/cardPipeline.service";
 
@@ -191,6 +192,89 @@ export function OzonValuePicker({
               <TouchableOpacity style={styles.row} onPress={() => onPick(v)} activeOpacity={0.7}>
                 <AppText style={styles.rowTitle}>{v.value}</AppText>
                 <AppText style={styles.rowId}>ID {v.id}{v.info ? ` · ${v.info}` : ""}</AppText>
+              </TouchableOpacity>
+            )}
+          />
+        )}
+      </KeyboardAvoidingView>
+    </Modal>
+  );
+}
+
+/** Picks a category + product type from Ozon's category tree (searched on the server). */
+export function OzonCategoryPicker({
+  onPick,
+  onClose,
+}: {
+  onPick: (c: OzonCategoryValue) => void;
+  onClose: () => void;
+}) {
+  const [q, setQ] = useState("");
+  const [items, setItems] = useState<OzonCategoryValue[]>([]);
+  const [total, setTotal] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const seq = useRef(0);
+
+  useEffect(() => {
+    const my = ++seq.current;
+    const t = setTimeout(
+      async () => {
+        setLoading(true);
+        setError(null);
+        try {
+          const res = await cardPipelineService.searchOzonCategories(q);
+          if (my === seq.current) {
+            setItems(res.categories);
+            setTotal(res.total);
+          }
+        } catch (e: any) {
+          if (my === seq.current) {
+            setItems([]);
+            setError(e?.response?.data?.message ?? "Не удалось загрузить категории Ozon");
+          }
+        } finally {
+          if (my === seq.current) setLoading(false);
+        }
+      },
+      q ? 400 : 0,
+    );
+    return () => clearTimeout(t);
+  }, [q]);
+
+  return (
+    <Modal visible animationType="slide" onRequestClose={onClose}>
+      <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+        <Header title="Категории Ozon" onClose={onClose} />
+        <View style={styles.searchWrap}>
+          <TextInput
+            style={styles.search}
+            value={q}
+            onChangeText={setQ}
+            placeholder="Поиск: «букинист книга», «журнал»…"
+            placeholderTextColor="#aaa"
+            autoCorrect={false}
+          />
+          <AppText style={styles.meta}>
+            {q ? `Найдено: ${total}${total > items.length ? `, показаны первые ${items.length}` : ""}` : "Раздел «Книги»"}
+          </AppText>
+        </View>
+        {loading ? (
+          <ActivityIndicator color="#1976D2" style={{ marginTop: 24 }} />
+        ) : error ? (
+          <AppText style={styles.error}>{error}</AppText>
+        ) : (
+          <FlatList
+            data={items}
+            keyExtractor={(c) => `${c.descriptionCategoryId}:${c.typeId}`}
+            keyboardShouldPersistTaps="handled"
+            ListEmptyComponent={<AppText style={styles.empty}>Ничего не найдено</AppText>}
+            renderItem={({ item: c }) => (
+              <TouchableOpacity style={styles.row} onPress={() => onPick(c)} activeOpacity={0.7}>
+                <AppText style={styles.rowTitle}>{c.label}</AppText>
+                <AppText style={styles.rowId}>
+                  категория {c.descriptionCategoryId} · тип {c.typeId}
+                </AppText>
               </TouchableOpacity>
             )}
           />

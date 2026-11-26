@@ -1,7 +1,7 @@
 import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { OzonApiClient, OzonApiError, type OzonCategoryAttribute } from '../ozon-api.client';
 import { OzonPayloadConfigService } from './ozon-payload-config.service';
-import type { OzonCategoryRule } from './ozon-payload-config';
+import { configCategories, type OzonCategoryValue } from './ozon-payload-config';
 
 /** An Ozon attribute as the picker shows it: merged over the categories of the payload config. */
 export interface CatalogAttribute {
@@ -47,19 +47,30 @@ export class OzonAttributeCatalogService {
     private readonly configService: OzonPayloadConfigService,
   ) {}
 
-  private async categories(): Promise<OzonCategoryRule[]> {
-    const config = await this.configService.get();
-    // the same category/type pair may serve several year ranges
-    const seen = new Set<string>();
-    return config.categories.filter((c) => {
-      const k = `${c.descriptionCategoryId}:${c.typeId}`;
-      if (seen.has(k)) return false;
-      seen.add(k);
-      return true;
-    });
+  private async categories(): Promise<OzonCategoryValue[]> {
+    return configCategories(await this.configService.get());
   }
 
-  private async load(cat: OzonCategoryRule): Promise<OzonCategoryAttribute[]> {
+  /**
+   * Leaves of Ozon's category tree (category › … › product type) matching the query
+   * (case- and ё/е-insensitive, every word); without a query — the «Книги» branch.
+   */
+  async searchCategories(q: string): Promise<{ categories: OzonCategoryValue[]; total: number }> {
+    let all: OzonCategoryValue[];
+    try {
+      all = await this.ozonApiClient.getCategoryLeaves();
+    } catch (e) {
+      throw new BadRequestException(`Не удалось получить дерево категорий. ${ozonMessage(e)}`);
+    }
+    const norm = (t: string) => t.toLowerCase().replace(/ё/g, 'е');
+    const words = norm(q).split(/\s+/).filter(Boolean);
+    const hits = words.length
+      ? all.filter((c) => words.every((w) => norm(c.label).includes(w)))
+      : all.filter((c) => c.label.startsWith('Книги'));
+    return { categories: hits.slice(0, 100), total: hits.length };
+  }
+
+  private async load(cat: OzonCategoryValue): Promise<OzonCategoryAttribute[]> {
     try {
       return await this.ozonApiClient.getCategoryAttributes(cat.descriptionCategoryId, cat.typeId);
     } catch (e) {

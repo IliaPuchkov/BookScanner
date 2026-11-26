@@ -47,6 +47,8 @@ export interface OzonPayloadReport {
   rows: Array<{ id: number; label: string; value: string; note?: string }>;
   /** Attributes a condition left out, and other remarks that are not problems */
   notes: string[];
+  /** The chosen Ozon category and why */
+  category: { label: string; descriptionCategoryId: number; typeId: number; note: string };
 }
 
 function value(v: string, dictId?: number | null): AttrValue {
@@ -199,8 +201,18 @@ export function buildOzonPayloadReport(
   for (const rule of config.attributes) {
     base.set(rule.id, sourceValues(rule, rule.source).map((v) => v.value).join("; "));
   }
-  const operandValue = (check: OzonCondCheck): string | null =>
-    check.operand.kind === "field" ? fieldValue(check.operand.field) : (base.get(check.operand.attrId) ?? null);
+  // The category comes next: its conditions see card fields and attributes' base values
+  let categoryLabel: string | null = null;
+  const operandValue = (check: OzonCondCheck): string | null => {
+    const o = check.operand;
+    if (o.kind === "field") return fieldValue(o.field);
+    if (o.kind === "attr") return base.get(o.attrId) ?? null;
+    return categoryLabel;
+  };
+  const catConditions = config.category.conditions ?? [];
+  const catHit = catConditions.findIndex((c) => c.checks.every((ch) => checkHolds(ch, operandValue(ch))));
+  const category = catHit >= 0 ? catConditions[catHit].category : config.category.default;
+  categoryLabel = category.label;
 
   // Pass 2: conditions (the first matching one wins), then what is sent
   for (const rule of config.attributes) {
@@ -243,12 +255,6 @@ export function buildOzonPayloadReport(
     });
   }
 
-  const year = book.yearPublished ?? 0;
-  const category =
-    config.categories.find(
-      (c) => (c.yearFrom == null || year >= c.yearFrom) && (c.yearTo == null || year <= c.yearTo),
-    ) ?? config.categories[0];
-
   const images =
     book.photos
       ?.sort((a, b) => a.sortOrder - b.sortOrder)
@@ -280,6 +286,12 @@ export function buildOzonPayloadReport(
     warnings,
     rows,
     notes,
+    category: {
+      label: category.label,
+      descriptionCategoryId: category.descriptionCategoryId,
+      typeId: category.typeId,
+      note: catHit >= 0 ? `условие ${catHit + 1}` : "по умолчанию",
+    },
   };
 }
 

@@ -4,6 +4,7 @@ import {
   OZON_PAYLOAD_CONFIG_KEY,
   SYSTEM_ATTR_KEYS,
   configOrStandard,
+  upgradeConfig,
   ozonPayloadConfigError,
   type OzonPayloadConfig,
 } from './ozon-payload-config';
@@ -23,7 +24,7 @@ export class OzonPayloadConfigService {
 
   /** Trims the texts, keeps the system flags as the code defines them; throws a 400 with the reason. */
   normalize(input: OzonPayloadConfig): OzonPayloadConfig {
-    const c: OzonPayloadConfig = JSON.parse(JSON.stringify(input ?? {}));
+    const c = JSON.parse(JSON.stringify(upgradeConfig(input ?? {}))) as OzonPayloadConfig;
     if (Array.isArray(c.attributes)) {
       c.attributes = c.attributes.map((a) => {
         const out = { ...a, label: a.label?.trim(), system: SYSTEM_ATTR_KEYS.includes(a.key) || undefined };
@@ -46,7 +47,15 @@ export class OzonPayloadConfigService {
         return out;
       });
     }
-    if (Array.isArray(c.categories)) c.categories = c.categories.map((x) => ({ ...x, label: x.label?.trim() }));
+    if (c.category?.default) c.category.default = { ...c.category.default, label: c.category.default.label?.trim() };
+    if (Array.isArray(c.category?.conditions)) {
+      c.category.conditions = c.category.conditions.map((x) => ({
+        ...x,
+        checks: (x.checks ?? []).map((ch) => ({ ...ch, value: ch.value?.trim() })),
+        category: { ...x.category, label: x.category?.label?.trim() },
+      }));
+      if (c.category.conditions.length === 0) delete c.category.conditions;
+    }
     const error = ozonPayloadConfigError(c);
     if (error) throw new BadRequestException(error);
     return c;

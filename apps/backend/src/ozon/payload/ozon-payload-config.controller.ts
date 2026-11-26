@@ -61,6 +61,12 @@ export class OzonPayloadConfigController {
     private readonly catalog: OzonAttributeCatalogService,
   ) {}
 
+  @Get('ozon-categories')
+  @ApiOperation({ summary: 'Поиск по дереву категорий Ozon (без запроса — ветка «Книги»), до 100 результатов' })
+  ozonCategories(@Query('q') q?: string) {
+    return this.catalog.searchCategories((q ?? '').slice(0, 100));
+  }
+
   @Get('ozon-attributes')
   @ApiOperation({ summary: 'Атрибуты Ozon для категорий из настройки (для выбора в редакторе)' })
   ozonAttributes() {

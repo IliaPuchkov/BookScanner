@@ -94,11 +94,15 @@ export type OzonCondOp = keyof typeof OZON_COND_OPS;
 export const OZON_UNARY_OPS: OzonCondOp[] = ['empty', 'notEmpty'];
 
 /**
- * What a check looks at: a card field (after the card defaults) or another attribute's value
+ * What a check looks at: a card field (after the card defaults), another attribute's value
  * as it would be sent — source + replacements, but before that attribute's own conditions
- * (so attributes may depend on each other without loops and their order does not matter).
+ * (so attributes may depend on each other without loops and their order does not matter) —
+ * or, in an attribute's condition, the Ozon category chosen for the book (its label).
  */
-export type OzonCondOperand = { kind: 'field'; field: OzonCardField } | { kind: 'attr'; attrId: number };
+export type OzonCondOperand =
+  | { kind: 'field'; field: OzonCardField }
+  | { kind: 'attr'; attrId: number }
+  | { kind: 'category' };
 
 export interface OzonCondCheck {
   operand: OzonCondOperand;
@@ -135,9 +139,33 @@ export interface OzonAttrRule {
   conditions?: OzonAttrCondition[];
 }
 
-export interface OzonCategoryRule {
+/** An Ozon category + product type (a leaf of /v1/description-category/tree) */
+export interface OzonCategoryValue {
+  /** the path in Ozon's tree, e.g. «Книги › Букинистические издания (1942-2010 гг.) › Печатная книга» */
   label: string;
-  /** inclusive; null — no bound. A book without a year counts as year 0. */
+  descriptionCategoryId: number;
+  typeId: number;
+}
+
+export interface OzonCategoryCondition {
+  checks: OzonCondCheck[];
+  category: OzonCategoryValue;
+}
+
+/**
+ * The book's Ozon category: chosen first (attributes, required ones and dictionaries depend on
+ * it). Conditions — top-down, the first match wins — may look at card fields and at attributes'
+ * base values; none matches — `default`.
+ */
+export interface OzonCategoryConfig {
+  default: OzonCategoryValue;
+  conditions?: OzonCategoryCondition[];
+}
+
+/** Before 2026-11-26 the category was picked by year ranges («Категории по году») */
+export interface LegacyOzonCategoryRule {
+  label: string;
+  /** inclusive; null — no bound. A book without a year counted as year 0. */
   yearFrom: number | null;
   yearTo: number | null;
   descriptionCategoryId: number;
@@ -145,8 +173,7 @@ export interface OzonCategoryRule {
 }
 
 export interface OzonPayloadConfig {
-  /** the first matching rule wins; none matches — the first one */
-  categories: OzonCategoryRule[];
+  category: OzonCategoryConfig;
   vat: string;
   maxImages: number;
   annotation: { prefix: string; stripLinks: boolean };
@@ -157,22 +184,24 @@ const field = (f: OzonCardField): OzonAttrSource => ({ kind: 'field', field: f }
 const builtin = (b: OzonBuiltin): OzonAttrSource => ({ kind: 'builtin', builtin: b });
 
 export const DEFAULT_OZON_PAYLOAD_CONFIG: OzonPayloadConfig = {
-  categories: [
-    {
-      label: 'Букинистические издания (до 2010)',
-      yearFrom: null,
-      yearTo: 2010,
+  category: {
+    // a book without a year stays here, as before
+    default: {
+      label: 'Книги › Букинистические издания (1942-2010 гг.) › Печатная книга',
       descriptionCategoryId: OZON_DESCRIPTION_CATEGORY_ID,
       typeId: OZON_TYPE_ID,
     },
-    {
-      label: 'Современные издания (с 2011)',
-      yearFrom: 2011,
-      yearTo: null,
-      descriptionCategoryId: OZON_MODERN_DESCRIPTION_CATEGORY_ID,
-      typeId: OZON_MODERN_TYPE_ID,
-    },
-  ],
+    conditions: [
+      {
+        checks: [{ operand: { kind: 'field', field: 'yearPublished' }, op: 'gte', value: '2011' }],
+        category: {
+          label: 'Книги › Современные печатные издания (с 2011 г.) › Печатная книга',
+          descriptionCategoryId: OZON_MODERN_DESCRIPTION_CATEGORY_ID,
+          typeId: OZON_MODERN_TYPE_ID,
+        },
+      },
+    ],
+  },
   vat: '0',
   maxImages: 30,
   annotation: { prefix: ANNOTATION_PREFIX, stripLinks: true },
@@ -271,17 +300,71 @@ function isPositiveInt(v: unknown): v is number {
   return typeof v === 'number' && Number.isInteger(v) && v > 0;
 }
 
+function categoryValueError(v: OzonCategoryValue | undefined): string | null {
+  if (!v) return 'не выбрана категория';
+  if (!v.label?.trim() || v.label.length > 300) return 'нет названия категории';
+  if (!isPositiveInt(v.descriptionCategoryId) || !isPositiveInt(v.typeId)) return 'ID категории и типа — целые числа';
+  return null;
+}
+
+/** Why the checks of a condition are invalid, or null. `self` — the attribute that owns them. */
+function checksError(
+  checks: OzonCondCheck[] | undefined,
+  attrIds: Set<number>,
+  opts: { self?: number; allowCategory: boolean },
+): string | null {
+  if (!Array.isArray(checks) || checks.length === 0) return 'нет ни одной проверки';
+  if (checks.length > MAX_CHECKS) return `не больше ${MAX_CHECKS} проверок`;
+  for (const ch of checks) {
+    const o = ch.operand;
+    if (o?.kind === 'field') {
+      if (!(o.field in OZON_CARD_FIELDS)) return 'неизвестное поле карточки';
+    } else if (o?.kind === 'attr') {
+      if (!attrIds.has(o.attrId)) return `атрибута ${o.attrId} нет в списке`;
+      if (o.attrId === opts.self) return 'условие не может проверять сам атрибут';
+    } else if (o?.kind === 'category') {
+      if (!opts.allowCategory) return 'категория не может зависеть от самой себя';
+    } else {
+      return 'не выбрано, что проверять';
+    }
+    if (!(ch.op in OZON_COND_OPS)) return 'неизвестное сравнение';
+    if (!OZON_UNARY_OPS.includes(ch.op) && (typeof ch.value !== 'string' || !ch.value.trim())) {
+      return 'не указано, с чем сравнивать';
+    }
+    if (typeof ch.value === 'string' && ch.value.length > 500) return 'значение длиннее 500 символов';
+  }
+  return null;
+}
+
+/** Every category the config can choose (default first), without repeats */
+export function configCategories(c: OzonPayloadConfig): OzonCategoryValue[] {
+  const all = [c.category.default, ...(c.category.conditions ?? []).map((x) => x.category)];
+  const seen = new Set<string>();
+  return all.filter((v) => {
+    const k = `${v.descriptionCategoryId}:${v.typeId}`;
+    if (seen.has(k)) return false;
+    seen.add(k);
+    return true;
+  });
+}
+
 /** Why the config can't be saved, or null. Messages name the attribute's position (1-based). */
 export function ozonPayloadConfigError(c: OzonPayloadConfig): string | null {
-  if (!Array.isArray(c.categories) || c.categories.length === 0) return 'Нужна хотя бы одна категория';
-  for (const [i, cat] of c.categories.entries()) {
-    const n = `Категория ${i + 1}`;
-    if (!cat.label?.trim()) return `${n}: нет названия`;
-    if (!isPositiveInt(cat.descriptionCategoryId) || !isPositiveInt(cat.typeId)) return `${n}: ID категории и типа — целые числа`;
-    for (const y of [cat.yearFrom, cat.yearTo]) {
-      if (y != null && (!Number.isInteger(y) || y < 0 || y > 3000)) return `${n}: неверный год`;
+  if (!c.category || typeof c.category !== 'object') return 'Не задана категория Ozon';
+  const defErr = categoryValueError(c.category.default);
+  if (defErr) return `Категория по умолчанию: ${defErr}`;
+  const allAttrIds = new Set((Array.isArray(c.attributes) ? c.attributes : []).map((a) => a.id));
+  if (c.category.conditions != null) {
+    if (!Array.isArray(c.category.conditions) || c.category.conditions.length > MAX_CONDITIONS) {
+      return `Категория: не больше ${MAX_CONDITIONS} условий`;
     }
-    if (cat.yearFrom != null && cat.yearTo != null && cat.yearFrom > cat.yearTo) return `${n}: «с» больше «по»`;
+    for (const [j, cond] of c.category.conditions.entries()) {
+      const n = `Категория, условие ${j + 1}`;
+      const chErr = checksError(cond.checks, allAttrIds, { allowCategory: false });
+      if (chErr) return `${n}: ${chErr}`;
+      const vErr = categoryValueError(cond.category);
+      if (vErr) return `${n}: ${vErr}`;
+    }
   }
   if (typeof c.vat !== 'string' || !/^(0|0\.\d+|1)$/.test(c.vat)) return 'НДС: 0, 0.05, 0.1, 0.2 и т. п.';
   if (!isPositiveInt(c.maxImages) || c.maxImages > 30) return 'Фото: от 1 до 30';
@@ -319,24 +402,8 @@ export function ozonPayloadConfigError(c: OzonPayloadConfig): string | null {
     }
     for (const [j, cond] of a.conditions.entries()) {
       const n = `Атрибут ${i + 1} «${a.label}», условие ${j + 1}`;
-      if (!Array.isArray(cond.checks) || cond.checks.length === 0) return `${n}: нет ни одной проверки`;
-      if (cond.checks.length > MAX_CHECKS) return `${n}: не больше ${MAX_CHECKS} проверок`;
-      for (const ch of cond.checks) {
-        const o = ch.operand;
-        if (o?.kind === 'field') {
-          if (!(o.field in OZON_CARD_FIELDS)) return `${n}: неизвестное поле карточки`;
-        } else if (o?.kind === 'attr') {
-          if (!attrIds.has(o.attrId)) return `${n}: атрибута ${o.attrId} нет в списке`;
-          if (o.attrId === a.id) return `${n}: условие не может проверять сам атрибут`;
-        } else {
-          return `${n}: не выбрано, что проверять`;
-        }
-        if (!(ch.op in OZON_COND_OPS)) return `${n}: неизвестное сравнение`;
-        if (!OZON_UNARY_OPS.includes(ch.op) && (typeof ch.value !== 'string' || !ch.value.trim())) {
-          return `${n}: не указано, с чем сравнивать`;
-        }
-        if (typeof ch.value === 'string' && ch.value.length > 500) return `${n}: значение длиннее 500 символов`;
-      }
+      const chErr = checksError(cond.checks, attrIds, { self: a.id, allowCategory: true });
+      if (chErr) return `${n}: ${chErr}`;
       const actErr = sourceError(cond.action, true);
       if (actErr) return `${n}: ${actErr}`;
       if (a.system && cond.action.kind === 'skip') return `${n}: обязательный атрибут нельзя не отправлять`;
@@ -352,8 +419,49 @@ export function ozonPayloadConfigError(c: OzonPayloadConfig): string | null {
   return null;
 }
 
+/**
+ * The old year ranges as a category with conditions. Old rule: the first range that holds the
+ * year (a book without a year = year 0), none — the first range.
+ */
+export function categoryFromLegacy(rules: LegacyOzonCategoryRule[]): OzonCategoryConfig {
+  const value = (r: LegacyOzonCategoryRule): OzonCategoryValue => ({
+    label: r.label,
+    descriptionCategoryId: r.descriptionCategoryId,
+    typeId: r.typeId,
+  });
+  const year = { kind: 'field' as const, field: 'yearPublished' as const };
+  const conditions: OzonCategoryCondition[] = [];
+  let fallback = rules[0];
+  for (const r of rules) {
+    const checks: OzonCondCheck[] = [];
+    if (r.yearFrom != null) checks.push({ operand: year, op: 'gte', value: String(r.yearFrom) });
+    if (r.yearTo != null) checks.push({ operand: year, op: 'lte', value: String(r.yearTo) });
+    if (checks.length === 0) {
+      fallback = r; // matches every year — later ranges were never reached
+      break;
+    }
+    conditions.push({ checks, category: value(r) });
+  }
+  // a book without a year went to the first range holding year 0
+  const zero = rules.find((r) => (r.yearFrom == null || r.yearFrom <= 0) && (r.yearTo == null || r.yearTo >= 0));
+  if (zero && zero !== fallback) {
+    conditions.unshift({ checks: [{ operand: year, op: 'empty' }], category: value(zero) });
+  }
+  return { default: value(fallback), ...(conditions.length && { conditions }) };
+}
+
+/** Converts a config saved with «Категории по году» (or sent by such an app) */
+export function upgradeConfig(input: unknown): unknown {
+  if (!input || typeof input !== 'object') return input;
+  const c = input as Record<string, unknown>;
+  if (c.category || !Array.isArray(c.categories) || c.categories.length === 0) return input;
+  const { categories, ...rest } = c;
+  return { ...rest, category: categoryFromLegacy(categories as LegacyOzonCategoryRule[]) };
+}
+
 /** A saved config, or the standard one when it is missing or broken. */
 export function configOrStandard(saved: unknown): OzonPayloadConfig {
+  saved = upgradeConfig(saved);
   if (!saved || typeof saved !== 'object') return DEFAULT_OZON_PAYLOAD_CONFIG;
   const c = { ...DEFAULT_OZON_PAYLOAD_CONFIG, ...(saved as Partial<OzonPayloadConfig>) };
   return ozonPayloadConfigError(c) ? DEFAULT_OZON_PAYLOAD_CONFIG : c;

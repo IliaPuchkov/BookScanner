@@ -41,7 +41,11 @@ export type OzonAttrSource =
 /** What a matched condition does */
 export type OzonCondAction = OzonAttrSource | { kind: 'skip' };
 
-export type OzonCondOperand = { kind: 'field'; field: string } | { kind: 'attr'; attrId: number };
+export type OzonCondOperand =
+  | { kind: 'field'; field: string }
+  | { kind: 'attr'; attrId: number }
+  /** the Ozon category chosen for the book (compared by its name); attributes' conditions only */
+  | { kind: 'category' };
 
 export interface OzonCondCheck {
   operand: OzonCondOperand;
@@ -76,16 +80,27 @@ export interface OzonAttrRule {
   conditions?: OzonAttrCondition[];
 }
 
-export interface OzonCategoryRule {
+/** A leaf of Ozon's category tree: category + product type */
+export interface OzonCategoryValue {
+  /** «Книги › Букинистические издания (1942-2010 гг.) › Печатная книга» */
   label: string;
-  yearFrom: number | null;
-  yearTo: number | null;
   descriptionCategoryId: number;
   typeId: number;
 }
 
+export interface OzonCategoryCondition {
+  checks: OzonCondCheck[];
+  category: OzonCategoryValue;
+}
+
+/** The book's Ozon category: the first matching condition, else `default` */
+export interface OzonCategoryConfig {
+  default: OzonCategoryValue;
+  conditions?: OzonCategoryCondition[];
+}
+
 export interface OzonPayloadConfig {
-  categories: OzonCategoryRule[];
+  category: OzonCategoryConfig;
   vat: string;
   maxImages: number;
   annotation: { prefix: string; stripLinks: boolean };
@@ -112,6 +127,8 @@ export interface OzonPayloadPreview {
   warnings: string[];
   /** attributes left out by a condition */
   notes?: string[];
+  /** the chosen category and why («по умолчанию» / «условие N») */
+  category?: OzonCategoryValue & { note: string };
   defaultedFields: string[];
 }
 
@@ -141,6 +158,12 @@ export interface OzonDictionaryValue {
 }
 
 export const cardPipelineService = {
+  /** Search Ozon's category tree (every word; empty — the «Книги» branch), up to 100 */
+  async searchOzonCategories(q: string): Promise<{ categories: OzonCategoryValue[]; total: number }> {
+    const { data } = await api.get('/ozon/payload-config/ozon-categories', { params: { q } });
+    return data;
+  },
+
   async getOzonAttributes(): Promise<{ categories: string[]; attributes: OzonCatalogAttribute[] }> {
     const { data } = await api.get('/ozon/payload-config/ozon-attributes');
     return data;
@@ -195,3 +218,15 @@ export const cardPipelineService = {
     return data;
   },
 };
+
+/** Every category the config can choose (default first), without repeats */
+export function configCategories(c: OzonPayloadConfig): OzonCategoryValue[] {
+  const all = [c.category.default, ...(c.category.conditions ?? []).map((x) => x.category)];
+  const seen = new Set<string>();
+  return all.filter((v) => {
+    const k = `${v.descriptionCategoryId}:${v.typeId}`;
+    if (seen.has(k)) return false;
+    seen.add(k);
+    return true;
+  });
+}
